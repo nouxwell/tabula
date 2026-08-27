@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Balin\Tabula;
 
 use Balin\Tabula\Export\ExportBuilder;
+use Balin\Tabula\Export\Writer\DefaultWriterFactory;
+use Balin\Tabula\Export\Writer\WriterFactory;
 use Balin\Tabula\Port\PassthroughTranslator;
 use Balin\Tabula\Port\Translator;
 use Balin\Tabula\Schema\Schema;
@@ -33,14 +35,18 @@ final class Tabula
 
     private readonly ValueResolver $resolver;
 
+    private readonly WriterFactory $writers;
+
     public function __construct(
         private readonly Translator $translator = new PassthroughTranslator(),
         private readonly TabulaSettings $settings = new TabulaSettings(),
         ?FormatterRegistry $formatters = null,
         ?ValueResolver $resolver = null,
+        ?WriterFactory $writers = null,
     ) {
         $this->formatters = $formatters ?? FormatterRegistry::default();
         $this->resolver = $resolver ?? new ValueResolver();
+        $this->writers = $writers ?? new DefaultWriterFactory();
     }
 
     public function export(Schema $schema): ExportBuilder
@@ -51,6 +57,7 @@ final class Tabula
             settings: $this->settings,
             formatters: $this->formatters,
             resolver: $this->resolver,
+            writers: $this->writers,
         );
     }
 

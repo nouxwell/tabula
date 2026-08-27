@@ -192,9 +192,30 @@ tabula:
     numbers:
         currency_symbols:
             TRY: '₺'
+    csv:                     # varsayılanlar Türkçe Excel içindir
+        delimiter: ';'
+        write_bom: true
+        line_ending: crlf    # crlf | lf
+    xlsx:
+        creator: 'Ionsis ERP'
+        freeze_header: true
+        auto_filter: true
 ```
 
 Ardından `Balin\Tabula\Tabula` her yere enjekte edilebilir.
+
+**Yazıcı ayarları.** Tek bir CSV varsayılanı yoktur: insan dosyayı Türkçe Excel'de açar (`;` + BOM
+şart), makine RFC 4180 bekler (`,`, BOM yok). İkisi de gerekiyorsa ayarı çağrı yerinde geçebilirsin:
+
+```php
+use Balin\Tabula\Export\Writer\{CsvWriter, CsvOptions, XlsxWriter, XlsxOptions};
+
+->writer(new CsvWriter(CsvOptions::rfc4180()))   // makineye giden besleme
+->writer(new XlsxWriter(XlsxOptions::plain()))   // süslemesiz ara dosya
+```
+
+`line_ending` YAML'da `crlf`/`lf` adıyla verilir; ham `"\r\n"` yazmak kaçış kurallarına takılıp
+sessizce iki harfe dönüşürdü.
 
 **Çeviri alanı meselesi.** ERP'de etiketler `messages`, enum karşılıkları `enum` alanındadır; ama
 enum'lar anahtarı `label(): string` ile döndürür ve o anahtar alan bilgisi taşımaz. Köprü bunu
@@ -221,13 +242,10 @@ composer cs       # php-cs-fixer
 | --- | --- | --- |
 | 0 | Çekirdek şema, biçimlendiriciler, `ArraySource`, Xlsx + CSV yazıcıları | **bitti** |
 | 1 | `DoctrineSource`, Symfony köprü bundle'ı | **bitti** |
-| 2 | Şemanın sunucuya alınması (istemci yalnız anahtar gönderir) + yazıcı ayarlarının config'e açılması | sırada |
+| 2a | Yazıcı ayarlarının config'e açılması (`WriterFactory`, `CsvOptions`, `XlsxOptions`) | **bitti** |
+| 2b | Şemanın sunucuya alınması — istemci yalnız anahtar gönderir (ERP tarafı) | sırada |
 | 3 | PDF yazıcısı, sayfa boyutu (A3/A4/A5) ve kolon bütçesi | |
 | 4 | İçe aktarma + şablon üretimi (anahtarla eşleşme, satır bazlı hata, kısmi kabul) | |
-
-> Faz 2'ye taşınan bilinen eksik: `CsvWriter`'ın ayraç/BOM/satır sonu ayarları henüz
-> `tabula.yaml` üzerinden verilemiyor; makineye giden bir besleme için hâlâ
-> `->writer(new CsvWriter(delimiter: ','))` yazmak gerekiyor.
 
 ## Lisans
 

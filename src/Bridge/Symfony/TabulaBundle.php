@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Balin\Tabula\Bridge\Symfony;
 
+use Balin\Tabula\Export\Writer\CsvOptions;
+use Balin\Tabula\Export\Writer\DefaultWriterFactory;
+use Balin\Tabula\Export\Writer\WriterFactory;
+use Balin\Tabula\Export\Writer\XlsxOptions;
 use Balin\Tabula\Port\Translator;
 use Balin\Tabula\Settings\DateSettings;
 use Balin\Tabula\Settings\NumberSettings;
@@ -131,6 +135,42 @@ final class TabulaBundle extends AbstractBundle
                         ->scalarNode('excel_datetime_format')->defaultValue('dd.mm.yyyy hh:mm')->end()
                     ->end()
                 ->end()
+
+                ->arrayNode('csv')
+                    ->addDefaultsIfNotSet()
+                    ->info('Varsayılanlar Türkçe Excel içindir. Makineye giden besleme için: delimiter "," · escape "" · write_bom false.')
+                    ->children()
+                        ->scalarNode('delimiter')->defaultValue(';')->cannotBeEmpty()->end()
+                        ->scalarNode('enclosure')->defaultValue('"')->cannotBeEmpty()->end()
+                        // Kaçış BİLEREK boş bırakılabilir: '' verilince PHP'nin standart dışı
+                        // kaçışı kapanır ve çıktı RFC 4180'e birebir uyar. Bu yüzden burada
+                        // `cannotBeEmpty()` YOK — ama `escape: ~` yazan kişi de "kapat" demek
+                        // istiyordur; null'ı boş dizeye çeviriyoruz, yoksa TypeError'a düşerdi.
+                        ->scalarNode('escape')
+                            ->defaultValue('\\')
+                            ->beforeNormalization()->ifNull()->then(static fn (): string => '')->end()
+                        ->end()
+                        ->booleanNode('write_bom')->defaultTrue()->end()
+                        ->enumNode('line_ending')
+                            ->values(['crlf', 'lf'])
+                            ->defaultValue('crlf')
+                        ->end()
+                    ->end()
+                ->end()
+
+                ->arrayNode('xlsx')
+                    ->addDefaultsIfNotSet()
+                    ->info('Renkler ARGB biçimindedir (FFRRGGBB); baştaki iki hane saydamlıktır.')
+                    ->children()
+                        ->scalarNode('creator')->defaultValue('Tabula')->cannotBeEmpty()->end()
+                        ->scalarNode('header_fill')->defaultValue('FFF2F2F2')->cannotBeEmpty()->end()
+                        ->scalarNode('required_header_fill')->defaultValue('FFFCE4E4')->cannotBeEmpty()->end()
+                        ->scalarNode('header_border_color')->defaultValue('FFBFBFBF')->cannotBeEmpty()->end()
+                        ->booleanNode('bold_header')->defaultTrue()->end()
+                        ->booleanNode('freeze_header')->defaultTrue()->end()
+                        ->booleanNode('auto_filter')->defaultTrue()->end()
+                    ->end()
+                ->end()
             ->end();
     }
 
@@ -170,12 +210,26 @@ final class TabulaBundle extends AbstractBundle
         $services->set(FormatterRegistry::class)
             ->factory([FormatterRegistry::class, 'default']);
 
+        $services->set(CsvOptions::class)
+            ->factory([SettingsFactory::class, 'csv'])
+            ->args([$config['csv']]);
+
+        $services->set(XlsxOptions::class)
+            ->factory([SettingsFactory::class, 'xlsx'])
+            ->args([$config['xlsx']]);
+
+        $services->set(DefaultWriterFactory::class)
+            ->args([service(CsvOptions::class), service(XlsxOptions::class)]);
+
+        $services->alias(WriterFactory::class, DefaultWriterFactory::class);
+
         $services->set(Tabula::class)
             ->args([
                 service(Translator::class),
                 service(TabulaSettings::class),
                 service(FormatterRegistry::class),
                 service(ValueResolver::class),
+                service(WriterFactory::class),
             ])
             ->public();
     }

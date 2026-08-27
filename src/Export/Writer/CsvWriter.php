@@ -54,25 +54,30 @@ final class CsvWriter implements Writer
     /** @var list<string> yazılan dosya yolları, oluşturulma sırasıyla */
     private array $paths = [];
 
+    private readonly string $delimiter;
+
+    private readonly string $enclosure;
+
+    private readonly string $escape;
+
+    private readonly bool $writeBom;
+
+    private readonly string $lineEnding;
+
     /**
-     * @param string $delimiter  Varsayılan ';' — çünkü Türkçe/Avrupa yerelinde Excel ondalık
-     *                           ayıracı olarak ',' kullanır. Virgülle ayrılmış bir dosyada
-     *                           "1.234,56" hücresi Excel tarafından iki ayrı sütuna bölünür;
-     *                           kullanıcı da bunu "dosya bozuk" diye bildirir. Noktalı virgül
-     *                           hem Excel'in beklediği hem de sayıyı bölmeyen ayıraçtır.
-     * @param string $escape     PHP'nin standart dışı kaçış mekanizması. Boş dize ('') verilirse
-     *                           tamamen kapanır ve çıktı RFC 4180'e birebir uyar; PHP 9'da
-     *                           varsayılan da bu olacak. Bkz. aşağıdaki `put()` notu.
-     * @param string $lineEnding varsayılan CRLF: hem RFC 4180'in şart koştuğu hem de Windows
-     *                           Excel'in sorunsuz açtığı satır sonu
+     * Ayarların GEREKÇELERİ (ayraç neden ';', BOM neden şart, kaçış neden kapatılabilir)
+     * `CsvOptions` üzerinde durur.
+     *
+     * Beş skaleri çağrı yerinde doğru sırada dizmek hataya açıktır ve sessizce yanlış bir
+     * dosya üretir; `CsvOptions::excel()` / `CsvOptions::rfc4180()` niyeti adıyla söyler.
      */
-    public function __construct(
-        private readonly string $delimiter = ';',
-        private readonly string $enclosure = '"',
-        private readonly string $escape = '\\',
-        private readonly bool $writeBom = true,
-        private readonly string $lineEnding = "\r\n",
-    ) {
+    public function __construct(CsvOptions $options = new CsvOptions())
+    {
+        $this->delimiter = $options->delimiter;
+        $this->enclosure = $options->enclosure;
+        $this->escape = $options->escape;
+        $this->writeBom = $options->writeBom;
+        $this->lineEnding = $options->lineEnding;
     }
 
     public function open(string $path): void

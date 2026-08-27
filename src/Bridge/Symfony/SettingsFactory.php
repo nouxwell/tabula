@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Balin\Tabula\Bridge\Symfony;
 
+use Balin\Tabula\Export\Writer\CsvOptions;
+use Balin\Tabula\Export\Writer\XlsxOptions;
 use Balin\Tabula\Settings\DateSettings;
 use Balin\Tabula\Settings\NumberSettings;
 use Balin\Tabula\Settings\SymbolPosition;
 use Balin\Tabula\Settings\TabulaSettings;
+use InvalidArgumentException;
 
 /**
  * Yapılandırma dizisinden ayar nesnelerini kurar.
@@ -48,6 +51,46 @@ final class SettingsFactory
             dateTimePattern: $config['datetime_pattern'],
             excelDateFormat: $config['excel_date_format'],
             excelDateTimeFormat: $config['excel_datetime_format'],
+        );
+    }
+
+    /**
+     * @param array{delimiter: string, enclosure: string, escape: string, write_bom: bool, line_ending: string} $config
+     */
+    public static function csv(array $config): CsvOptions
+    {
+        return new CsvOptions(
+            delimiter: $config['delimiter'],
+            enclosure: $config['enclosure'],
+            escape: $config['escape'],
+            writeBom: $config['write_bom'],
+            // YAML'da "\r\n" yazmak kaçış kurallarına takıldığı ve sessizce iki harfe
+            // dönüştüğü için config `crlf`/`lf` adlarını alır, ham diziyi değil.
+            //
+            // `match` + `default: throw`, üçlü operatörün yerine BİLEREK kullanıldı: bu metot
+            // public statik bir API ve config ağacına yarın yeni bir ad eklenirse üçlü operatör
+            // onu sessizce CRLF'e düşürürdü. Bilinmeyen ad gürültü çıkarmalı.
+            lineEnding: match ($config['line_ending']) {
+                'lf' => "\n",
+                'crlf' => "\r\n",
+                default => throw new InvalidArgumentException(sprintf('Bilinmeyen satır sonu adı: "%s". Beklenen: "crlf" ya da "lf".', $config['line_ending'])),
+            },
+        );
+    }
+
+    /**
+     * @param array{creator: string, header_fill: string, required_header_fill: string, header_border_color: string, bold_header: bool, freeze_header: bool, auto_filter: bool} $config
+     */
+    public static function xlsx(array $config): XlsxOptions
+    {
+        return new XlsxOptions(
+            creator: $config['creator'],
+            headerFill: $config['header_fill'],
+            requiredHeaderFill: $config['required_header_fill'],
+            headerBorderColor: $config['header_border_color'],
+            boldHeader: $config['bold_header'],
+            freezeHeader: $config['freeze_header'],
+            autoFilter: $config['auto_filter'],
         );
     }
 

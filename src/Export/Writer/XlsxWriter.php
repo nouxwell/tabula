@@ -44,17 +44,6 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx as SpreadsheetXlsxWriter;
  */
 final class XlsxWriter implements Writer
 {
-    private const string CREATOR = 'Tabula';
-
-    /** Başlık satırının açık gri dolgusu. */
-    private const string HEADER_FILL = 'FFF2F2F2';
-
-    /** Zorunlu kolon başlığının açık kırmızı dolgusu. */
-    private const string REQUIRED_HEADER_FILL = 'FFFCE4E4';
-
-    /** Başlığın altındaki ince çizginin rengi; siyah çok sert, gri satırı ayırmaya yeter. */
-    private const string HEADER_BORDER_COLOR = 'FFBFBFBF';
-
     /** Excel'in sayfa adı sınırı. */
     private const int TITLE_MAX_LENGTH = 31;
 
@@ -113,6 +102,16 @@ final class XlsxWriter implements Writer
     /** @var list<string> yazılan dosya yolları */
     private array $paths = [];
 
+    /**
+     * Görünüm ayarları (üretici adı, başlık renkleri, dondurma/süzme).
+     *
+     * Renklerin ARGB biçimi ve varsayılanların gerekçesi `XlsxOptions` üzerindedir.
+     */
+    public function __construct(
+        private readonly XlsxOptions $options = new XlsxOptions(),
+    ) {
+    }
+
     public function open(string $path): void
     {
         if (null !== $this->spreadsheet) {
@@ -125,7 +124,7 @@ final class XlsxWriter implements Writer
         $this->guardTarget($path);
 
         $spreadsheet = new Spreadsheet();
-        $spreadsheet->getProperties()->setCreator(self::CREATOR);
+        $spreadsheet->getProperties()->setCreator($this->options->creator);
 
         // Varsayılan sayfa BURADA SİLİNMEZ. `new Spreadsheet()` "Worksheet" adıyla bir
         // sayfa yaratır; onu silip sonra `createSheet()` demek gereksiz nesne trafiği,
@@ -358,16 +357,16 @@ final class XlsxWriter implements Writer
         // Başlık stili tek aralıkta uygulanır; kolon kolon uygulamak aynı stili
         // kolon sayısı kadar kez hash'letirdi.
         $header = $sheet->getStyle('A1:'.$this->lastLetter.'1');
-        $header->getFont()->setBold(true);
+        $header->getFont()->setBold($this->options->boldHeader);
         $header->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()
-            ->setARGB(self::HEADER_FILL);
+            ->setARGB($this->options->headerFill);
         $header->getBorders()
             ->getBottom()
             ->setBorderStyle(Border::BORDER_THIN)
             ->getColor()
-            ->setARGB(self::HEADER_BORDER_COLOR);
+            ->setARGB($this->options->headerBorderColor);
         $header->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
         // Zorunlu kolonlar açık kırmızı. Dosya bir içe aktarma şablonu olarak indirildiğinde
@@ -382,12 +381,15 @@ final class XlsxWriter implements Writer
                 ->getFill()
                 ->setFillType(Fill::FILL_SOLID)
                 ->getStartColor()
-                ->setARGB(self::REQUIRED_HEADER_FILL);
+                ->setARGB($this->options->requiredHeaderFill);
         }
 
         // "A2'yi dondur" = 1. satır sabit kalsın. Yüz binlik listelerde kaydırırken
         // başlığın kaybolmaması, kullanıcıdan gelen en eski isteklerden biriydi.
-        $sheet->freezePane('A2');
+        // Makineye giden ara dosyalarda kapatılabilir: işe yaramaz ama XML üretir.
+        if ($this->options->freezeHeader) {
+            $sheet->freezePane('A2');
+        }
     }
 
     /**
@@ -410,7 +412,10 @@ final class XlsxWriter implements Writer
             // sabit bir aralıkla ("A1:Z1000") kuruyordu; bin satırdan uzun dışa aktarmalarda
             // son satırlar filtrenin dışında kalıyor, kullanıcı süzünce veri "kayboluyordu".
             $lastRow = $this->nextRow - 1; // veri hiç gelmediyse 1 (yalnız başlık)
-            $sheet->setAutoFilter('A1:'.$this->lastLetter.$lastRow);
+
+            if ($this->options->autoFilter) {
+                $sheet->setAutoFilter('A1:'.$this->lastLetter.$lastRow);
+            }
 
             $this->applyColumnAlignment($sheet);
         }

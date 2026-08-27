@@ -7,9 +7,8 @@ namespace Balin\Tabula\Export;
 use Balin\Tabula\Exception\ExportException;
 use Balin\Tabula\Export\Sheet\SheetStrategy;
 use Balin\Tabula\Export\Sheet\SingleSheet;
-use Balin\Tabula\Export\Writer\CsvWriter;
 use Balin\Tabula\Export\Writer\Writer;
-use Balin\Tabula\Export\Writer\XlsxWriter;
+use Balin\Tabula\Export\Writer\WriterFactory;
 use Balin\Tabula\Format;
 use Balin\Tabula\Port\Translator;
 use Balin\Tabula\Schema\Field;
@@ -51,6 +50,7 @@ final class ExportBuilder
         private readonly TabulaSettings $settings,
         private readonly FormatterRegistry $formatters,
         private readonly ValueResolver $resolver,
+        private readonly WriterFactory $writers,
     ) {
     }
 
@@ -138,7 +138,10 @@ final class ExportBuilder
         // Varsayılan strateji taşma korumalıdır: Excel'in satır tavanı aşıldığında sessizce
         // bozuk dosya üretmek yerine yeni sayfaya geçilir.
         $strategy = $this->sheets ?? new SingleSheet($defaultSheetName, $this->settings->maxRowsPerSheet);
-        $writer = $this->writer ?? $this->writerFor($this->format);
+        // Yazıcı fabrikadan gelir, burada `new`lenmez: ayraç/BOM gibi ayarlar uygulamanın
+        // yapılandırmasından beslenebilsin diye (aksi hâlde makineye giden her besleme
+        // çağrı yerinde elle `->writer(new CsvWriter(...))` yazmak zorunda kalıyordu).
+        $writer = $this->writer ?? $this->writers->for($this->format);
 
         $this->ensureTargetIsWritable($path);
 
@@ -230,15 +233,6 @@ final class ExportBuilder
         }
 
         return null === $title ? $this->schema->getName() : $context->trans($title);
-    }
-
-    private function writerFor(Format $format): Writer
-    {
-        return match ($format) {
-            Format::Xlsx => new XlsxWriter(),
-            Format::Csv => new CsvWriter(),
-            Format::Pdf => throw ExportException::unsupportedFormat($format),
-        };
     }
 
     private function ensureTargetIsWritable(string $path): void
