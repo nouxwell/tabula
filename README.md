@@ -23,7 +23,8 @@ yazıcılar, biçimlendiriciler, sayfa stratejileri — o tanımı okuyan tüket
 composer require balin/tabula
 ```
 
-PHP 8.5+ gerekir. PDF çıktısı için ayrıca `dompdf/dompdf` kurun (Faz 3).
+PHP 8.5+ gerekir. PDF çıktısı için ayrıca `dompdf/dompdf` kurun; kurulu değilse `Format::Pdf`
+istendiğinde yazıcı **kurulurken** hata verir — yani elli bin satır işlendikten sonra değil.
 
 ## Hızlı başlangıç
 
@@ -131,12 +132,70 @@ sessizce ilk sayfada bitirirdi.
 | --- | --- | --- |
 | `Format::Xlsx` | PhpSpreadsheet | Gerçek sekmeler |
 | `Format::Csv` | Yerel `fputcsv`, tam akış | Parça başına ayrı dosya |
-| `Format::Pdf` | Dompdf + Twig | Faz 3 |
+| `Format::Pdf` | Dompdf | Sayfa adı tablonun üstünde başlık |
 
 CSV varsayılan ayracı `;`'dir: Türkçe/Avrupa Excel'inde `,` **ondalık** ayracıdır ve virgülle ayrılmış
 dosya sayıları iki kolona böler. Dosyalar UTF-8 BOM ile yazılır, aksi hâlde Excel Türkçe karakterleri bozar.
 
-## Sayfa stratejileri
+## PDF: kâğıt ve kolon bütçesi
+
+Xlsx ve CSV'nin sayfa boyutu diye bir kavramı yoktur; PDF'in **fiziksel bir eni** vardır. Bu yüzden
+kolon sayısı bir tercih değil, hesaplanabilir bir bütçedir:
+
+```
+bütçe = floor( (kâğıt eni − sol/sağ boşluk) ÷ asgari kolon genişliği )
+```
+
+A4 yatayda 297 − 2×10 = 277 mm; 22 mm asgari genişlikle 12 kolon. Aynı şemayı A3 yataya taşımak
+bütçeyi 18'e çıkarır — **sayfayı büyütmek kolon sayısını kendiliğinden büyütür**, ayrıca ayar gerekmez.
+
+```php
+use Balin\Tabula\Format;
+use Balin\Tabula\Export\Page\{Page, ColumnBudget, Overflow};
+
+$tabula->export($schema)
+    ->from(ArraySource::of($rows))
+    ->locale('tr')
+    ->to(Format::Pdf)
+    ->page(Page::a3()->landscape()->margins(8))
+    ->columns(ColumnBudget::fit()->minWidth(25)->anchor('code', 'name'))
+    ->write('/tmp/musteriler.pdf');
+```
+
+`Page` kâğıt geometrisidir: `a3() · a4() · a5() · letter() · custom(w, h)`, ardından
+`landscape()/portrait()` ve `margins(mm)` / `marginsOf(t, r, b, l)`. Ölçüler her zaman **dikey**
+verilir; yönü `Page` uygular. Varsayılan **A4 yatay**'dır — mevcut ERP tüm listeleri A4 dikey basıyor
+ve on kolonluk bir fatura listesinin son kolonları kâğıdın dışında kalıyordu.
+
+`ColumnBudget` kolonların o kâğıda nasıl sığdırılacağıdır. Sığmadıklarında üç davranış var:
+
+| `Overflow` | Ne yapar | Veri kaybı |
+| --- | --- | --- |
+| `NextPageSet` (varsayılan) | Kolonları gruplara böler, her grup kendi sayfa takımına basılır | yok |
+| `Drop` | Düşük öncelikli kolonları eler (`Optional` önce, `Always` asla) | **var** |
+| `Shrink` | Hiç bölmez, hepsini sığdırmaya çalışır | yok (okunaksızlaşabilir) |
+
+```php
+->columns(ColumnBudget::fit()->max(8)->overflow(Overflow::Drop))   // tek sayfalık özet çıktı
+->columns(ColumnBudget::unlimited())                               // kolon sayısı zaten az
+```
+
+`anchor('code', 'name')` verilen kolonlar **her grupta tekrarlanır**: ikinci gruba bakan okuyucu
+hangi satırda olduğunu ancak onlarla bilir. Dışa aktarmada yer almayan bir çapa anahtarı sessizce
+yok sayılır — kullanıcı o kolonu seçmemişse çapalanacak bir şey yoktur.
+
+> ⚠ `->page()` ya da `->columns()`, kâğıt kavramı olmayan bir biçime (Xlsx, CSV) verilirse dışa
+> aktarma **başlamaz**; `ExportException` fırlatılır. Sessizce yok saymak, bu fazın ortadan
+> kaldırmak için var olduğu hatanın kendisi olurdu: eski kodda sayfa boyutu hem PHP'de
+> (`Dompdf::setPaper()`) hem şablonun `@page` kuralında tanımlıydı, Dompdf render sırasında CSS'i
+> uyguluyordu ve `setPaper()` çağrısı fiilen dekoratifti. Artık `@page` kuralını **yalnızca**
+> `Page::cssPageRule()` üretir.
+
+Yazı tipi ailesi Latin Extended-A kapsamalıdır. Dompdf'in çekirdek yazı tipleri (Helvetica, Times,
+Courier) WinAnsi'ye bağlıdır ve o kümede `ş ğ ı İ` **yoktur**; pakette bu harfleri taşıyan tek aile
+`DejaVu Sans`tır ve varsayılan odur.
+
+## Sayfa stratejileri (sekmeler)
 
 ```php
 use Balin\Tabula\Export\Sheet\{SingleSheet, ChunkedSheets, GroupedSheets};
@@ -200,6 +259,16 @@ tabula:
         creator: 'Ionsis ERP'
         freeze_header: true
         auto_filter: true
+    pdf:
+        page_size: a4            # a3 | a4 | a5 | letter | legal (ölçüler dikey)
+        orientation: landscape   # portrait | landscape
+        margin_mm: 10.0
+        min_column_width_mm: 22.0
+        max_columns: ~           # ~ = sert tavan yok
+        overflow: next_page_set  # next_page_set | drop | shrink
+        font_family: 'DejaVu Sans'
+        font_size_pt: 8.0
+        repeat_header: true
 ```
 
 Ardından `Balin\Tabula\Tabula` her yere enjekte edilebilir.
@@ -215,7 +284,14 @@ use Balin\Tabula\Export\Writer\{CsvWriter, CsvOptions, XlsxWriter, XlsxOptions};
 ```
 
 `line_ending` YAML'da `crlf`/`lf` adıyla verilir; ham `"\r\n"` yazmak kaçış kurallarına takılıp
-sessizce iki harfe dönüşürdü.
+sessizce iki harfe dönüşürdü. Aynı gerekçeyle `pdf.page_size` / `orientation` / `overflow` de
+adla verilir, milimetre ya da sınıf adıyla değil.
+
+`pdf` düğümündeki ölçülerin **pozitif olma** kuralı config ağacında değil, değer nesnelerinde
+(`Page`, `ColumnBudget`, `PdfOptions`) yaşar: oradaki mesajlar çözümü de söyler ("A4 yerine A3,
+yatay çevirin, kenar boşluğunu azaltın…") ve aynı kuralın yarısını ağaca kopyalamak, tam olarak
+bu fazın ortadan kaldırdığı şeyin — aynı gerçeğin iki yerde yaşamasının — küçük bir örneği olurdu.
+`->page()`/`->columns()` çağrı yerinde verilirse yapılandırmadaki varsayılanı ezer.
 
 **Çeviri alanı meselesi.** ERP'de etiketler `messages`, enum karşılıkları `enum` alanındadır; ama
 enum'lar anahtarı `label(): string` ile döndürür ve o anahtar alan bilgisi taşımaz. Köprü bunu
@@ -244,7 +320,7 @@ composer cs       # php-cs-fixer
 | 1 | `DoctrineSource`, Symfony köprü bundle'ı | **bitti** |
 | 2a | Yazıcı ayarlarının config'e açılması (`WriterFactory`, `CsvOptions`, `XlsxOptions`) | **bitti** |
 | 2b | Şemanın sunucuya alınması — istemci yalnız anahtar gönderir (ERP tarafı) | sırada |
-| 3 | PDF yazıcısı, sayfa boyutu (A3/A4/A5) ve kolon bütçesi | |
+| 3 | PDF yazıcısı, sayfa boyutu (A3/A4/A5) ve kolon bütçesi | **bitti** |
 | 4 | İçe aktarma + şablon üretimi (anahtarla eşleşme, satır bazlı hata, kısmi kabul) | |
 
 ## Lisans

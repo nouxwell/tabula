@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace Balin\Tabula\Bridge\Symfony;
 
+use Balin\Tabula\Export\Page\ColumnBudget;
+use Balin\Tabula\Export\Page\Orientation;
+use Balin\Tabula\Export\Page\Overflow;
+use Balin\Tabula\Export\Page\Page;
+use Balin\Tabula\Export\Page\PageSize;
 use Balin\Tabula\Export\Writer\CsvOptions;
+use Balin\Tabula\Export\Writer\PdfOptions;
 use Balin\Tabula\Export\Writer\XlsxOptions;
 use Balin\Tabula\Settings\DateSettings;
 use Balin\Tabula\Settings\NumberSettings;
@@ -91,6 +97,41 @@ final class SettingsFactory
             boldHeader: $config['bold_header'],
             freezeHeader: $config['freeze_header'],
             autoFilter: $config['auto_filter'],
+        );
+    }
+
+    /**
+     * @param array{page_size: string, orientation: string, margin_mm: float, min_column_width_mm: float, max_columns: int|null, overflow: string, font_family: string, font_size_pt: float, repeat_header: bool} $config
+     */
+    public static function pdf(array $config): PdfOptions
+    {
+        $page = Page::of(PageSize::from($config['page_size']));
+
+        $page = match (Orientation::from($config['orientation'])) {
+            Orientation::Landscape => $page->landscape(),
+            Orientation::Portrait => $page->portrait(),
+        };
+
+        // (float) kastı SÜS DEĞİL: Symfony'nin `FloatNode`u tam sayıyı kabul eder ama
+        // ÇEVİRMEZ — `margin_mm: 10` yazan bir yaml dosyası buraya `int(10)` olarak düşer.
+        // Kasti burada atmazsak `Page`in float alanlarına int sızar ve `10 === $margin`
+        // gibi bir karşılaştırma yapan her kod (ya da testi) tipe göre şaşar.
+        $page = $page->margins((float) $config['margin_mm']);
+
+        $budget = ColumnBudget::fit()
+            ->minWidth((float) $config['min_column_width_mm'])
+            ->max($config['max_columns'])
+            ->overflow(Overflow::from($config['overflow']));
+
+        // `title` ve `anchor()` bilerek yapılandırmada YOK: ikisi de dışa aktarma başına
+        // değişir (belge başlığı, satırı tanıtan çapa kolonlar) ve global bir varsayılanı
+        // olamaz. Çağrı yerinde `->page()` / `->columns()` ile verilirler.
+        return new PdfOptions(
+            page: $page,
+            budget: $budget,
+            fontFamily: $config['font_family'],
+            fontSizePt: (float) $config['font_size_pt'],
+            repeatHeader: $config['repeat_header'],
         );
     }
 

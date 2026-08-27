@@ -7,11 +7,13 @@ namespace Balin\Tabula\Tests\Bridge\Symfony;
 use Balin\Tabula\Bridge\Symfony\SettingsFactory;
 use Balin\Tabula\Bridge\Symfony\TabulaBundle;
 use Balin\Tabula\Exception\WriterException;
+use Balin\Tabula\Export\Page\Page;
 use Balin\Tabula\Format;
 use Balin\Tabula\Schema\Field;
 use Balin\Tabula\Schema\Schema;
 use Balin\Tabula\Source\ArraySource;
 use Balin\Tabula\Tabula;
+use Balin\Tabula\Tests\Fixture\PdfDocument;
 use Balin\Tabula\Tests\Fixture\StubSymfonyTranslator;
 use Balin\Tabula\Tests\Fixture\TempDirectory;
 use InvalidArgumentException;
@@ -87,6 +89,40 @@ final class WriterConfigurationTest extends TestCase
             ->from(ArraySource::of([['code' => 'A1', 'name' => 'Çiğdem Şahin']]))
             ->locale('tr')
             ->to($format)
+            ->write($path);
+
+        return $path;
+    }
+
+    /**
+     * PDF için ayrı bir yazma yolu: kâğıt bütçesinin görünür olması altı kolon ister.
+     *
+     * @param array<string, mixed> $config
+     */
+    private function writePdf(array $config, string $file): string
+    {
+        $path = $this->dir->file($file);
+
+        $schema = Schema::make('t')->fields(
+            Field::string('code')->label('Kod'),
+            Field::string('name')->label('Ünvan'),
+            Field::string('city')->label('Şehir'),
+            Field::string('phone')->label('Telefon'),
+            Field::string('email')->label('E-posta'),
+            Field::string('note')->label('Not'),
+        );
+
+        $this->tabula($config)->export($schema)
+            ->from(ArraySource::of([[
+                'code' => 'A1',
+                'name' => 'Çiğdem Şahin',
+                'city' => 'İstanbul',
+                'phone' => '0212 000 00 00',
+                'email' => 'info@ornek.test',
+                'note' => 'Şubat ayında görüşülecek',
+            ]]))
+            ->locale('tr')
+            ->to(Format::Pdf)
             ->write($path);
 
         return $path;
@@ -226,6 +262,106 @@ final class WriterConfigurationTest extends TestCase
         $this->expectException(Throwable::class);
 
         $this->write(['xlsx' => ['header_fill' => $colour]], Format::Xlsx, 'kotu-renk.xlsx');
+    }
+
+    // ---------------------------------------------------------------- PDF
+
+    /**
+     * Varsayılan A4 YATAY olmalı.
+     *
+     * Mevcut ERP tüm listeleri A4 dikey basıyordu; on kolonlu bir fatura listesinin son
+     * kolonları kâğıdın dışında kalıyor, kullanıcı eksiği ancak Excel çıktısıyla
+     * karşılaştırınca fark ediyordu. Yatay kâğıt kullanılabilir eni 190 → 277 mm yapar.
+     */
+    #[Test]
+    public function pdfDefaultsProduceAnA4LandscapePage(): void
+    {
+        PdfDocument::at($this->writePdf([], 'varsayilan.pdf'))->assertPaper(Page::a4()->landscape());
+    }
+
+    #[Test]
+    public function pdfConfigurationReachesTheWrittenFile(): void
+    {
+        $config = ['pdf' => ['page_size' => 'a5', 'orientation' => 'portrait']];
+
+        PdfDocument::at($this->writePdf($config, 'a5.pdf'))->assertPaper(Page::a5());
+    }
+
+    /**
+     * Kolon bütçesi de yapılandırmadan gelmeli.
+     *
+     * Altı kolon, sayfa başına en fazla iki kolon → üç sayfa takımı, yani üç kâğıt.
+     * `max_columns` taşınmasaydı A5'e üç kolon sığar ve iki kâğıt çıkardı.
+     */
+    #[Test]
+    public function thePdfColumnBudgetFromConfigurationReachesTheWrittenFile(): void
+    {
+        $config = ['pdf' => [
+            'page_size' => 'a5',
+            'orientation' => 'portrait',
+            'min_column_width_mm' => 40.0,
+            'max_columns' => 2,
+        ]];
+
+        PdfDocument::at($this->writePdf($config, 'bolunmus.pdf'))->assertPageCount(3);
+    }
+
+    /**
+     * `max_columns: ~` "tavan yok" demektir, çökme sebebi değil.
+     *
+     * `csv.escape` ile birebir aynı tuzak: Symfony'nin `IntegerNode`u null'ı "Expected int,
+     * but got null" diye reddeder, oysa devralınan bir değeri geri almanın tek yolu `~`
+     * yazmaktır. Bu yüzden düğüm `integerNode` değil, doğrulamalı bir `scalarNode`.
+     */
+    #[Test]
+    public function aMaxColumnsWrittenAsNullIsReadAsNoCapRatherThanCrashing(): void
+    {
+        $config = ['pdf' => ['page_size' => 'a5', 'orientation' => 'portrait', 'max_columns' => null]];
+
+        // A5 dikeyde 128 mm / 22 mm = 5 kolon; altı kolon iki gruba (5 + 1) düşer.
+        PdfDocument::at($this->writePdf($config, 'tavansiz.pdf'))->assertPageCount(2);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>, string}> */
+    public static function invalidPdfConfigurations(): iterable
+    {
+        yield 'bilinmeyen kâğıt' => [['page_size' => 'a2'], 'tabula.pdf.page_size'];
+        yield 'bilinmeyen yön' => [['orientation' => 'yatay'], 'tabula.pdf.orientation'];
+        yield 'bilinmeyen taşma' => [['overflow' => 'wrap'], 'tabula.pdf.overflow'];
+        // Yazı tipi boş kalırsa Dompdf Latin-1 çekirdek yazı tipine düşer ve "ş ğ ı İ"
+        // harfleri SESSİZCE basılmaz.
+        yield 'boş yazı tipi' => [['font_family' => ''], 'tabula.pdf.font_family'];
+        yield 'null yazı tipi' => [['font_family' => null], 'tabula.pdf.font_family'];
+        yield 'sıfır kolon tavanı' => [['max_columns' => 0], 'tabula.pdf.max_columns'];
+        yield 'metin kolon tavanı' => [['max_columns' => 'hepsi'], 'tabula.pdf.max_columns'];
+    }
+
+    /**
+     * @param array<string, mixed> $pdf
+     */
+    #[Test]
+    #[DataProvider('invalidPdfConfigurations')]
+    public function theConfigurationTreeRejectsBadPdfValues(array $pdf, string $path): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessageMatches('/'.preg_quote($path, '/').'/');
+
+        $this->tabula(['pdf' => $pdf]);
+    }
+
+    /**
+     * Aralık kuralı ağaçta değil, DEĞER NESNESİNDE yaşar (bkz. `pdf` düğümündeki not).
+     *
+     * Ama yaşadığı yerde gerçekten çalışmalı: sıfır punto Dompdf'te istisna fırlatmaz,
+     * satır yüksekliğini sıfır hesaplar ve tabloyu görünmez bir şeride indirir — kullanıcıya
+     * "boş PDF" olarak döner ve nedeni çıktıya bakarak anlaşılamaz.
+     */
+    #[Test]
+    public function aNonPositiveFontSizeIsRejectedByTheValueObject(): void
+    {
+        $this->expectException(WriterException::class);
+
+        $this->writePdf(['pdf' => ['font_size_pt' => 0.0]], 'gorunmez.pdf');
     }
 
     // ---------------------------------------------------------------- config ağacı

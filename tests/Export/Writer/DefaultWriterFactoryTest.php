@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Balin\Tabula\Tests\Export\Writer;
 
-use Balin\Tabula\Exception\ExportException;
 use Balin\Tabula\Export\Column;
+use Balin\Tabula\Export\Page\Page;
 use Balin\Tabula\Export\Writer\CsvOptions;
 use Balin\Tabula\Export\Writer\CsvWriter;
 use Balin\Tabula\Export\Writer\DefaultWriterFactory;
+use Balin\Tabula\Export\Writer\PdfOptions;
+use Balin\Tabula\Export\Writer\PdfWriter;
 use Balin\Tabula\Export\Writer\Writer;
 use Balin\Tabula\Export\Writer\XlsxOptions;
 use Balin\Tabula\Export\Writer\XlsxWriter;
@@ -38,7 +40,8 @@ use PHPUnit\Framework\TestCase;
  *     kod yolunda birinin dosyasını diğerinin üzerine yazdırır. Bu, `assertNotSame` ile
  *     "farklı nesne" diye değil, iki yazıcıyı GERÇEKTEN aynı anda çalıştırıp dosyalarına
  *     bakarak da doğrulanır (bkz. `twoWritersFromOneFactory...`).
- *  2. `with()` değiştirmez, KOPYALAR. Faz 3'te PDF yazıcısı buraya bu şekilde takılacak.
+ *  2. `with()` değiştirmez, KOPYALAR. Uygulamaya özel bir yazıcı (ör. antetli PDF) buraya
+ *     bu şekilde takılır ve paylaşılan fabrika servisi kirlenmez.
  */
 #[CoversClass(DefaultWriterFactory::class)]
 final class DefaultWriterFactoryTest extends TestCase
@@ -64,16 +67,31 @@ final class DefaultWriterFactoryTest extends TestCase
 
         self::assertInstanceOf(CsvWriter::class, $factory->for(Format::Csv));
         self::assertInstanceOf(XlsxWriter::class, $factory->for(Format::Xlsx));
+        self::assertInstanceOf(PdfWriter::class, $factory->for(Format::Pdf));
     }
 
+    /**
+     * Fabrikaya verilen PDF ayarı gerçekten üretilen yazıcıya iniyor mu.
+     *
+     * `PdfWriter` ayarını dışarı AÇMAZ (yazıcının okunacak bir yüzeyi yok), bu yüzden iddia
+     * çıktının kendisinden okunur: A5 dikey kâğıt PDF'in `MediaBox`ında 419×595 punto olur.
+     * "Nesne kuruldu" demek burada yetmezdi — bu fazın var olma sebebi, kurulan ama
+     * uygulanmayan bir sayfa ayarıydı.
+     */
     #[Test]
-    public function pdfHasNoWriterYetAndSaysSo(): void
+    public function thePdfOptionsGivenToTheFactoryReachTheWriterItProduces(): void
     {
-        $this->expectException(ExportException::class);
-        // Mesaj Faz 3'ü işaret etmeli; "biçim desteklenmiyor" demek çağıranı hata aramaya iter.
-        $this->expectExceptionMessageMatches('/Faz 3/');
+        $path = $this->dir->file('a5.pdf');
 
-        (new DefaultWriterFactory())->for(Format::Pdf);
+        $writer = (new DefaultWriterFactory(pdf: new PdfOptions(page: Page::a5())))->for(Format::Pdf);
+
+        $writer->open($path);
+        $writer->startSheet('Müşteriler', self::columns());
+        $writer->writeRow([Cell::text('0042')]);
+        $writer->finishSheet();
+
+        self::assertSame([$path], $writer->close());
+        self::assertStringContainsString('MediaBox [0.000 0.000 419.528 595.276]', (string) file_get_contents($path));
     }
 
     // ---------------------------------------------------------------- ★ taze yazıcı
@@ -85,6 +103,7 @@ final class DefaultWriterFactoryTest extends TestCase
 
         self::assertNotSame($factory->for(Format::Csv), $factory->for(Format::Csv));
         self::assertNotSame($factory->for(Format::Xlsx), $factory->for(Format::Xlsx));
+        self::assertNotSame($factory->for(Format::Pdf), $factory->for(Format::Pdf));
     }
 
     /**

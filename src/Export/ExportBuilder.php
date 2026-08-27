@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Balin\Tabula\Export;
 
 use Balin\Tabula\Exception\ExportException;
+use Balin\Tabula\Export\Page\ColumnBudget;
+use Balin\Tabula\Export\Page\Page;
 use Balin\Tabula\Export\Sheet\SheetStrategy;
 use Balin\Tabula\Export\Sheet\SingleSheet;
+use Balin\Tabula\Export\Writer\PageAware;
 use Balin\Tabula\Export\Writer\Writer;
 use Balin\Tabula\Export\Writer\WriterFactory;
 use Balin\Tabula\Format;
@@ -41,6 +44,10 @@ final class ExportBuilder
     private Format $format = Format::Xlsx;
 
     private ?SheetStrategy $sheets = null;
+
+    private ?Page $page = null;
+
+    private ?ColumnBudget $budget = null;
 
     private ?Writer $writer = null;
 
@@ -100,6 +107,37 @@ final class ExportBuilder
         });
     }
 
+    /**
+     * Kâğıt geometrisi: boyut, yön, kenar boşlukları.
+     *
+     *     ->page(Page::a3()->landscape()->margins(8))
+     *
+     * Yalnız kâğıda basan biçimler için anlamlıdır. Xlsx/CSV'de verilirse dışa aktarma
+     * BAŞLAMAZ: sessizce yok saymak, bu fazın ortadan kaldırmak için var olduğu hatanın
+     * aynısı olurdu (bkz. `write()` içindeki `applyPage()`).
+     */
+    public function page(Page $page): self
+    {
+        return $this->with(static function (self $b) use ($page): void {
+            $b->page = $page;
+        });
+    }
+
+    /**
+     * Kolonların sayfaya nasıl sığdırılacağı; taşma stratejisi de burada.
+     *
+     *     ->columns(ColumnBudget::fit()->minWidth(25)->anchor('code', 'name'))
+     *
+     * Metodun adı `budget()` değil `columns()`: çağrı yerinde okunan cümle "bu dışa
+     * aktarmanın KOLONLARI şöyle davransın" olmalı, kullanılan sınıfın adı değil.
+     */
+    public function columns(ColumnBudget $budget): self
+    {
+        return $this->with(static function (self $b) use ($budget): void {
+            $b->budget = $budget;
+        });
+    }
+
     /** Yerleşik yazıcı yerine kendi yazıcını kullan. */
     public function writer(Writer $writer): self
     {
@@ -141,7 +179,7 @@ final class ExportBuilder
         // Yazıcı fabrikadan gelir, burada `new`lenmez: ayraç/BOM gibi ayarlar uygulamanın
         // yapılandırmasından beslenebilsin diye (aksi hâlde makineye giden her besleme
         // çağrı yerinde elle `->writer(new CsvWriter(...))` yazmak zorunda kalıyordu).
-        $writer = $this->writer ?? $this->writers->for($this->format);
+        $writer = $this->applyPage($this->writer ?? $this->writers->for($this->format));
 
         $this->ensureTargetIsWritable($path);
 
@@ -198,6 +236,34 @@ final class ExportBuilder
     }
 
     // ---------------------------------------------------------------- iç
+
+    /**
+     * Sayfa ayarını yazıcıya iter — ya da yazıcı kâğıt tanımıyorsa DIŞA AKTARMAYI DURDURUR.
+     *
+     * ★ Buradaki `throw` bu fazın özüdür. `PageAware` olmayan bir yazıcıya sessizce
+     * dokunmamak "ayar uygulanmadı" demektir ve kullanıcı bunu ancak çıktıyı ölçerek
+     * anlayabilir — mevcut ERP'nin dekoratif `setPaper()` çağrısının yaptığı tam olarak
+     * buydu. Ayar ya uygulanır ya da gürültü çıkarır; üçüncü seçenek yok.
+     *
+     * Kontrol, yazıcının fabrikadan mı yoksa `->writer()` ile elle mi geldiğine BAKMAZ:
+     * elle verilen bir `CsvWriter`ın sayfa ayarını yutması, fabrikadan gelenin yutmasından
+     * daha az zararlı değil. `withPage()` zaten yerinde değiştirmez, kopya döndürür — yani
+     * paylaşılan bir yazıcı örneğine A3 bulaşmaz (bkz. `PageAware`).
+     */
+    private function applyPage(Writer $writer): Writer
+    {
+        if (null === $this->page && null === $this->budget) {
+            return $writer;
+        }
+
+        if (!$writer instanceof PageAware) {
+            throw ExportException::pageSettingsUnsupported($this->format);
+        }
+
+        // null geçilen argüman "elindekini koru" demektir; yalnız sayfayı değiştirip
+        // bütçeye dokunmamak (ya da tersi) böyle mümkün olur.
+        return $writer->withPage($this->page, $this->budget);
+    }
 
     /**
      * @param list<Field> $fields

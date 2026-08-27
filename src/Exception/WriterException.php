@@ -71,4 +71,16 @@ final class WriterException extends LogicException implements TabulaException
             $value,
         ));
     }
+
+    /**
+     * PDF yazı tipi boyutu pozitif olmalıdır.
+     *
+     * Dompdf sıfır ya da negatif puntoyu REDDETMEZ: satır yüksekliğini sıfır hesaplar ve
+     * tablo sayfada görünmez bir şeride iner. Kullanıcıya bu "boş PDF" olarak döner ve
+     * nedeni çıktıya bakarak anlaşılamaz — bu yüzden kurulum anında durduruyoruz.
+     */
+    public static function invalidFontSize(float $pt): self
+    {
+        return new self(sprintf('PDF yazı tipi boyutu pozitif olmalı; %s punto verildi.', $pt));
+    }
 }

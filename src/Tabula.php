@@ -27,7 +27,7 @@ use Balin\Tabula\Value\ValueResolver;
  *         ->to(Format::Xlsx)
  *         ->write('/tmp/musteriler.xlsx');
  *
- * Faz 0 kapsamı yalnızca dışa aktarmadır; `import()` ve `template()` sırasıyla Faz 4 ve Faz 3'te eklenecek.
+ * Şimdilik kapsam yalnızca dışa aktarmadır; `import()` ve `template()` Faz 4'te eklenecek.
  */
 final class Tabula
 {

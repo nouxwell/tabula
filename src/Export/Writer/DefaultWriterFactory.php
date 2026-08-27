@@ -7,12 +7,13 @@ namespace Balin\Tabula\Export\Writer;
 use Balin\Tabula\Exception\ExportException;
 use Balin\Tabula\Format;
 use Closure;
+use Dompdf\Dompdf;
 
 /**
  * Yerleşik yazıcıları verilen ayarlarla üretir.
  *
- * `with()` ile bir biçim için kendi üreticini geçirebilirsin — PDF yazıcısı (Faz 3) de
- * buraya bu şekilde takılacak, `ExportBuilder`e dokunmadan.
+ * `with()` ile bir biçim için kendi üreticini geçirebilirsin — ör. şirket antetli kendi PDF
+ * yazıcın, `ExportBuilder`e dokunmadan.
  */
 final class DefaultWriterFactory implements WriterFactory
 {
@@ -22,6 +23,7 @@ final class DefaultWriterFactory implements WriterFactory
     public function __construct(
         private readonly CsvOptions $csv = new CsvOptions(),
         private readonly XlsxOptions $xlsx = new XlsxOptions(),
+        private readonly PdfOptions $pdf = new PdfOptions(),
     ) {
     }
 
@@ -47,7 +49,12 @@ final class DefaultWriterFactory implements WriterFactory
         return match ($format) {
             Format::Xlsx => new XlsxWriter($this->xlsx),
             Format::Csv => new CsvWriter($this->csv),
-            Format::Pdf => throw ExportException::unsupportedFormat($format),
+            // Motor kontrolü BURADA, `PdfWriter`ın içinde değil: yazıcı Dompdf'i ancak
+            // `close()`ta çağırır, yani eksik paket tüm satırlar işlendikten sonra ham bir
+            // `Error` olarak patlardı (bkz. `ExportException::missingPdfEngine`).
+            Format::Pdf => class_exists(Dompdf::class)
+                ? new PdfWriter($this->pdf)
+                : throw ExportException::missingPdfEngine(),
         };
     }
 }

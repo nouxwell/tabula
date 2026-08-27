@@ -6,6 +6,7 @@ namespace Balin\Tabula\Bridge\Symfony;
 
 use Balin\Tabula\Export\Writer\CsvOptions;
 use Balin\Tabula\Export\Writer\DefaultWriterFactory;
+use Balin\Tabula\Export\Writer\PdfOptions;
 use Balin\Tabula\Export\Writer\WriterFactory;
 use Balin\Tabula\Export\Writer\XlsxOptions;
 use Balin\Tabula\Port\Translator;
@@ -43,6 +44,9 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
  *         numbers:
  *             currency_symbols:
  *                 TRY: '₺'
+ *         pdf:
+ *             page_size: a4
+ *             orientation: landscape
  *
  * Ardından `Balin\Tabula\Tabula` her yere otomatik enjekte edilebilir.
  */
@@ -171,6 +175,67 @@ final class TabulaBundle extends AbstractBundle
                         ->booleanNode('auto_filter')->defaultTrue()->end()
                     ->end()
                 ->end()
+
+                ->arrayNode('pdf')
+                    ->addDefaultsIfNotSet()
+                    ->info('Varsayılan A4 YATAY: dikey kâğıtta on kolonluk bir liste sayfanın dışına taşar ve son kolonlar hiç basılmaz.')
+                    ->children()
+                        ->enumNode('page_size')
+                            ->values(['a3', 'a4', 'a5', 'letter', 'legal'])
+                            ->defaultValue('a4')
+                        ->end()
+                        ->enumNode('orientation')
+                            ->values(['portrait', 'landscape'])
+                            ->defaultValue('landscape')
+                        ->end()
+                        // Ölçülerin POZİTİF olması `Page`/`ColumnBudget`/`PdfOptions`
+                        // tarafında zaten denetleniyor ve oradaki mesajlar çözümü de
+                        // söylüyor ("A4 yerine A3, yatay çevirin, boşluğu azaltın…").
+                        // Aynı kuralın yarısını burada `min()` ile tekrarlamak, bu fazın
+                        // ortadan kaldırdığı şeyin — aynı gerçeğin iki yerde yaşamasının —
+                        // küçük bir kopyası olurdu. Tip denetimi ağacın, aralık denetimi
+                        // değer nesnesinin işi.
+                        ->floatNode('margin_mm')
+                            ->defaultValue(10.0)
+                            ->info('Dört kenara aynı boşluk (mm).')
+                        ->end()
+                        ->floatNode('min_column_width_mm')
+                            ->defaultValue(22.0)
+                            ->info('Okunabilirlik tabanı. Sayfa bütçesi bundan hesaplanır: (kâğıt eni − boşluklar) ÷ bu değer.')
+                        ->end()
+                        // `integerNode` DEĞİL. `max_columns: ~` (tavan yok) yazan bir
+                        // ortam dosyası `IntegerNode`da "Expected int, but got null" ile
+                        // patlıyor; oysa `~` bu ayarın tek anlamlı sıfırlama biçimi —
+                        // devralınan bir değeri geri almanın başka yolu yok. Aynı tuzağa
+                        // `csv.escape` de düşmüştü (bkz. oradaki null normalizasyonu).
+                        ->scalarNode('max_columns')
+                            ->defaultNull()
+                            ->info('Genişlik elverse bile bu sayıdan fazla kolon basma. null = sert tavan yok.')
+                            ->validate()
+                                ->ifTrue(static fn (mixed $value): bool => null !== $value && (!is_int($value) || $value < 1))
+                                ->thenInvalid('Azami kolon sayısı en az 1 olmalı ya da "~" (tavan yok) olmalı; %s verildi.')
+                            ->end()
+                        ->end()
+                        ->enumNode('overflow')
+                            ->values(['next_page_set', 'drop', 'shrink'])
+                            ->defaultValue('next_page_set')
+                            ->info('Sığmayan kolonlar: next_page_set = ayrı sayfa takımı · drop = düşük öncelikliyi ELE (veri kaybeder) · shrink = hepsini sıkıştır.')
+                        ->end()
+                        // Boş bırakılamaz: `""` CSS'e `"",sans-serif` olarak iner ve Dompdf
+                        // Latin-1 çekirdek yazı tipine düşer — "ş ğ ı İ" o kümede yoktur,
+                        // yani çıktı SESSİZCE eksik harfle basılır.
+                        ->scalarNode('font_family')
+                            ->defaultValue('DejaVu Sans')
+                            ->cannotBeEmpty()
+                            ->info('Latin Extended-A kapsayan bir aile olmalı. Dompdf ile gelen tek böyle aile DejaVu Sans\'tır.')
+                        ->end()
+                        ->floatNode('font_size_pt')->defaultValue(8.0)->end()
+                        ->booleanNode('repeat_header')
+                            ->defaultTrue()
+                            ->info('Başlık satırı her sayfada tekrarlansın mı. Kapalıysa ikinci sayfadan sonra hangi kolonun ne olduğu anlaşılmaz.')
+                        ->end()
+                    ->end()
+                ->end()
             ->end();
     }
 
@@ -218,8 +283,12 @@ final class TabulaBundle extends AbstractBundle
             ->factory([SettingsFactory::class, 'xlsx'])
             ->args([$config['xlsx']]);
 
+        $services->set(PdfOptions::class)
+            ->factory([SettingsFactory::class, 'pdf'])
+            ->args([$config['pdf']]);
+
         $services->set(DefaultWriterFactory::class)
-            ->args([service(CsvOptions::class), service(XlsxOptions::class)]);
+            ->args([service(CsvOptions::class), service(XlsxOptions::class), service(PdfOptions::class)]);
 
         $services->alias(WriterFactory::class, DefaultWriterFactory::class);
 

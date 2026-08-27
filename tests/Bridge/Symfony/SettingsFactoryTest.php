@@ -5,7 +5,12 @@ declare(strict_types=1);
 namespace Balin\Tabula\Tests\Bridge\Symfony;
 
 use Balin\Tabula\Bridge\Symfony\SettingsFactory;
+use Balin\Tabula\Export\Column;
+use Balin\Tabula\Export\Page\Orientation;
+use Balin\Tabula\Export\Page\Overflow;
+use Balin\Tabula\Schema\Align;
 use Balin\Tabula\Schema\FieldType;
+use Balin\Tabula\Schema\Priority;
 use Balin\Tabula\Settings\DateSettings;
 use Balin\Tabula\Settings\NumberSettings;
 use Balin\Tabula\Settings\SymbolPosition;
@@ -25,6 +30,7 @@ use ValueError;
  * varsayılanlardan uzak seçilmiştir: yer değiştirme testi kırmızıya döndürür.
  *
  * @phpstan-type NumberConfig array{decimal_separator: string, thousand_separator: string, decimal_digits: int, quantity_digits: int, money_digits: int, symbol_position: string, currency_symbols: array<string, string>}
+ * @phpstan-type PdfConfig array{page_size: string, orientation: string, margin_mm: float, min_column_width_mm: float, max_columns: int|null, overflow: string, font_family: string, font_size_pt: float, repeat_header: bool}
  */
 #[CoversClass(SettingsFactory::class)]
 final class SettingsFactoryTest extends TestCase
@@ -175,6 +181,143 @@ final class SettingsFactoryTest extends TestCase
         self::assertSame('dd.mm.yyyy hh:mm', $dates->excelFormatFor(FieldType::DateTime));
     }
 
+    // ---------------------------------------------------------------- pdf
+
+    #[Test]
+    public function pdfMapsEveryConfigKeyToItsOwnProperty(): void
+    {
+        $pdf = SettingsFactory::pdf(self::pdfConfig([
+            'page_size' => 'a3',
+            'orientation' => 'portrait',
+            'margin_mm' => 7.5,
+            'font_family' => 'Ionsis Sans',
+            'font_size_pt' => 9.5,
+            'repeat_header' => false,
+        ]));
+
+        self::assertSame(297.0, $pdf->page->widthMm());
+        self::assertSame(420.0, $pdf->page->heightMm());
+        self::assertSame(Orientation::Portrait, $pdf->page->orientation);
+        self::assertSame('Ionsis Sans', $pdf->fontFamily);
+        self::assertSame(9.5, $pdf->fontSizePt);
+        self::assertFalse($pdf->repeatHeader);
+
+        // Dört kenar da aynı değeri almalı; biri atlanırsa çıktı görünürde "biraz kaymış" olur.
+        self::assertSame(7.5, $pdf->page->marginTopMm);
+        self::assertSame(7.5, $pdf->page->marginRightMm);
+        self::assertSame(7.5, $pdf->page->marginBottomMm);
+        self::assertSame(7.5, $pdf->page->marginLeftMm);
+    }
+
+    /**
+     * Yön SAKLANMAKLA kalmaz, ölçüye UYGULANIR.
+     *
+     * `Orientation` alanını doğru kurup `->landscape()` çağırmayı unutmak sessiz bir hatadır:
+     * `@page` kuralı doğru yazılırdı ama kolon bütçesi dikey enden hesaplanır, yani sayfa
+     * yatay basılırken kolonlar dikeye göre bölünürdü.
+     */
+    #[Test]
+    public function theOrientationIsAppliedToTheMeasurementsNotJustStored(): void
+    {
+        $pdf = SettingsFactory::pdf(self::pdfConfig(['page_size' => 'a5', 'orientation' => 'landscape']));
+
+        self::assertSame(210.0, $pdf->page->widthMm());
+        self::assertSame(148.0, $pdf->page->heightMm());
+    }
+
+    /**
+     * `margin_mm: 10` yazan bir yaml dosyası buraya `int(10)` olarak düşer.
+     *
+     * Symfony'nin `FloatNode`u tam sayıyı kabul eder ama ÇEVİRMEZ (bkz. `FloatNode::validateType`;
+     * kastı yerel değişkene yapar, düğümün değerine değil). Fabrika kasti atmazsa `Page`in
+     * float alanlarına int sızar.
+     */
+    #[Test]
+    public function aWholeNumberMarginArrivesAsAFloat(): void
+    {
+        $pdf = SettingsFactory::pdf(self::pdfConfig([
+            'margin_mm' => 12,
+            'min_column_width_mm' => 30,
+            'font_size_pt' => 9,
+        ]));
+
+        self::assertSame(12.0, $pdf->page->marginTopMm);
+        self::assertSame(9.0, $pdf->fontSizePt);
+    }
+
+    /**
+     * Bütçe üç ayardan kurulur ve üçü de gerçekten okunur.
+     *
+     * A4 yatayda kullanılabilir en 297 − 2×10 = 277 mm; 50 mm asgari kolonla 5 kolon sığar,
+     * `max_columns` onu 3'e çeker. Değer taşınmasaydı burası 5 kalırdı.
+     */
+    #[Test]
+    public function theColumnBudgetIsBuiltFromMinWidthAndMax(): void
+    {
+        $pdf = SettingsFactory::pdf(self::pdfConfig([
+            'min_column_width_mm' => 50.0,
+            'max_columns' => 3,
+        ]));
+
+        self::assertSame(3, $pdf->budget->capacity($pdf->page));
+    }
+
+    #[Test]
+    public function aNullMaxColumnsMeansNoHardCap(): void
+    {
+        $pdf = SettingsFactory::pdf(self::pdfConfig([
+            'min_column_width_mm' => 50.0,
+            'max_columns' => null,
+        ]));
+
+        self::assertSame(5, $pdf->budget->capacity($pdf->page));
+    }
+
+    #[Test]
+    #[DataProvider('overflowNames')]
+    public function theOverflowNameBecomesTheEnumCase(string $configured, Overflow $expected): void
+    {
+        $pdf = SettingsFactory::pdf(self::pdfConfig(['overflow' => $configured, 'min_column_width_mm' => 50.0]));
+
+        // `Overflow` bütçenin İÇİNDE özel; davranışından okuyoruz: Shrink hiç bölmez, çapa
+        // da tanımaz — kaç kolon olursa olsun tek grup döner.
+        $columns = self::wideColumns(12);
+        $groups = $pdf->budget->split($columns, $pdf->page);
+
+        self::assertSame(
+            Overflow::Shrink === $expected ? 1 : 3,
+            count($groups),
+            'Taşma stratejisi bütçeye ulaşmamış olabilir.',
+        );
+    }
+
+    /** @return iterable<string, array{string, Overflow}> */
+    public static function overflowNames(): iterable
+    {
+        // 12 kolon / 5 kapasite: next_page_set üç gruba böler, drop tek gruba indirir
+        // (ama 5 kolon kalır), shrink hiç bölmez. `drop` da tek grup döndürdüğü için
+        // ayırt edici sayı 3 ↔ 1'dir.
+        yield 'next_page_set' => ['next_page_set', Overflow::NextPageSet];
+        yield 'shrink' => ['shrink', Overflow::Shrink];
+    }
+
+    #[Test]
+    public function anUnknownPageSizeFailsLoudly(): void
+    {
+        // Tek koruma bundle'ın `enumNode()`'u; çerçevesiz çağrıda hata sessiz kalmamalı.
+        $this->expectException(ValueError::class);
+
+        SettingsFactory::pdf(self::pdfConfig(['page_size' => 'a2']));
+    }
+
+    #[Test]
+    public function anUnknownOverflowNameFailsLoudly(): void
+    {
+        $this->expectException(ValueError::class);
+
+        SettingsFactory::pdf(self::pdfConfig(['overflow' => 'wrap']));
+    }
+
     // ---------------------------------------------------------------- kök ayarlar
 
     #[Test]
@@ -241,5 +384,54 @@ final class SettingsFactoryTest extends TestCase
         ], $overrides);
 
         return $config;
+    }
+
+    /**
+     * Tam bir PDF yapılandırması; bundle'ın ağacının ürettiği varsayılanlarla aynı.
+     *
+     * @param array<string, mixed> $overrides
+     *
+     * @return PdfConfig
+     */
+    private static function pdfConfig(array $overrides = []): array
+    {
+        /** @var PdfConfig $config */
+        $config = array_merge([
+            'page_size' => 'a4',
+            'orientation' => 'landscape',
+            'margin_mm' => 10.0,
+            'min_column_width_mm' => 22.0,
+            'max_columns' => null,
+            'overflow' => 'next_page_set',
+            'font_family' => 'DejaVu Sans',
+            'font_size_pt' => 8.0,
+            'repeat_header' => true,
+        ], $overrides);
+
+        return $config;
+    }
+
+    /**
+     * Bütçeyi zorlayacak kadar çok, genişliği verilmemiş kolon.
+     *
+     * @return list<Column>
+     */
+    private static function wideColumns(int $count): array
+    {
+        $columns = [];
+
+        for ($i = 0; $i < $count; ++$i) {
+            $columns[] = new Column(
+                key: 'k'.$i,
+                label: 'Kolon '.$i,
+                type: FieldType::String,
+                align: Align::Left,
+                width: null,
+                required: false,
+                priority: Priority::Normal,
+            );
+        }
+
+        return $columns;
     }
 }
