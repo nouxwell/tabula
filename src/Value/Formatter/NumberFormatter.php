@@ -75,7 +75,24 @@ final class NumberFormatter implements ValueFormatter
      * hâlihazırda yerelleştirilmiş dizeler de gelebilir ("1.234,56"); mevcut ERP'nin
      * yaptığı düz `(float)` dönüşümü bu dizeyi sessizce 1.0 yapıyordu.
      */
-    public static function parse(mixed $raw, NumberSettings $numbers): int|float|null
+    /**
+     * @param bool $preferLocalized Metnin YERELLEŞTİRİLMİŞ bir gösterimden geldiği biliniyorsa `true`.
+     *
+     * Aynı dize, geldiği yöne göre farklı anlama gelir ve bu ayrım AÇIK olmalıdır:
+     *
+     *  - Dışa aktarma tarafında değer çoğunlukla veritabanı skalerinden gelir ("1234.5600"),
+     *    orada tek başına nokta HER ZAMAN ondalıktır — kanonik okuma doğrudur.
+     *  - İçe aktarma tarafında metin, bizim ürettiğimiz şablondan ya da kullanıcının kendi
+     *    yerelinde Excel'e yazdığı hücreden gelir. Türkçe ayarlarla `Field::money('balance')`
+     *    1234 değerini "1.234 ₺" diye yazar; bunu kanonik okumak 1.234 verir — SESSİZCE
+     *    1000 KATLIK sapma, üstelik geçerli bir float üretildiği için kimse fark etmez.
+     *
+     * `true` verildiğinde kanonik kısayol atlanır ve yapılandırılmış ayıraçlar kazanır.
+     * Kanonik dizeler yine doğru okunur: "1234.5600" ondalıktan sonra 4 hane taşıdığı için
+     * binlik gruplaması sayılmaz. Kaybedilen tek şey bilimsel gösterimdir ("1e3") — o da
+     * elektronik tablodan zaten yerel `float` olarak gelir, dize olarak değil.
+     */
+    public static function parse(mixed $raw, NumberSettings $numbers, bool $preferLocalized = false): int|float|null
     {
         if (null === $raw) {
             return null;
@@ -106,7 +123,10 @@ final class NumberFormatter implements ValueFormatter
 
         // Kanonik hâl — veritabanının döndürdüğü "1234.5600", "-0.5", "1e3".
         // Buradaki tek başına nokta HER ZAMAN ondalıktır; "1.234" = 1.234.
-        if (is_numeric($text)) {
+        //
+        // İçe aktarmada bu kısayol ATLANIR: oradaki metin yerelleştirilmiş bir gösterimden
+        // gelir ve "1.234" binlik gruplu 1234 demektir (bkz. $preferLocalized).
+        if (!$preferLocalized && is_numeric($text)) {
             $canonical = $text + 0;
 
             return is_float($canonical) && !is_finite($canonical) ? null : $canonical;

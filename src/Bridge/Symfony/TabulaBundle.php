@@ -9,12 +9,16 @@ use Balin\Tabula\Export\Writer\DefaultWriterFactory;
 use Balin\Tabula\Export\Writer\PdfOptions;
 use Balin\Tabula\Export\Writer\WriterFactory;
 use Balin\Tabula\Export\Writer\XlsxOptions;
+use Balin\Tabula\Import\Reader\ReaderRegistry;
 use Balin\Tabula\Port\Translator;
 use Balin\Tabula\Settings\DateSettings;
 use Balin\Tabula\Settings\NumberSettings;
 use Balin\Tabula\Settings\TabulaSettings;
 use Balin\Tabula\Tabula;
+use Balin\Tabula\Template\TemplateBuilder;
+use Balin\Tabula\Template\TemplateOptions;
 use Balin\Tabula\Value\FormatterRegistry;
+use Balin\Tabula\Value\ParserRegistry;
 use Balin\Tabula\Value\ValueResolver;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -47,6 +51,8 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
  *         pdf:
  *             page_size: a4
  *             orientation: landscape
+ *         template:
+ *             sample_rows: 5
  *
  * Ardından `Balin\Tabula\Tabula` her yere otomatik enjekte edilebilir.
  */
@@ -176,6 +182,34 @@ final class TabulaBundle extends AbstractBundle
                     ->end()
                 ->end()
 
+                ->arrayNode('template')
+                    ->addDefaultsIfNotSet()
+                    ->info('Boş içe aktarma şablonu. Başlık GÖRÜNÜMÜ bilerek burada değil `xlsx` düğümündedir: şablon, dışa aktarılan dosyanın aynası olmalı.')
+                    ->children()
+                        ->booleanNode('include_key_row')
+                            ->defaultTrue()
+                            ->info('1. satıra kanonik alan anahtarlarını yaz. Kapatmak dosyayı ETİKETLE eşleşmeye mahkûm eder: çevirideki tek bir kelime değişikliği kullanıcıların elindeki tüm şablonları bozar — eski ERP\'nin ölümcül kusuru buydu. Yalnızca şablonu başka bir sisteme yem olarak verirken kapatın.')
+                        ->end()
+                        ->booleanNode('hide_key_row')
+                            ->defaultTrue()
+                            ->info('Anahtar satırı Excel\'de gizlensin mi. Gizli satır dosyada DURMAYA devam eder; kullanıcı teknik anahtarları görmez, içe aktarma yine de görür.')
+                        ->end()
+                        // `integerNode` ama null KABUL EDER: `sample_rows: ~` devralınan
+                        // bir değeri geri almanın tek yoludur ve ham `IntegerNode` orada
+                        // "Expected int, but got null" ile patlar. Aynı tuzağa `csv.escape`
+                        // ile `pdf.max_columns` da düşmüştü (bkz. oradaki notlar).
+                        //
+                        // `min()` BİLEREK yok: `TemplateOptions` sıfırın altındaki değeri
+                        // zaten "hiç" sayar ve bu kural değer nesnesinin işidir. Tip
+                        // denetimi ağacın, aralık denetimi değer nesnesinin.
+                        ->integerNode('sample_rows')
+                            ->defaultValue(0)
+                            ->beforeNormalization()->ifNull()->then(static fn (): int => 0)->end()
+                            ->info('Başlığın altında önceden biçimlendirilmiş kaç boş satır oluşturulsun. 0 = hiç.')
+                        ->end()
+                    ->end()
+                ->end()
+
                 ->arrayNode('pdf')
                     ->addDefaultsIfNotSet()
                     ->info('Varsayılan A4 YATAY: dikey kâğıtta on kolonluk bir liste sayfanın dışına taşar ve son kolonlar hiç basılmaz.')
@@ -275,6 +309,16 @@ final class TabulaBundle extends AbstractBundle
         $services->set(FormatterRegistry::class)
             ->factory([FormatterRegistry::class, 'default']);
 
+        // İçe aktarmanın iki kayıt defteri. İkisi de yalnız yerleşikleri taşır ve
+        // `with()` ile ÇOĞALTILARAK genişletilir; bu yüzden yapılandırma düğümleri yok.
+        // Bir proje kendi tarih lehçesini ya da kendi dosya türünü tanıtmak istediğinde
+        // bu servisleri kendi tanımıyla ezer (`->factory()` yerine kendi fabrikası).
+        $services->set(ParserRegistry::class)
+            ->factory([ParserRegistry::class, 'default']);
+
+        $services->set(ReaderRegistry::class)
+            ->factory([ReaderRegistry::class, 'default']);
+
         $services->set(CsvOptions::class)
             ->factory([SettingsFactory::class, 'csv'])
             ->args([$config['csv']]);
@@ -292,6 +336,30 @@ final class TabulaBundle extends AbstractBundle
 
         $services->alias(WriterFactory::class, DefaultWriterFactory::class);
 
+        // `SettingsFactory`den GEÇMEZ: o fabrika, çekirdek ayar sınıflarının enum ya da
+        // türetilmiş değer taşıdığı yerler için var (bkz. sınıf yorumu). `TemplateOptions`
+        // yalnız üç skaler ve paylaşılan `XlsxOptions` taşıdığı için doğrudan kurulabilir.
+        //
+        // ★ Görünüm ayarı DIŞA AKTARMAYLA ORTAK servisten gelir: şablon indirip dolduran
+        // kullanıcı, dışa aktardığı dosyayla aynı başlığı görmeli (zorunlu kolonların
+        // kırmızı dolgusu gibi öğrenilmiş tek görsel ipucu iki yerde ayrı bakım istemesin).
+        $services->set(TemplateOptions::class)
+            ->args([
+                $config['template']['include_key_row'],
+                $config['template']['hide_key_row'],
+                $config['template']['sample_rows'],
+                service(XlsxOptions::class),
+            ]);
+
+        // `Tabula::template()` kendi yazıcısını kurar; buradaki kayıt, şablon üretimini
+        // `Tabula`ya uğramadan tip ipucuyla enjekte etmek isteyen kod içindir.
+        $services->set(TemplateBuilder::class)
+            ->args([
+                service(Translator::class),
+                service(TabulaSettings::class),
+                service(TemplateOptions::class),
+            ]);
+
         $services->set(Tabula::class)
             ->args([
                 service(Translator::class),
@@ -299,6 +367,9 @@ final class TabulaBundle extends AbstractBundle
                 service(FormatterRegistry::class),
                 service(ValueResolver::class),
                 service(WriterFactory::class),
+                service(ParserRegistry::class),
+                service(ReaderRegistry::class),
+                service(TemplateOptions::class),
             ])
             ->public();
     }
