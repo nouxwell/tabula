@@ -22,7 +22,15 @@ formatters, parsers, sheet strategies — are consumers of that definition.
 ## Installation
 
 ```bash
-composer require balin/tabula
+composer require nouxwell/tabula
+```
+
+The package is not on Packagist. Point Composer at the repository:
+
+```json
+"repositories": [
+    { "type": "vcs", "url": "git@github.com:nouxwell/tabula.git" }
+]
 ```
 
 Requires PHP 8.5+. For PDF output also install `dompdf/dompdf`; if it is missing, asking for
@@ -400,4 +408,7 @@ at level 8 over both `src` and `tests`.
 
 ## License
 
-Proprietary.
+None. All rights reserved.
+
+The source is readable here, but no licence to use, copy, modify or distribute it is granted. If you
+want to use it, ask.
