@@ -28,17 +28,19 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * ★ BU FAZIN BAŞLIK TESTİ: şablon üret → kullanıcı gibi doldur → geri içe aktar.
+ * ★ THE HEADLINE TEST OF THIS PHASE: produce a template → fill it in like a user → import it
+ * back.
  *
- * "Tek şema, üç yön" iddiasının ölçüldüğü yer burasıdır. Dışa aktarma, şablon üretimi ve
- * içe aktarma aynı `Schema` nesnesinden beslenir; dolayısıyla ürettiğimiz dosya hiçbir
- * dönüşüm olmadan geri okunabilmeli VE değerler doğru TİPLE geri gelmelidir — boole
- * gerçek bool, enum enum ÖRNEĞİ, tarih `DateTimeImmutable`, miktar float.
+ * This is where the "one schema, three directions" claim is measured. Export, template
+ * production and import are all fed from the same `Schema` object; consequently the file we
+ * produce must be readable back without any conversion at all AND the values must come back
+ * with the right TYPE — a boolean as a real bool, an enum as an enum INSTANCE, a date as a
+ * `DateTimeImmutable`, a quantity as a float.
  *
- * İkinci ve daha önemli iddia: DOSYANIN KİMLİĞİ ÇEVİRİ DEĞİLDİR. Eski ERP'de eşleştirme
- * çevrilmiş başlık metniyle yapılıyordu, yani çeviri dosyasındaki tek bir kelime
- * değişikliği kullanıcıların elindeki tüm şablonları sessizce okunamaz hâle getiriyordu.
- * Aşağıdaki testler bunu bir kere gösterir, bir kere de çürütür.
+ * The second and more important claim: THE FILE'S IDENTITY IS NOT THE TRANSLATION. In the
+ * system this replaces the matching was done with the translated header text, which means a
+ * single word changed in a translation file silently made every template users had on disk
+ * unreadable. The tests below demonstrate this once and refute it once.
  */
 final class RoundTripTest extends TestCase
 {
@@ -54,10 +56,10 @@ final class RoundTripTest extends TestCase
         $this->dir->remove();
     }
 
-    // ---------------------------------------------------------------- kurulum
+    // ---------------------------------------------------------------- set-up
 
     /**
-     * Özgün katalog — şablonun üretildiği dil.
+     * The original catalogue — the language the template was produced in.
      *
      * @param array<string, string> $overrides
      */
@@ -82,11 +84,11 @@ final class RoundTripTest extends TestCase
     }
 
     /**
-     * TÜM kolon etiketleri yeniden yazılmış katalog.
+     * A catalogue in which EVERY column label has been rewritten.
      *
-     * Değer sözlükleri (`status.*`, `tabula.bool.*`) bilerek DOKUNULMADAN bırakıldı:
-     * anahtar satırının koruduğu şey KOLON KİMLİĞİDİR. Hücrenin içindeki metin ayrı bir
-     * sözleşmedir ve sınırı aşağıda ayrıca ölçülüyor.
+     * The value dictionaries (`status.*`, `tabula.bool.*`) are deliberately left UNTOUCHED:
+     * what the key row preserves is the COLUMN IDENTITY. The text inside the cell is a
+     * separate contract, and that boundary is measured separately below.
      */
     private function retranslated(): Translator
     {
@@ -126,12 +128,12 @@ final class RoundTripTest extends TestCase
     }
 
     /**
-     * Kullanıcının şablona yazdığı iki satır.
+     * The two rows the user wrote into the template.
      *
-     * İki satır BİLEREK farklı yollardan gelir. Excel'de doldurulan bir tarih hücresi
-     * SERİ NUMARASI olarak saklanır (3. satır); dosyayı yapıştırarak ya da başka bir
-     * sistemden doldurmuş kullanıcıda aynı hücre METİN olur (4. satır). İkisi de aynı
-     * `DateTimeImmutable`e inmelidir.
+     * The two rows DELIBERATELY come by different routes. A date cell filled in inside Excel
+     * is stored as a SERIAL NUMBER (row 3); for a user who pasted the file in or filled it
+     * from another system, the same cell is TEXT (row 4). Both must land on the same
+     * `DateTimeImmutable`.
      *
      * @return list<list<mixed>>
      */
@@ -143,7 +145,7 @@ final class RoundTripTest extends TestCase
         ];
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     private function template(Translator $translator, string $name, bool $includeKeyRow = true): string
     {
@@ -159,11 +161,12 @@ final class RoundTripTest extends TestCase
     }
 
     /**
-     * Şablonu kullanıcı gibi doldurur: dosyayı AÇAR, veri satırlarını yazar, geri kaydeder.
+     * Fills the template in like a user: OPENS the file, writes the data rows, saves it back.
      *
-     * Dizeler AÇIK tiple yazılır — varsayılan bağlayıcı "0042"yi sayı sanıp 42'ye çevirirdi,
-     * yani testin ölçmek istediği baştaki sıfır korumasını ölçmeden bozardı. (Şablonun metin
-     * kolonu Excel'de zaten '@' biçimlidir; bu, o davranışın programatik karşılığıdır.)
+     * Strings are written with an EXPLICIT type — the default binder would take "0042" for a
+     * number and turn it into 42, which would break the leading-zero preservation the test
+     * means to measure before it ever got measured. (The template's text column is already
+     * '@' formatted in Excel; this is the programmatic counterpart of that behaviour.)
      */
     private function fill(string $path, int $firstDataRow): void
     {
@@ -212,18 +215,18 @@ final class RoundTripTest extends TestCase
         $value = $row->get($key);
 
         if (!$value instanceof DateTimeImmutable) {
-            self::fail(sprintf('"%s" alanı DateTimeImmutable olmalıydı, gelen: %s', $key, get_debug_type($value)));
+            self::fail(sprintf('The "%s" field should have been a DateTimeImmutable, got: %s', $key, get_debug_type($value)));
         }
 
         return $value;
     }
 
-    // ---------------------------------------------------------------- gidiş-dönüş
+    // ---------------------------------------------------------------- round trip
 
     #[Test]
     public function everyValueSurvivesTheRoundTripWithItsRightType(): void
     {
-        $path = $this->template($this->translator(), 'sablon.xlsx');
+        $path = $this->template($this->translator(), 'template.xlsx');
         $this->fill($path, 3);
 
         /** @var list<ImportedRow> $rows */
@@ -231,7 +234,7 @@ final class RoundTripTest extends TestCase
         $result = $this->import($this->translator(), $path, $rows);
 
         self::assertTrue($result->isCompletelySuccessful(), sprintf(
-            'İçe aktarma hatasız bitmeliydi. Hatalar: %s',
+            'The import should have finished without errors. Errors: %s',
             implode(' | ', array_map(static fn ($error): string => $error->row.': '.$error->message, $result->errors)),
         ));
         self::assertSame(2, $result->read);
@@ -239,7 +242,7 @@ final class RoundTripTest extends TestCase
         self::assertSame(
             ['code', 'name', 'qty', 'balance', 'isActive', 'status', 'createdAt'],
             $result->columns,
-            'Tanınan kolonlar dosyadaki sırayla ve kanonik anahtarlarla raporlanmalı.',
+            'The recognised columns must be reported in the order of the file and with their canonical keys.',
         );
         self::assertSame([], $result->ignored);
 
@@ -247,48 +250,51 @@ final class RoundTripTest extends TestCase
         $first = $rows[0];
         $second = $rows[1];
 
-        // Satır numarası KULLANICININ GÖRDÜĞÜ numaradır: veri 3. satırdan başlar.
+        // The row number is THE NUMBER THE USER SEES: the data starts at row 3.
         self::assertSame(3, $first->row);
         self::assertSame(4, $second->row);
 
-        // Metin: baştaki sıfır yenmemeli (eski ERP'nin en sık bildirilen içe aktarma hatası).
+        // Text: the leading zero must not be eaten (the most frequently reported import bug of
+        // the system this replaces).
         self::assertSame('0042', $first->get('code'));
         self::assertSame('Çiğdem Şahin Ltd. Şti.', $first->get('name'));
 
-        // Miktar daima float, para daima float — kolonun tipi satırdan satıra değişmez.
+        // A quantity is always a float, money is always a float — a column's type does not
+        // change from row to row.
         self::assertSame(12.5, $first->get('qty'));
         self::assertIsFloat($second->get('qty'));
         self::assertEqualsWithDelta(1234.56, $first->get('balance'), 0.0001);
         self::assertEqualsWithDelta(-99.9, $second->get('balance'), 0.0001);
 
-        // Boole GERÇEK bool, "Evet" dizesi değil.
+        // A boolean is a REAL bool, not the string "Evet".
         self::assertTrue($first->get('isActive'));
         self::assertFalse($second->get('isActive'));
         self::assertIsBool($first->get('isActive'));
 
-        // Enum ÖRNEĞİ: çağıran taraf dize eşleştirmesiyle uğraşmaz.
+        // An enum INSTANCE: the calling side does not have to bother with string matching.
         self::assertSame(Status::Open, $first->get('status'));
         self::assertSame(Status::Closed, $second->get('status'));
 
-        // Excel'in seri numarası ve kullanıcının yazdığı metin aynı güne inmeli.
+        // Excel's serial number and the text the user typed must land on the same day.
         self::assertSame('2024-01-05 00:00:00', $this->dateOf($first, 'createdAt')->format('Y-m-d H:i:s'));
         self::assertSame('2024-02-11 00:00:00', $this->dateOf($second, 'createdAt')->format('Y-m-d H:i:s'));
     }
 
     /**
-     * ★ ESKİ ERP'NİN ÖLÜMCÜL KUSURUNUN TAMİR EDİLDİĞİNİN KANITI.
+     * ★ THE PROOF THAT THE FATAL FLAW OF THE SYSTEM THIS REPLACES HAS BEEN REPAIRED.
      *
-     * Aynı dosya, TÜM kolon etiketleri yeniden yazılmış bir katalogla ikinci kez içe
-     * aktarılır ve çalışmaya devam eder — çünkü eşleştirme 1. satırdaki kanonik
-     * anahtarlardan geçer, kullanıcının okuduğu başlıktan değil.
+     * The same file is imported a second time with a catalogue in which EVERY column label has
+     * been rewritten, and it goes on working — because the matching goes through the canonical
+     * keys in row 1, not through the header the user reads.
      *
-     * Karşı uç aynı testte durur: `MatchStrategy::Label` açıkça "beni etiketle eşleştir"
-     * demektir ve o yolda dosya artık tanınamaz. Eski ERP'nin TEK yolu buydu.
+     * The opposite end is held in the very same test: `MatchStrategy::Label` explicitly says
+     * "match me by label", and down that route the file can no longer be recognised. That was
+     * the ONLY route the system this replaces had.
      */
     #[Test]
     public function theKeyRowSurvivesACompleteRetranslationWhereTheLabelWouldNot(): void
     {
-        $path = $this->template($this->translator(), 'sablon.xlsx');
+        $path = $this->template($this->translator(), 'template.xlsx');
         $this->fill($path, 3);
 
         /** @var list<ImportedRow> $rows */
@@ -297,29 +303,30 @@ final class RoundTripTest extends TestCase
 
         self::assertTrue(
             $result->isCompletelySuccessful(),
-            'Çeviri değişti diye kullanıcının elindeki şablon okunamaz hâle GELMEMELİ.',
+            'A template the user has on disk must NOT become unreadable just because the translation changed.',
         );
         self::assertSame(2, $result->imported);
         self::assertSame('0042', $rows[0]->get('code'));
         self::assertSame(Status::Open, $rows[0]->get('status'));
 
-        // …ve şimdi aynı dosya, aynı katalogla, ama kimliği ETİKETTE arayarak:
+        // …and now the same file, with the same catalogue, but looking for the identity in the LABEL:
         /** @var list<ImportedRow> $labelRows */
         $labelRows = [];
 
         $this->expectException(ImportException::class);
-        $this->expectExceptionMessage('hiçbir kolon şemayla eşleşmedi');
+        $this->expectExceptionMessage('None of the columns in the file matched the schema');
 
         $this->import($this->retranslated(), $path, $labelRows, MatchStrategy::Label);
     }
 
     /**
-     * Aynı kusur, anahtar satırı OLMAYAN bir dosyada hâlâ ölümcül.
+     * The same flaw is still fatal in a file that has NO key row.
      *
-     * `TemplateOptions(includeKeyRow: false)` şablonu eski ERP'nin yerleşimine indirger:
-     * dosyanın kimliği yeniden çevrilmiş başlık metnidir. Böyle bir dosya özgün katalogla
-     * okunur, katalog değiştiği anda okunamaz olur. Anahtar satırının NEDEN varsayılan
-     * olduğunu tek bir testte gösteren karşılaştırma budur.
+     * `TemplateOptions(includeKeyRow: false)` reduces the template to the layout of the system
+     * this replaces: the file's identity is the retranslated header text. Such a file is
+     * readable with the original catalogue and becomes unreadable the moment the catalogue
+     * changes. This is the comparison that shows in a single test WHY the key row is the
+     * default.
      */
     #[Test]
     public function aFileWithoutTheKeyRowBreaksTheMomentTheTranslationChanges(): void
@@ -331,7 +338,7 @@ final class RoundTripTest extends TestCase
         $rows = [];
         $result = $this->import($this->translator(), $path, $rows);
 
-        self::assertTrue($result->isCompletelySuccessful(), 'Özgün katalogla etiket eşleşmesi çalışmalı.');
+        self::assertTrue($result->isCompletelySuccessful(), 'Label matching must work with the original catalogue.');
         self::assertSame(2, $result->imported);
         self::assertSame('0042', $rows[0]->get('code'));
 
@@ -339,23 +346,24 @@ final class RoundTripTest extends TestCase
         $afterRename = [];
 
         $this->expectException(ImportException::class);
-        $this->expectExceptionMessage('Doğru şablonu indirdiğinizden emin olun.');
+        $this->expectExceptionMessage('Make sure you downloaded the right template.');
 
         $this->import($this->retranslated(), $path, $afterRename);
     }
 
     /**
-     * SINIRIN kendisi: anahtar satırı KOLON kimliğini korur, HÜCRE İÇERİĞİNİ değil.
+     * THE BOUNDARY itself: the key row preserves the COLUMN identity, not the CELL CONTENT.
      *
-     * Enum hücresine yazılan metin çevrilmiş etikettir ("Açık"). O etiket yeniden
-     * yazılırsa daha önce doldurulmuş dosyadaki değer artık hiçbir case'e oturmaz ve satır
-     * reddedilir. Bu, başlık tarafındaki kusurun hücre tarafındaki kalıntısıdır; belgelenmiş
-     * olması, birinin "çeviri değişikliği artık hiçbir şeyi bozamaz" diye özetlemesini önler.
+     * The text written into an enum cell is the translated label ("Açık"). If that label is
+     * rewritten, the value in an already filled file no longer lands on any case and the row
+     * is rejected. This is the residue, on the cell side, of the flaw on the header side;
+     * having it documented stops anyone from summarising the work as "a translation change can
+     * no longer break anything".
      */
     #[Test]
     public function retranslatingAValueLabelStillBreaksAnAlreadyFilledFile(): void
     {
-        $path = $this->template($this->translator(), 'sablon.xlsx');
+        $path = $this->template($this->translator(), 'template.xlsx');
         $this->fill($path, 3);
 
         /** @var list<ImportedRow> $rows */
@@ -367,14 +375,14 @@ final class RoundTripTest extends TestCase
         );
 
         self::assertSame(2, $result->read);
-        self::assertSame(0, $result->imported, 'Değer sözlüğü değişince eski dosyanın enum hücreleri tanınmaz.');
+        self::assertSame(0, $result->imported, 'Once the value dictionary changes, the enum cells of the old file are not recognised.');
 
         $errors = $result->errorsByRow();
 
         self::assertArrayHasKey(3, $errors);
         self::assertSame('status', $errors[3][0]->field);
-        self::assertStringContainsString('Seçenekler: Yeni Kayıt, Kapatılmış', $errors[3][0]->message);
-        // Ham değer hatanın yanında taşınır: kullanıcı hangi hücreye bakacağını bilmeli.
+        self::assertStringContainsString('Options: Yeni Kayıt, Kapatılmış', $errors[3][0]->message);
+        // The raw value travels alongside the error: the user must know which cell to look at.
         self::assertSame('Açık', $errors[3][0]->value);
     }
 }

@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Balin\Tabula;
 
 /**
- * Çıktı biçimi.
+ * The output format.
  *
- * Bir alan `Field::only()` ile belirli biçimlere sınırlanabilir — ör. yalnız Excel'de
- * görünen teknik kimlik kolonu.
+ * A field can be restricted to certain formats with `Field::only()` — for example a technical
+ * id column that is only visible in Excel.
  */
 enum Format: string
 {
@@ -30,13 +30,13 @@ enum Format: string
         };
     }
 
-    /** Bu biçim gerçek sayı/biçim kodu taşıyabiliyor mu, yoksa yalnız metin mi yazılıyor? */
+    /** Can this format carry real numbers and format codes, or is only text written out? */
     public function supportsTypedValues(): bool
     {
         return self::Xlsx === $this;
     }
 
-    /** Bu biçim tek dosyada birden çok sayfa taşıyabiliyor mu? */
+    /** Can this format carry more than one sheet in a single file? */
     public function supportsMultipleSheets(): bool
     {
         return self::Xlsx === $this;

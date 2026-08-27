@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace Balin\Tabula\Import;
 
-/** Tamamlanmış bir içe aktarmanın sonucu. */
+/** The result of a completed import. */
 final readonly class ImportResult
 {
     /**
-     * @param int            $read     dosyada okunan veri satırı sayısı (başlıklar hariç)
-     * @param int            $imported geri çağırıma başarıyla verilen satır sayısı
-     * @param list<RowError> $errors   satır/alan bazlı hatalar
-     * @param list<string>   $columns  dosyada tanınan alan anahtarları, dosyadaki sırayla
-     * @param list<string>   $ignored  şemada karşılığı olmayan, yok sayılan başlıklar
+     * @param int            $read     number of data rows read from the file (headers excluded)
+     * @param int            $imported number of rows successfully handed to the callback
+     * @param list<RowError> $errors   row-level and field-level errors
+     * @param list<string>   $columns  the field keys recognised in the file, in file order
+     * @param list<string>   $ignored  headers with no counterpart in the schema, ignored
      */
     public function __construct(
         public int $read,
@@ -33,15 +33,15 @@ final readonly class ImportResult
         return [] === $this->errors && $this->read === $this->imported;
     }
 
-    /** Reddedilen satır sayısı. */
+    /** The number of rejected rows. */
     public function rejected(): int
     {
         return $this->read - $this->imported;
     }
 
     /**
-     * Hataları satır numarasına göre gruplar — kullanıcıya "37. satırda şunlar var"
-     * diye göstermenin en doğal yolu.
+     * Groups the errors by row number — the most natural way to show the user
+     * "here is what is wrong on row 37".
      *
      * @return array<int, list<RowError>>
      */

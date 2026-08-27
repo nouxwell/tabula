@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Balin\Tabula\Export\Page;
 
 /**
- * Standart kâğıt boyutları, DİKEY yönde milimetre olarak.
+ * Standard paper sizes, in millimetres, in PORTRAIT orientation.
  *
- * Yatay çevirme `Page` tarafında yapılır; enum yalnız ham ölçüyü bilir.
+ * Flipping to landscape happens over in `Page`; the enum only knows the raw dimensions.
  */
 enum PageSize: string
 {
@@ -17,7 +17,7 @@ enum PageSize: string
     case Letter = 'letter';
     case Legal = 'legal';
 
-    /** Dikey genişlik (mm). */
+    /** Portrait width (mm). */
     public function widthMm(): float
     {
         return match ($this) {
@@ -29,7 +29,7 @@ enum PageSize: string
         };
     }
 
-    /** Dikey yükseklik (mm). */
+    /** Portrait height (mm). */
     public function heightMm(): float
     {
         return match ($this) {

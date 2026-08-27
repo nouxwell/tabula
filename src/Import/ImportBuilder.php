@@ -22,21 +22,21 @@ use IteratorIterator;
 use Traversable;
 
 /**
- * Tek bir içe aktarmanın akıcı kurulumu ve çalıştırılması — `ExportBuilder`ın ters yönü.
+ * The fluent set-up and execution of a single import — the reverse direction of `ExportBuilder`.
  *
- * Kurulum değiştirilemezdir: her ayar yeni bir kopya döndürür, böylece aynı temel
- * yapılandırmadan birden çok çalıştırma türetilebilir (ör. önce kuru bir doğrulama
- * turu, sonra gerçek yazma turu):
+ * The set-up is immutable: every setting returns a new copy, so several runs can be derived
+ * from the same base configuration (for instance a dry validation pass first, then the real
+ * writing pass):
  *
  *     $base = $tabula->import($schema)->from($path)->locale('tr');
  *
- *     $onizleme = $base->each(static fn (ImportedRow $row) => $satirlar[] = $row->toArray())->run();
- *     $sonuc    = $base->each(static fn (ImportedRow $row) => $repo->save($row))->run();
+ *     $preview = $base->each(static fn (ImportedRow $row) => $rows[] = $row->toArray())->run();
+ *     $result  = $base->each(static fn (ImportedRow $row) => $repo->save($row))->run();
  *
- * ⚠ İŞLEM (TRANSACTION) YÖNETİMİ ÇAĞIRANIN İŞİDİR. Kütüphane satırı ayrıştırır ve geri
- * çağırıma verir; veritabanına yazmaz. Mevcut ERP'de içe aktarmanın tamamı TEK bir
- * Doctrine işlemine sarılıydı, yani 5.000 satırlık bir dosyada 37. satırdaki yazım hatası
- * diğer 4.999 satırı da geri alıyordu (bkz. `ErrorMode`).
+ * ⚠ TRANSACTION MANAGEMENT IS THE CALLER'S JOB. The library parses a row and hands it to the
+ * callback; it does not write to the database. In the system this replaces the whole import
+ * was wrapped in a SINGLE Doctrine transaction, so a typo on row 37 of a 5,000-row file rolled
+ * back the other 4,999 rows as well (see `ErrorMode`).
  */
 final class ImportBuilder
 {
@@ -60,9 +60,9 @@ final class ImportBuilder
     ) {
     }
 
-    // ---------------------------------------------------------------- kurulum
+    // ---------------------------------------------------------------- set-up
 
-    /** Okunacak dosya. Tür UZANTIDAN seçilir (bkz. `ReaderRegistry`). */
+    /** The file to read. The type is chosen FROM THE EXTENSION (see `ReaderRegistry`). */
     public function from(string $path): self
     {
         return $this->with(static function (self $b) use ($path): void {
@@ -71,10 +71,10 @@ final class ImportBuilder
     }
 
     /**
-     * Ayrıştırma dili.
+     * The parsing language.
      *
-     * Dışa aktarmadaki gibi süs değil: "Evet" değerinin `true`ya, "Açık" değerinin
-     * `Status::Open` enum'una dönmesi bu dile bağlıdır (bkz. `ParseContext`).
+     * Unlike on export, this is not decoration: whether the value "Evet" turns into `true` and
+     * "Açık" into the `Status::Open` enum depends on this language (see `ParseContext`).
      */
     public function locale(string $locale): self
     {
@@ -98,9 +98,9 @@ final class ImportBuilder
     }
 
     /**
-     * Geçerli her satır için çağrılacak kapanış.
+     * The closure called for every valid row.
      *
-     * Yalnız HATASIZ satırlar gelir; yarısı ayrıştırılmış bir satır asla verilmez.
+     * Only ERROR-FREE rows arrive; a half-parsed row is never handed over.
      *
      * @param Closure(ImportedRow): void $fn
      */
@@ -111,16 +111,17 @@ final class ImportBuilder
         });
     }
 
-    // ---------------------------------------------------------------- çalıştırma
+    // ---------------------------------------------------------------- execution
 
     public function run(): ImportResult
     {
         $path = $this->path ?? throw ImportException::noSource();
         $handler = $this->handler ?? throw ImportException::noHandler();
 
-        // Okunabilirlik BURADA denetlenir, kayıt defterinden ÖNCE: defter uzantıya bakar
-        // ve var olmayan bir "liste.txt" için "tanınmayan dosya türü" derdi. Kullanıcının
-        // gerçek sorunu dosyanın kayıp/izinsiz olması; mesaj onu söylemeli.
+        // Readability is checked HERE, BEFORE the registry: the registry looks at the
+        // extension and would say "unrecognised file type" for a "list.txt" that does not even
+        // exist. The user's real problem is that the file is missing or not permitted; the
+        // message has to say so.
         if (!is_file($path) || !is_readable($path)) {
             throw ImportException::fileNotReadable($path);
         }
@@ -133,9 +134,9 @@ final class ImportBuilder
             settings: $this->settings,
         );
 
-        // Akış tek yönlüdür (okuyucular Generator döndürür): dosyayı ikinci kez dolaşmak
-        // yok. Oysa hangi satırın VERİ olduğunu bilmek için önce ilk iki satırı görmek
-        // gerekir — `foreach` öne bakamadığı için imleci elle ilerletiyoruz.
+        // The stream is one-way (the readers return a Generator): there is no second pass over
+        // the file. Yet to know which row is DATA we first have to see the first two rows —
+        // and since `foreach` cannot look ahead, we advance the cursor by hand.
         $iterator = self::iterator($reader->rows($path));
         $iterator->rewind();
 
@@ -149,11 +150,11 @@ final class ImportBuilder
 
         $map = HeaderMap::resolve($firstRow, $secondRow, $this->schema, $this->strategy, $context);
 
-        // Ayrıştırıcılar TEK sefer, hiç satır okunmadan çözülür. `ParserRegistry::for()`
-        // kayıtlı ayrıştırıcı bulamazsa `ParseException` fırlatır; bu bir YAPILANDIRMA
-        // hatasıdır, satır hatası değil. Döngünün içinde çözseydik aynı eksiklik satır
-        // sayısı kadar `RowError`e dönüşür ve kullanıcı "5.000 satırın hepsi bozuk"
-        // raporuyla baş başa kalırdı.
+        // The parsers are resolved ONCE, before a single row is read. `ParserRegistry::for()`
+        // throws a `ParseException` when it finds no registered parser; that is a
+        // CONFIGURATION error, not a row error. Had we resolved inside the loop, the very same
+        // missing piece would turn into one `RowError` per row and the user would be left
+        // alone with an "all 5,000 rows are broken" report.
         /** @var list<array{int, Field, ValueParser}> $columns */
         $columns = [];
 
@@ -166,9 +167,9 @@ final class ImportBuilder
         /** @var list<RowError> $errors */
         $errors = [];
 
-        // İmleç 2. satırda duruyor; başlık satırlarını satır NUMARASINA göre eliyoruz,
-        // sayarak değil. Numaralar okuyucudan geldiği gibi, yani kullanıcının Excel'de
-        // gördüğü hâliyle kullanılır.
+        // The cursor is sitting on row 2; we filter out the header rows BY ROW NUMBER, not by
+        // counting. The numbers are used exactly as they come from the reader, that is, as the
+        // user sees them in Excel.
         for (; $iterator->valid(); $iterator->next()) {
             $number = $iterator->key();
 
@@ -178,12 +179,12 @@ final class ImportBuilder
 
             $cells = $iterator->current();
 
-            // ★ Tamamen boş satır SESSİZCE atlanır ve `read` sayacına da girmez.
-            // Excel dosyalarının sonunda takılı kalan boş satır kuraldır, istisna değil;
-            // onu veri satırı saymak zorunlu alanı olan HER gerçek dosyayı "hatalı"
-            // yapardı — hem de kullanıcının hiç dokunmadığı bir satır yüzünden.
-            // `read`e saymamak da şart: aksi hâlde `rejected()` hiçbir `RowError`e
-            // karşılık gelmeyen bir sayı döndürür ve rapor kendi kendisiyle çelişirdi.
+            // ★ A completely empty row is skipped SILENTLY and does not even enter the `read`
+            // counter. A blank row left dangling at the end of an Excel file is the rule, not
+            // the exception; counting it as a data row would make EVERY real file that has a
+            // required field "invalid" — and over a row the user never even touched.
+            // Keeping it out of `read` is just as essential: otherwise `rejected()` returns a
+            // number that corresponds to no `RowError` at all and the report contradicts itself.
             if (self::isEmptyRow($cells)) {
                 continue;
             }
@@ -197,24 +198,24 @@ final class ImportBuilder
 
             foreach ($columns as [$index, $field, $parser]) {
                 $key = $field->getKey();
-                // Kısa satır kolon KAYDIRMAZ: CSV'de sondaki hücreler hiç yazılmamış
-                // olabilir, eksik hücre boş hücredir.
+                // A short row DOES NOT SHIFT the columns: in a CSV the trailing cells may
+                // never have been written at all, and a missing cell is a blank cell.
                 $raw = $cells[$index] ?? null;
 
                 try {
                     $value = $parser->parse($raw, $field, $context);
                 } catch (ParseException $exception) {
-                    // Ham değer hatanın yanında taşınır: "geçersiz değer" diyen bir mesaj
-                    // kullanıcıya hangi hücreye bakacağını söylemez.
+                    // The raw value travels alongside the error: a message that just says
+                    // "invalid value" does not tell the user which cell to look at.
                     $rowErrors[] = RowError::forField($number, $key, $exception->getMessage(), StringParser::describe($raw));
 
                     continue;
                 }
 
-                // ★ ZORUNLULUK DENETİMİ BURADA YAŞAR. Ayrıştırıcı alanın zorunlu
-                // olduğunu BİLMEZ ve bilmemeli: boş hücre onun için hata değil, "değer
-                // yok"tur (bkz. `StringParser::isBlank()`). Zorunluluk şemanın bilgisidir
-                // ve şemayı yalnız bu döngü görür.
+                // ★ THE REQUIREDNESS CHECK LIVES HERE. The parser DOES NOT KNOW that the field
+                // is required, and must not: for it a blank cell is not an error but "no
+                // value" (see `StringParser::isBlank()`). Requiredness is the schema's
+                // knowledge, and only this loop sees the schema.
                 if (null === $value && $field->isRequired()) {
                     $rowErrors[] = RowError::forField($number, $key, ParseException::required($field)->getMessage());
 
@@ -225,12 +226,12 @@ final class ImportBuilder
             }
 
             if ([] !== $rowErrors) {
-                // ★ Satır BÜTÜN olarak reddedilir. Yarısı ayrıştırılmış bir satırı geri
-                // çağırıma vermek, çağıranın yarım bir kaydı veritabanına yazması demekti.
+                // ★ The row is rejected AS A WHOLE. Handing a half-parsed row to the callback
+                // would have meant the caller writing half a record into the database.
                 if (ErrorMode::FailFast === $this->errorMode) {
-                    // Satırın TÜM hataları taşınır, yalnız ilk hücrenin hatası değil:
-                    // aynı satırı dört kez düzeltip dört kez yüklemek kimsenin işine
-                    // yaramaz. İstisnanın mesajında yine ilki görünür.
+                    // ALL of the row's errors are carried, not just the first cell's: fixing
+                    // and uploading the same row four times over is of use to nobody. The
+                    // exception's message still shows the first one.
                     throw ImportException::stoppedAtFirstError($rowErrors);
                 }
 
@@ -241,9 +242,10 @@ final class ImportBuilder
                 continue;
             }
 
-            // Geri çağırımın fırlattığı istisna YUTULMAZ: çağıranın veritabanı hatası bir
-            // `RowError` değildir ve "4.812 satır aktarıldı" raporunun içinde kaybolmamalıdır.
-            // (Okuyucuların `finally` blokları imleç yok edilirken dosyayı yine de kapatır.)
+            // An exception thrown by the callback is NOT SWALLOWED: the caller's database
+            // error is not a `RowError` and must not get lost inside a "4,812 rows imported"
+            // report. (The readers' `finally` blocks still close the file as the cursor is
+            // destroyed.)
             $handler(new ImportedRow($number, $values));
             ++$imported;
         }
@@ -257,10 +259,10 @@ final class ImportBuilder
         );
     }
 
-    // ---------------------------------------------------------------- iç
+    // ---------------------------------------------------------------- internals
 
     /**
-     * Okuyucunun verdiği `iterable`ı elle ilerletilebilir bir imlece çevirir.
+     * Turns the `iterable` the reader gives us into a cursor that can be advanced by hand.
      *
      * @param iterable<int, list<mixed>> $rows
      *
@@ -269,8 +271,8 @@ final class ImportBuilder
     private static function iterator(iterable $rows): Iterator
     {
         return match (true) {
-            // Yerleşik okuyucular Generator döndürür, yani ilk dal. `rewind()` henüz
-            // başlamamış bir Generator'da zararsızdır.
+            // The built-in readers return a Generator, so this is the first branch. `rewind()`
+            // is harmless on a Generator that has not started yet.
             $rows instanceof Iterator => $rows,
             $rows instanceof Traversable => new IteratorIterator($rows),
             default => new ArrayIterator($rows),
@@ -278,11 +280,12 @@ final class ImportBuilder
     }
 
     /**
-     * Satırın TAMAMI boş mu?
+     * Is the row empty in its ENTIRETY?
      *
-     * Denetim eşleşen kolonlarla sınırlı DEĞİLDİR: eşleşmeyen bir sütununda veri olan
-     * satırı "boş" sayıp atlamak sessiz veri kaybı olurdu. Böyle bir satır işlenir ve
-     * zorunlu alanları boşsa kullanıcıya hata olarak görünür — sessizce yok olmaz.
+     * The check is NOT limited to the matched columns: taking a row that has data in an
+     * unmatched column for "empty" and skipping it would be silent data loss. Such a row is
+     * processed and, if its required fields are blank, shows up to the user as an error — it
+     * does not vanish silently.
      *
      * @param list<mixed> $cells
      */

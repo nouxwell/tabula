@@ -5,23 +5,24 @@ declare(strict_types=1);
 namespace Balin\Tabula\Import;
 
 /**
- * Bozuk satırla karşılaşınca ne yapılacağı.
+ * What to do when a broken row is encountered.
  *
- * Mevcut ERP'de seçenek YOKTU: içe aktarmanın tamamı TEK bir Doctrine işlemine sarılıydı,
- * yani 5.000 satırlık bir dosyada 37. satırdaki bir yazım hatası diğer 4.999 satırı da geri
- * alıyordu. Kullanıcı hatayı düzeltip her şeyi baştan yüklüyordu.
+ * In the system this replaces there was NO choice: the whole import was wrapped in a SINGLE
+ * Doctrine transaction, so one typo on row 37 of a 5,000-row file rolled back the other 4,999
+ * rows as well. The user fixed the mistake and uploaded everything again from scratch.
  */
 enum ErrorMode: string
 {
     /**
-     * Varsayılan: hataları TOPLA, geçerli satırları işle.
+     * The default: COLLECT the errors, process the valid rows.
      *
-     * Sonuçta kullanıcı "4.812 satır aktarıldı, şu 3 satır şu yüzden alınmadı" görür.
-     * ⚠ İşlem (transaction) yönetimi ÇAĞIRANIN sorumluluğundadır: kütüphane satırları
-     * geri çağırıma verir, veritabanına yazmaz.
+     * What the user ends up seeing is "4,812 rows imported, these 3 rows were left out for
+     * this reason".
+     * ⚠ Transaction management is the CALLER's responsibility: the library hands the rows to
+     * the callback, it does not write to the database.
      */
     case Collect = 'collect';
 
-    /** İlk hatada dur. "Ya hep ya hiç" gereken akışlar için. */
+    /** Stop at the first error. For flows that need all-or-nothing. */
     case FailFast = 'fail_fast';
 }

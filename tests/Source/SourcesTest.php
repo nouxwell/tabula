@@ -15,12 +15,12 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Satır kaynaklarının sözleşmesi.
+ * The contract of the row sources.
  *
- * Eski ERP motoru tüm satırları tek bir `Spreadsheet` nesnesine yığıp sonra dizeye
- * çeviriyordu; bu yüzden 10.000 satırlık sert bir tavan konmuştu. Buradaki kaynaklar
- * TEMBELDİR: `rows()` bir generator döndürür ve satırlar tüketildikçe üretilir.
- * Aşağıdaki testler bu tembelliği ve iki kez okunabilirliği doğrular.
+ * The engine of the system this replaces piled every row into a single `Spreadsheet` object
+ * and then turned it into strings; that is why a hard ceiling of 10,000 rows had been put in
+ * place. The sources here are LAZY: `rows()` returns a generator and the rows are produced as
+ * they are consumed. The tests below verify that laziness and the ability to be read twice.
  */
 #[CoversClass(ArraySource::class)]
 #[CoversClass(IteratorSource::class)]
@@ -49,8 +49,8 @@ final class SourcesTest extends TestCase
     #[Test]
     public function arraySourceMaterialisesAGenerator(): void
     {
-        // Generator tek kullanımlıktır; ArraySource onu kurucu içinde diziye çevirir,
-        // böylece kaynak sonradan defalarca okunabilir.
+        // A generator is single-use; ArraySource turns it into an array inside the
+        // constructor, so that the source can afterwards be read over and over again.
         $source = ArraySource::of(self::generateRows(3));
 
         self::assertSame(3, $source->count());
@@ -61,7 +61,7 @@ final class SourcesTest extends TestCase
     #[Test]
     public function arraySourceReindexesTheRows(): void
     {
-        // Anahtarlı dizi verilse bile satırlar 0..n olarak sıralanır.
+        // Even when a keyed array is given, the rows are numbered 0..n.
         $source = ArraySource::of(['first' => ['id' => 1], 'second' => ['id' => 2]]);
 
         self::assertSame([['id' => 1], ['id' => 2]], self::collect($source));
@@ -79,9 +79,10 @@ final class SourcesTest extends TestCase
     // ---------------------------------------------------------------- IteratorSource
 
     /**
-     * API'nin doğrudan generator değil, generator ÜRETEN kapanış almasının tek sebebi budur:
-     * tükenmiş bir generator ikinci kez okunamaz. Boru hattı kaynağı birden çok kez
-     * gezebildiği için (ör. önce sayfa bölme, sonra yazma) bu davranış sözleşmenin parçasıdır.
+     * This is the one and only reason why the API takes a closure that PRODUCES a generator
+     * rather than a generator itself: an exhausted generator cannot be read a second time.
+     * Because the pipeline can walk the source more than once (e.g. paginating first, writing
+     * afterwards), this behaviour is part of the contract.
      */
     #[Test]
     public function iteratorSourceCanBeIteratedTwiceBecauseTheFactoryMakesAFreshGenerator(): void
@@ -98,8 +99,8 @@ final class SourcesTest extends TestCase
         $second = self::collect($source);
 
         self::assertSame([['id' => 1], ['id' => 2]], $first);
-        self::assertSame($first, $second, 'İkinci gezinti boş dönmemeli.');
-        self::assertSame(2, $factoryCalls, 'Her gezinti için taze bir generator üretilmeli.');
+        self::assertSame($first, $second, 'The second walk must not come back empty.');
+        self::assertSame(2, $factoryCalls, 'A fresh generator must be produced for every walk.');
     }
 
     #[Test]
@@ -113,7 +114,7 @@ final class SourcesTest extends TestCase
         });
 
         $rows = $source->rows();
-        self::assertSame(0, $factoryCalls, 'rows() çağrısı tek başına veriyi çekmemeli.');
+        self::assertSame(0, $factoryCalls, 'Calling rows() on its own must not pull the data.');
 
         self::consume($rows);
         self::assertSame(1, $factoryCalls);
@@ -155,7 +156,7 @@ final class SourcesTest extends TestCase
 
         self::assertSame([1, 2, 3], self::ids($source));
 
-        // Üçüncü sayfa hiç istenmez: eksik dolu sayfa son sayfadır.
+        // The third page is never asked for: a page that came back only partly filled is the last page.
         self::assertSame([[1, 2], [2, 2]], $calls);
     }
 
@@ -174,7 +175,7 @@ final class SourcesTest extends TestCase
 
         self::assertSame([1, 2], self::ids($source));
 
-        // Tam dolu sayfadan sonra devam edip edilmeyeceği ancak boş sayfayla anlaşılır.
+        // Whether there is anything after an exactly full page can only be found out with an empty page.
         self::assertSame([[1, 2], [2, 2]], $calls);
     }
 
@@ -193,7 +194,7 @@ final class SourcesTest extends TestCase
         );
 
         self::assertSame([1, 2], self::ids($source));
-        self::assertSame([[1, 1], [2, 1]], $calls, 'Toplam biliniyorsa fazladan tur atılmamalı.');
+        self::assertSame([[1, 1], [2, 1]], $calls, 'If the total is known, no extra round must be made.');
         self::assertSame(2, $source->count());
     }
 
@@ -213,7 +214,7 @@ final class SourcesTest extends TestCase
         );
 
         self::assertSame([], self::collect($source));
-        self::assertSame([[0, 5]], $calls, 'Sıfır tabanlı sayfalayan API için ilk sayfa 0 olabilmeli.');
+        self::assertSame([[0, 5]], $calls, 'For an API that paginates from zero, the first page must be allowed to be 0.');
     }
 
     #[Test]
@@ -246,7 +247,7 @@ final class SourcesTest extends TestCase
         );
 
         $rows = $source->rows();
-        self::assertSame([], $calls, 'rows() çağrısı tek başına sorgu atmamalı.');
+        self::assertSame([], $calls, 'Calling rows() on its own must not issue a query.');
 
         self::consume($rows);
         self::assertSame([[1, 3]], $calls);
@@ -255,9 +256,10 @@ final class SourcesTest extends TestCase
     #[Test]
     public function callableSourceRejectsAPageSizeBelowOne(): void
     {
-        // Sayfa boyutu 0 olsaydı `rows()` sonsuz döngüye girerdi; hata kurulumda verilir.
+        // Had the page size been 0, `rows()` would have gone into an infinite loop; the error
+        // is raised at set-up time.
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Sayfa boyutu en az 1 olmalı.');
+        $this->expectExceptionMessage('The page size must be at least 1.');
 
         CallableSource::of(static fn (int $page, int $limit): array => [], 0);
     }
@@ -268,7 +270,7 @@ final class SourcesTest extends TestCase
         self::assertNull(CallableSource::of(static fn (int $page, int $limit): array => [])->count());
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     /** @return list<array<string, mixed>|object> */
     private static function collect(DataSource $source): array
@@ -299,7 +301,7 @@ final class SourcesTest extends TestCase
     private static function consume(iterable $rows): void
     {
         foreach ($rows as $ignored) {
-            // Tembelliği ölçmek için tüketmek yeterli.
+            // Consuming is all it takes to measure the laziness.
         }
     }
 

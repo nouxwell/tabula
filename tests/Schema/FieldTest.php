@@ -16,19 +16,19 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Field sözleşmesinin ana başlığı DEĞİŞMEZLİKTİR.
+ * The headline of the Field contract is IMMUTABILITY.
  *
- * Eski ERP motorunda kolon tanımları paylaşılan, değiştirilebilir dizilerdi: bir ekranda
- * yapılan genişlik ayarı aynı tanımı kullanan başka bir dışa aktarmayı da sessizce bozuyordu.
- * Burada her akıcı metot kopya döndürdüğü için asıl sorulan soru "özgün nesne dokunulmadan
- * kaldı mı" olur; aşağıdaki testlerin çoğu bunu ölçer.
+ * In the engine this replaces, column definitions were shared, mutable arrays: a
+ * width adjustment made on one screen silently broke another export that used the same
+ * definition. Here every fluent method returns a copy, so the real question being asked is
+ * "was the original object left untouched"; most of the tests below measure that.
  */
 #[CoversClass(Field::class)]
 #[CoversClass(Align::class)]
 #[CoversClass(FieldType::class)]
 final class FieldTest extends TestCase
 {
-    // ---------------------------------------------------------------- değişmezlik
+    // ---------------------------------------------------------------- immutability
 
     #[Test]
     public function fluentSetterReturnsACloneAndLeavesTheOriginalUntouched(): void
@@ -36,19 +36,19 @@ final class FieldTest extends TestCase
         $a = Field::string('x');
         $b = $a->label('L');
 
-        self::assertNotSame($a, $b, 'Akıcı metot yeni bir nesne döndürmeli.');
-        self::assertNull($a->getLabel(), 'Özgün alan değişmemeli.');
+        self::assertNotSame($a, $b, 'A fluent method must return a new object.');
+        self::assertNull($a->getLabel(), 'The original field must not change.');
         self::assertSame('L', $b->getLabel());
 
-        // Anahtar ve tip kopyaya aynen taşınır.
+        // The key and the type are carried over to the copy unchanged.
         self::assertSame('x', $a->getKey());
         self::assertSame('x', $b->getKey());
         self::assertSame(FieldType::String, $b->getType());
     }
 
     /**
-     * Tek tek her akıcı metot için aynı üç şeyi doğrular: yeni nesne, özgünde
-     * eski değer, kopyada yeni değer.
+     * Verifies the same three things for every single fluent method: a new object, the old
+     * value on the original, the new value on the copy.
      *
      * @param Closure(Field): Field $mutate
      * @param Closure(Field): mixed $read
@@ -140,7 +140,7 @@ final class FieldTest extends TestCase
             'd.m.Y',
         ];
 
-        // Kapanış kimliği yerine "var mı" sorusu sorulur; iki ayrı kapanış asla eşit olmaz.
+        // Instead of closure identity we ask "is one set"; two separate closures are never equal.
         yield 'format' => [
             static fn (Field $f): Field => $f->format(static fn (mixed $raw): string => (string) $raw),
             static fn (Field $f): mixed => null !== $f->getFormatter(),
@@ -172,12 +172,12 @@ final class FieldTest extends TestCase
         $required = Field::string('s')->required()->required(false);
         self::assertFalse($required->isRequired());
 
-        // only() birikmez, tümüyle değiştirir.
+        // only() does not accumulate, it replaces the previous selection entirely.
         $formats = Field::string('s')->only(Format::Xlsx)->only(Format::Csv, Format::Pdf);
         self::assertSame([Format::Csv, Format::Pdf], $formats->getOnly());
     }
 
-    // ---------------------------------------------------------------- kaynak
+    // ---------------------------------------------------------------- source
 
     #[Test]
     public function sourceFallsBackToTheKeyWhenFromIsNotGiven(): void
@@ -202,9 +202,9 @@ final class FieldTest extends TestCase
         self::assertSame($reader, $field->getSource());
     }
 
-    // ---------------------------------------------------------------- hizalama
+    // ---------------------------------------------------------------- alignment
 
-    /** Hizalama dışarıya hiçbir zaman `Auto` sızdırmaz; yazıcılar somut bir değer bekler. */
+    /** Alignment never leaks `Auto` to the outside; writers expect a concrete value. */
     #[Test]
     #[DataProvider('everyFieldType')]
     public function alignIsAlwaysResolvedNeverAuto(FieldType $type): void
@@ -236,11 +236,11 @@ final class FieldTest extends TestCase
     #[Test]
     public function explicitAutoStillResolvesFromTheType(): void
     {
-        // Auto'yu elle vermek "varsayılana dön" demektir, "hizalama yok" demek değil.
+        // Passing Auto by hand means "fall back to the default", not "no alignment".
         self::assertSame(Align::Right, Field::money('m')->align(Align::Auto)->getAlign());
     }
 
-    // ---------------------------------------------------------------- biçim kapsamı
+    // ---------------------------------------------------------------- format scope
 
     #[Test]
     public function fieldAppliesToEveryFormatByDefault(): void
@@ -275,9 +275,9 @@ final class FieldTest extends TestCase
     }
 
     /**
-     * Keskin kenar: `only()` argümansız çağrılırsa alan HİÇBİR biçimde görünmez.
-     * Bilerek yazıldığında "şimdilik kapalı" anlamına gelir; kazara yazıldığında
-     * alan sessizce kaybolur. Davranış burada kayda geçirilmiştir.
+     * Sharp edge: if `only()` is called with no arguments, the field is visible in NO format
+     * at all. Written deliberately it means "switched off for now"; written by accident the
+     * field silently disappears. The behaviour is put on the record here.
      */
     #[Test]
     public function onlyWithoutArgumentsHidesTheFieldEverywhere(): void
@@ -290,7 +290,7 @@ final class FieldTest extends TestCase
         self::assertFalse($field->appliesTo(Format::Pdf));
     }
 
-    // ---------------------------------------------------------------- tipe özel ekler
+    // ---------------------------------------------------------------- type-specific extras
 
     #[Test]
     public function enumFieldStoresItsEnumClass(): void
@@ -320,7 +320,7 @@ final class FieldTest extends TestCase
         $resolver = static fn (): array => ['a' => 'A'];
         $field = Field::options('status', $resolver);
 
-        // Kapanış çalışma anına saklanır; tanım anında çözülmez.
+        // The closure is kept for run time; it is not resolved at definition time.
         self::assertSame($resolver, $field->getOptions());
     }
 
@@ -342,7 +342,7 @@ final class FieldTest extends TestCase
         self::assertNull($field->getOptions());
     }
 
-    // ---------------------------------------------------------------- varsayılanlar
+    // ---------------------------------------------------------------- defaults
 
     #[Test]
     public function freshFieldHasQuietDefaults(): void
@@ -384,7 +384,7 @@ final class FieldTest extends TestCase
         self::assertSame($currency, $field->getCurrency());
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     /** @return iterable<string, array{FieldType}> */
     public static function everyFieldType(): iterable
@@ -394,7 +394,7 @@ final class FieldTest extends TestCase
         }
     }
 
-    /** Her tip için o tipin kendi kurucusunu kullanır — kurucu private olduğu için tek yol bu. */
+    /** Uses each type's own constructor — the constructor is private, so this is the only way. */
     private static function fieldOfType(FieldType $type): Field
     {
         return match ($type) {

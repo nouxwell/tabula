@@ -14,14 +14,14 @@ use Balin\Tabula\Value\Formatter\NumberFormatter;
 use Balin\Tabula\Value\Formatter\StringFormatter;
 
 /**
- * Tipten biçimlendiriciye eşleme.
+ * Maps a type to a formatter.
  *
- * Aramalar tip başına önbelleklenir; satır sayısı yüz binlere çıktığında her hücrede
- * doğrusal tarama yapmak ölçülebilir bir maliyettir.
+ * Lookups are cached per type; once the row count runs into the hundreds of thousands, a
+ * linear scan on every single cell is a measurable cost.
  *
- * Öndeki biçimlendirici kazanır: `with()` ile eklenen özel bir biçimlendirici,
- * yerleşik olanı ezer. (Mevcut ERP'de `normalize()` metodu 8 ayrı sınıfa kopyalanmıştı;
- * burada davranışı değiştirmek tek bir sınıf eklemekle olur.)
+ * The formatter in front wins: a custom formatter added through `with()` overrides the
+ * built-in one. (In the system this replaces, the `normalize()` method had been
+ * copied into 8 separate classes; here, changing the behaviour means adding a single class.)
  */
 final class FormatterRegistry
 {
@@ -36,7 +36,7 @@ final class FormatterRegistry
         $this->formatters = array_values($formatters);
     }
 
-    /** Yerleşik biçimlendiricilerle kurulu kayıt defteri. */
+    /** A registry wired up with the built-in formatters. */
     public static function default(): self
     {
         return new self(
@@ -49,7 +49,7 @@ final class FormatterRegistry
         );
     }
 
-    /** Özel biçimlendiricileri BAŞA ekleyerek yerleşikleri ezer. */
+    /** Prepends the custom formatters TO THE FRONT, so they override the built-in ones. */
     public function with(ValueFormatter ...$formatters): self
     {
         return new self(...array_values($formatters), ...$this->formatters);

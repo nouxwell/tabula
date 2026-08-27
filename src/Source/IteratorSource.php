@@ -7,9 +7,9 @@ namespace Balin\Tabula\Source;
 use Closure;
 
 /**
- * Generator ya da herhangi bir `Traversable` üzerinden akış.
+ * Streams over a generator, or over any `Traversable`.
  *
- * Sabit bellekte milyonlarca satır yazmak için doğru seçim.
+ * The right choice for writing millions of rows in constant memory.
  */
 final readonly class IteratorSource implements DataSource
 {
@@ -23,8 +23,9 @@ final readonly class IteratorSource implements DataSource
     }
 
     /**
-     * Fabrika HER ÇAĞRIDA taze bir iterable üretmelidir; tükenmiş bir generator
-     * ikinci kez okunamayacağı için doğrudan generator değil, onu üreten kapanış alınır.
+     * The factory must produce a FRESH iterable ON EVERY CALL; since an exhausted generator
+     * cannot be read a second time, what is taken is not the generator itself but the closure
+     * that produces it.
      *
      * @param Closure(): iterable<int, array<string, mixed>|object> $factory
      */

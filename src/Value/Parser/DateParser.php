@@ -15,45 +15,49 @@ use Exception;
 use Stringable;
 
 /**
- * Tarih ve tarih/saat alanlarının ayrıştırıcısı — daima `DateTimeImmutable` döndürür.
+ * The parser for date and date/time fields — it always returns a `DateTimeImmutable`.
  *
- * Kaynak sırası, hücrenin nereden geldiğine göre kurulmuştur:
- *  1. `DateTimeInterface` — okuyucu hazır nesne verdiyse dokunulmaz.
- *  2. EXCEL SERİ NUMARASI — tarih biçimli bir hücre elektronik tabloda SAYIDIR
- *     (45292 = 2024-01-01). `DateFormatter`ın yazdığı değerin tersi burada çözülür;
- *     dönüşüm yine elle yapılır, bu sınıf bilerek PhpSpreadsheet'e bağlı değildir.
- *  3. Alanın deseni (`d.m.Y`) — kullanıcının şablonda GÖRDÜĞÜ biçim.
- *  4. ISO/serbest biçim — `2024-01-05`, `2024-01-05T09:30:00` gibi kanonik gösterimler.
+ * The order of the sources is built around where the cell came from:
+ *  1. `DateTimeInterface` — if the reader handed over a ready object, it is left untouched.
+ *  2. THE EXCEL SERIAL NUMBER — a date-formatted cell is a NUMBER in a spreadsheet
+ *     (45292 = 2024-01-01). What `DateFormatter` wrote is undone here; the conversion is
+ *     again done by hand, this class is deliberately not tied to PhpSpreadsheet.
+ *  3. The field's pattern (`d.m.Y`) — the format the user SEES in the template.
+ *  4. ISO/free form — canonical representations such as `2024-01-05` or
+ *     `2024-01-05T09:30:00`.
  *
- * Biçimlendiriciden AYRILDIĞI üç nokta:
- *  - `DateFormatter` çözemediği hücreyi HAM METİN olarak basıp geçer; burada çözülemeyen
- *    değer istisnadır ve mesaj BEKLENEN DESENİ söyler ("beklenen biçim: d.m.Y"), çünkü
- *    kullanıcı hatayı ancak doğru biçimi görürse düzeltebilir.
- *  - MySQL sıfır tarihi (`0000-00-00`) dışa aktarmada boş hücredir (eski kayıtlarda çok
- *    sayıda var, rapor onlar yüzünden ölmemeli). İçe aktarmada ise REDDEDİLİR: "tarih yok"
- *    demek isteyen kullanıcı hücreyi boş bırakır; sıfır tarihi başka bir sistemin
- *    bozuk çıktısıdır ve veritabanına taşınmamalıdır.
- *  - Sayısal değer biçimlendiricide UNIX ZAMAN DAMGASI sayılır (veri tabanından öyle
- *    gelir), burada EXCEL SERİ NUMARASI (elektronik tablodan öyle gelir). Aynı sayının
- *    iki yönde farklı anlamı vardır; kaynak farklıdır.
+ * Three points where it DIFFERS from the formatter:
+ *  - `DateFormatter` prints a cell it cannot resolve as RAW TEXT and moves on; here a value
+ *    that cannot be resolved is an exception, and the message states the EXPECTED PATTERN
+ *    ("expected format: d.m.Y"), because the user can only fix the error once they see the
+ *    correct format.
+ *  - The MySQL zero date (`0000-00-00`) is an empty cell on export (old records are full of
+ *    them, and a report must not die because of them). On import it is REJECTED: a user who
+ *    means "no date" leaves the cell empty; a zero date is the broken output of some other
+ *    system and must not be carried into the database.
+ *  - A numeric value counts as a UNIX TIMESTAMP in the formatter (that is how it comes out
+ *    of the database), and as an EXCEL SERIAL NUMBER here (that is how it comes out of a
+ *    spreadsheet). The same number means two different things in the two directions; the
+ *    source is different.
  */
 final class DateParser implements ValueParser
 {
-    /** Unix epoch'un (1970-01-01) Excel gün sayacındaki karşılığı. */
+    /** Where the Unix epoch (1970-01-01) sits in Excel's day counter. */
     private const int EXCEL_EPOCH_OFFSET = 25569;
 
     private const int SECONDS_PER_DAY = 86400;
 
-    /** 2958465 = 9999-12-31; Excel'in tarih olarak yorumladığı son seri numarası. */
+    /** 2958465 = 9999-12-31; the last serial number Excel still interprets as a date. */
     private const int MAX_EXCEL_SERIAL = 2958465;
 
     /**
-     * Salt rakamdan oluşan bir DİZE için asgari seri numarası (10000 = 1927-05-18).
+     * The minimum serial number for a digits-only STRING (10000 = 1927-05-18).
      *
-     * Sayısal hücre elektronik tabloda kesinlikle seri numarasıdır, ama METİN olarak gelen
-     * "2024" bir yıl parçası olabilir; seri sayılsaydı sessizce 1905-07-16'ya dönerdi.
-     * PHP'nin serbest ayrıştırıcısı da bu dizeyi kurtarmaz, "20:24" saati olarak okur —
-     * bu yüzden aralığa girmeyen salt-rakam dizeler hiç denenmeden reddedilir.
+     * A numeric cell in a spreadsheet is definitely a serial number, but a "2024" arriving
+     * as TEXT may be a year fragment; taken as a serial it would silently become
+     * 1905-07-16. PHP's free-form parser does not rescue that string either — it reads it as
+     * the time "20:24" — which is why digits-only strings outside the range are rejected
+     * without being tried at all.
      */
     private const int MIN_TEXT_SERIAL = 10000;
 
@@ -69,7 +73,8 @@ final class DateParser implements ValueParser
         }
 
         $type = $field->getType();
-        // Alanın kendi deseni varsa o kazanır; yoksa genel ayar (tarih/tarih-saat ayrı).
+        // The field's own pattern wins if it has one; otherwise the global setting
+        // (date and date-time are configured separately).
         $pattern = $field->getPattern() ?? $context->settings->dates->patternFor($type);
 
         $date = $this->toDate($raw, $pattern);
@@ -78,8 +83,8 @@ final class DateParser implements ValueParser
             throw ParseException::notADate($field, StringParser::describe($raw), $pattern);
         }
 
-        // Saf tarih kolonunda saat artığı kalmaz: aynı gün her satırda aynı değeri alsın,
-        // `BETWEEN` sorguları gün sonunu kaçırmasın.
+        // No leftover time in a pure date column: the same day gets the same value on every
+        // row, and `BETWEEN` queries do not miss the end of the day.
         return FieldType::Date === $type ? $date->setTime(0, 0) : $date;
     }
 
@@ -93,8 +98,8 @@ final class DateParser implements ValueParser
             return DateTimeImmutable::createFromInterface($raw);
         }
 
-        // Sayısal hücre = seri numarası. Aralık geniş tutulur (1 = 1899-12-31): böyle bir
-        // hücre elektronik tabloda zaten tarih olarak biçimlenmiştir.
+        // A numeric cell = a serial number. The range is kept wide (1 = 1899-12-31): such a
+        // cell is already formatted as a date in the spreadsheet.
         if (is_int($raw) || is_float($raw)) {
             return $this->fromExcelSerial((float) $raw, 1.0);
         }
@@ -121,15 +126,15 @@ final class DateParser implements ValueParser
             return $parsed;
         }
 
-        // Salt rakam: CSV'ye biçimlenmeden düşmüş seri numarası olabilir. Aralığın dışında
-        // kalan salt-rakam dize hiç denenmez (bkz. MIN_TEXT_SERIAL).
+        // Digits only: it may be a serial number that landed in the CSV unformatted. A
+        // digits-only string outside the range is not tried at all (see MIN_TEXT_SERIAL).
         if (ctype_digit($value)) {
             return $this->fromExcelSerial((float) $value, (float) self::MIN_TEXT_SERIAL);
         }
 
-        // İçinde rakam olmayan metin tarih değildir. Bu denetim olmadan PHP'nin serbest
-        // ayrıştırıcısı "now", "tomorrow", "next monday" gibi dizeleri KABUL eder ve
-        // içe aktarma anının tarihini veritabanına yazardı.
+        // Text without a digit in it is not a date. Without this check, PHP's free-form
+        // parser would ACCEPT strings such as "now", "tomorrow" or "next monday" and write
+        // the date of the import run itself into the database.
         if (1 !== preg_match('/\d/', $value)) {
             return null;
         }
@@ -149,9 +154,10 @@ final class DateParser implements ValueParser
             return null;
         }
 
-        // Uyarılar da hata sayılır: "32.13.2024" gibi girdiler `createFromFormat`ta sessizce
-        // bir sonraki aya taşar ve kullanıcı yanlış tarihi hiç fark etmezdi. Kısmi eşleşme
-        // de kabul edilmez ("15.01.2024 saat 9" desene oturmaz).
+        // Warnings count as errors too: input such as "32.13.2024" silently overflows into
+        // the next month in `createFromFormat`, and the user would never notice the wrong
+        // date. A partial match is not accepted either ("15.01.2024 at 9" does not fit the
+        // pattern).
         $errors = DateTimeImmutable::getLastErrors();
         if (is_array($errors) && (0 < $errors['warning_count'] || 0 < $errors['error_count'])) {
             return null;
@@ -161,10 +167,11 @@ final class DateParser implements ValueParser
     }
 
     /**
-     * Desenin başına `!` ekler: desende bulunmayan alanlar "şu an" yerine sıfırlanır.
+     * Prefixes the pattern with `!`: fields not present in the pattern are reset instead of
+     * defaulting to "now".
      *
-     * Bu olmadan `d.m.Y` ile okunan bir tarih, içe aktarmanın ÇALIŞMA SAATİNİ de taşırdı;
-     * aynı gün içe aktarılan iki dosya aynı tarih için farklı değerler üretirdi.
+     * Without this, a date read with `d.m.Y` would carry the RUN TIME of the import as well;
+     * two files imported on the same day would produce different values for the same date.
      */
     private function resetPattern(string $pattern): string
     {
@@ -176,16 +183,17 @@ final class DateParser implements ValueParser
     }
 
     /**
-     * Excel seri numarasını tarihe çevirir — `DateFormatter::toExcelSerial()`ın tersi.
+     * Converts an Excel serial number to a date — the inverse of
+     * `DateFormatter::toExcelSerial()`.
      *
-     * Sonuç UTC'dir ve DUVAR SAATİNİ korur: biçimlendirici, hücrede yerel saat görünsün
-     * diye seri numarasına saat dilimi farkını ekliyordu; burada aynı fark geri
-     * çıkarılmaz, çünkü kullanıcının dosyada gördüğü saat neyse veritabanına da o
-     * yazılmalıdır. Kütüphanenin saat dilimi ayarı yoktur; olsaydı 09:00 yazan bir hücre
-     * 06:00 olarak içe aktarılırdı.
+     * The result is UTC and preserves WALL-CLOCK TIME: the formatter added the time-zone
+     * offset to the serial number so that the cell would show local time; that same offset
+     * is not subtracted back here, because whatever time the user sees in the file is what
+     * has to go into the database. The library has no time-zone setting; if it had, a cell
+     * reading 09:00 would be imported as 06:00.
      *
-     * Yuvarlama zorunludur: 09:30 kesri 0.39583333… olarak saklanır ve düz `(int)`
-     * dönüşümü saati 09:29:59 yapardı.
+     * Rounding is mandatory: the 09:30 fraction is stored as 0.39583333… and a plain `(int)`
+     * conversion would turn the time into 09:29:59.
      */
     private function fromExcelSerial(float $serial, float $minimum): ?DateTimeImmutable
     {
@@ -203,10 +211,10 @@ final class DateParser implements ValueParser
     }
 
     /**
-     * MySQL sıfır tarihi (`0000-00-00`, `0000-00-00 00:00:00`).
+     * The MySQL zero date (`0000-00-00`, `0000-00-00 00:00:00`).
      *
-     * PHP bunu sessizce MÖ 1'e ayrıştırır; denetlenmezse veritabanına gerçek ama saçma bir
-     * tarih yazılırdı.
+     * PHP silently parses this as 1 BC; left unchecked, a real but nonsensical date would be
+     * written into the database.
      */
     private function isZeroDate(string $value): bool
     {

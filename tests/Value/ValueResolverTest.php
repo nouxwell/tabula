@@ -13,13 +13,13 @@ use PHPUnit\Framework\TestCase;
 use stdClass;
 
 /**
- * Satırdan ham değeri okuyan tek nokta.
+ * The single place where the raw value is read out of a row.
  *
- * Satır her şey olabilir: Doctrine dizi projeksiyonu, entity, DTO, ArrayObject.
- * Eski ERP motorunda bunun için her rapor kendi `$row['x'] ?? $row->getX()` merdivenini
- * yazıyordu; eksik ilişki de çoğu yerde "Undefined index" ile patlıyordu. Buradaki
- * sözleşme nettir: EKSİK VERİ HATA DEĞİL, BOŞ HÜCREDİR — yol boyunca `null` görülürse
- * `null` döner, istisna fırlatılmaz.
+ * A row can be anything: a Doctrine array projection, an entity, a DTO, an ArrayObject. In
+ * the engine this replaces, every report wrote its own `$row['x'] ?? $row->getX()`
+ * ladder for this, and a missing relation blew up with "Undefined index" in most places. The
+ * contract here is clear: MISSING DATA IS NOT AN ERROR, IT IS AN EMPTY CELL — if `null` is
+ * met anywhere along the path, `null` is returned and no exception is thrown.
  */
 #[CoversClass(ValueResolver::class)]
 final class ValueResolverTest extends TestCase
@@ -31,7 +31,7 @@ final class ValueResolverTest extends TestCase
         $this->resolver = new ValueResolver();
     }
 
-    // ---------------------------------------------------------------- diziler
+    // ---------------------------------------------------------------- arrays
 
     #[Test]
     public function readsAPlainArrayKey(): void
@@ -64,7 +64,7 @@ final class ValueResolverTest extends TestCase
         self::assertSame('0', $this->read('code', ['code' => '0']));
     }
 
-    // ---------------------------------------------------------------- nesneler
+    // ---------------------------------------------------------------- objects
 
     #[Test]
     public function readsAGetter(): void
@@ -81,7 +81,7 @@ final class ValueResolverTest extends TestCase
     #[Test]
     public function readsABareMethodNamedLikeTheKey(): void
     {
-        // getX/isX bulunamazsa anahtarın kendisi metot adı olarak denenir.
+        // If no getX/isX is found, the key itself is tried as a method name.
         self::assertSame('1234567890', $this->read('taxNumber', new ResolverCustomer()));
     }
 
@@ -103,14 +103,14 @@ final class ValueResolverTest extends TestCase
     #[Test]
     public function getterWinsOverAPublicPropertyWithTheSameName(): void
     {
-        // Erişimci sırası: getX, isX, x(), sonra özellik.
+        // Accessor order: getX, isX, x(), then the property.
         self::assertSame('getter', $this->read('label', new ResolverAccessorOrder()));
     }
 
     #[Test]
     public function inaccessibleMembersAreNotReachable(): void
     {
-        // private metot da private özellik de dışarıdan okunamaz; hata değil, null.
+        // Neither a private method nor a private property can be read from outside; not an error, null.
         self::assertNull($this->read('secret', new ResolverCustomer()));
         self::assertNull($this->read('hiddenCode', new ResolverCustomer()));
     }
@@ -146,7 +146,7 @@ final class ValueResolverTest extends TestCase
         self::assertSame('İzmir', $this->read('city', $row, 'address.city'));
     }
 
-    // ---------------------------------------------------------------- kapanış kaynağı
+    // ---------------------------------------------------------------- closure source
 
     #[Test]
     public function aClosureSourceReceivesTheWholeRow(): void
@@ -179,12 +179,12 @@ final class ValueResolverTest extends TestCase
         self::assertSame($row, $captured);
     }
 
-    // ---------------------------------------------------------------- DQL takma adları
+    // ---------------------------------------------------------------- DQL aliases
 
     /**
-     * Doctrine projeksiyonlarında `SELECT c.code` sonucu satırda çoğu zaman düz `code`
-     * olarak döner, bazı sürücü/hydration kombinasyonlarında ise `c.code` olarak.
-     * Alan tanımı her iki durumda da aynı kalabilsin diye önce düz anahtar denenir.
+     * In Doctrine projections the result of `SELECT c.code` most often comes back on the row
+     * as a flat `code`, but with some driver/hydration combinations as `c.code`. So that the
+     * field definition can stay the same in both cases, the flat key is tried first.
      */
     #[Test]
     public function aDqlAliasResolvesWhenTheRowHasTheFlatKey(): void
@@ -215,7 +215,7 @@ final class ValueResolverTest extends TestCase
         self::assertSame('FLAT', $this->read('code', $row, 'c.code'));
     }
 
-    // ---------------------------------------------------------------- eksik veri
+    // ---------------------------------------------------------------- missing data
 
     #[Test]
     public function aMissingKeyReturnsNullInsteadOfThrowing(): void
@@ -233,7 +233,7 @@ final class ValueResolverTest extends TestCase
     #[Test]
     public function nullMidwayStopsTheWalkAndReturnsNull(): void
     {
-        // Eksik ilişki hata değildir: adres yoksa şehir boş hücredir.
+        // A missing relation is not an error: with no address, the city is an empty cell.
         self::assertNull($this->read('city', ['address' => null], 'address.city'));
         self::assertNull($this->read('city', new ResolverCustomer(), 'address.city'));
     }
@@ -252,9 +252,9 @@ final class ValueResolverTest extends TestCase
         self::assertNull($this->read('code', 42));
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
-    /** Alan tanımı yazmadan tek satırda okuma yapmak için. */
+    /** For reading in a single line without writing out a field definition. */
     private function read(string $key, mixed $row, ?string $from = null): mixed
     {
         $field = Field::string($key);
@@ -267,7 +267,7 @@ final class ValueResolverTest extends TestCase
     }
 }
 
-/** Test koşumu için basit bir adres nesnesi. */
+/** A simple address object for the test run. */
 final class ResolverAddress
 {
     public function __construct(public string $city)
@@ -275,12 +275,12 @@ final class ResolverAddress
     }
 }
 
-/** Erişimcinin her biçimini (getter, isser, düz metot, public özellik, private üye) taşıyan satır. */
+/** A row carrying every accessor shape (getter, isser, bare method, public property, private member). */
 final class ResolverCustomer
 {
     public string $displayName = 'Ada Lovelace';
 
-    /** Doldurulmamış bir ilişki/alan: erişimci vardır ama değer yoktur. */
+    /** An unpopulated relation/field: the accessor exists but there is no value. */
     public ?string $nickname = null;
 
     private string $secret = 'gizli';
@@ -309,7 +309,7 @@ final class ResolverCustomer
         return $this->nickname;
     }
 
-    /** private üyeler dışarıdan görünmez; test bunu doğrular, bu metot yalnız erişimi kanıtlar. */
+    /** Private members are not visible from outside; the test proves that, this method only proves the access exists. */
     public function revealSecret(): string
     {
         return $this->secret;
@@ -326,7 +326,7 @@ final class ResolverCustomer
     }
 }
 
-/** getX, isX ve public özelliğin aynı anda bulunduğu satır — sıra testi için. */
+/** A row where getX, isX and a public property are present at the same time — for the ordering test. */
 final class ResolverAccessorOrder
 {
     public string $label = 'property';
@@ -337,7 +337,7 @@ final class ResolverAccessorOrder
     }
 }
 
-/** Nesne içinde düz dizi taşıyan satır. */
+/** A row carrying a plain array inside an object. */
 final class ResolverArrayHolder
 {
     /** @var array<string, string> */

@@ -8,20 +8,20 @@ use Balin\Tabula\Value\FormatContext;
 use InvalidArgumentException;
 
 /**
- * Her N satırda yeni sayfa.
+ * A new sheet every N rows.
  *
- * Excel'in 1.048.576 satır sınırını ve devasa tek sayfanın açılış yavaşlığını aşar.
- * CSV'de her parça ayrı dosya olur ve tek bir arşivde toplanır.
+ * Gets past Excel's 1,048,576-row limit and past how slowly one gigantic sheet opens.
+ * In CSV every chunk becomes a separate file, collected into a single archive.
  */
 final readonly class ChunkedSheets implements SheetStrategy
 {
     public function __construct(
         private int $rowsPerSheet,
-        /** `%d` parça numarasıyla değiştirilir. */
-        private string $namePattern = 'Sayfa %d',
+        /** `%d` is replaced with the chunk number. */
+        private string $namePattern = 'Sheet %d',
     ) {
         if ($rowsPerSheet < 1) {
-            throw new InvalidArgumentException('Sayfa başına satır sayısı en az 1 olmalı.');
+            throw new InvalidArgumentException('Rows per sheet must be at least 1.');
         }
     }
 

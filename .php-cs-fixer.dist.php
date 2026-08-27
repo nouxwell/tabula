@@ -3,9 +3,10 @@
 declare(strict_types=1);
 
 /*
- * Ana projedeki (crm-backend) kural seti @Symfony'dir; kütüphane onunla hizalı kalsın
- * diye aynı temel alınır. Fark: burada `declare(strict_types=1)` ZORUNLUDUR — ana projede
- * bu oran %2 civarındayken kütüphane sıfırdan başladığı için eşiği yüksek tutuyoruz.
+ * The rule set of the application this package was extracted from is @Symfony; the same base is
+ * taken here so the library stays aligned with it. The difference: `declare(strict_types=1)` is
+ * MANDATORY here — in that application the ratio sits at around 2%, but since the library starts
+ * from scratch we keep the bar high.
  */
 
 $finder = PhpCsFixer\Finder::create()

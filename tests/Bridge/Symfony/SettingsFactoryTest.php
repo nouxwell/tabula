@@ -21,13 +21,14 @@ use PHPUnit\Framework\TestCase;
 use ValueError;
 
 /**
- * Yapılandırma dizisi → ayar nesnesi eşlemesi.
+ * The configuration array → settings object mapping.
  *
- * Fabrikanın içinde mantık yok; tek riski YANLIŞ ARGÜMANA bağlamaktır. `quantity_digits`
- * ile `money_digits` aynı tipte (int) olduğu için bir yer değiştirme ne PHP ne de PHPStan
- * tarafından yakalanır — hata ancak dışa aktarılan dosyada, miktar kolonu iki basamak
- * gösterdiğinde fark edilir. Bu yüzden her testte değerler BİLEREK birbirinden farklı ve
- * varsayılanlardan uzak seçilmiştir: yer değiştirme testi kırmızıya döndürür.
+ * There is no logic inside the factory; its only risk is binding to the WRONG ARGUMENT.
+ * Because `quantity_digits` and `money_digits` have the same type (int), a transposition is
+ * caught neither by PHP nor by PHPStan — the mistake only shows up in the exported file, once
+ * the quantity column displays two decimals. That is why in every test the values are
+ * DELIBERATELY chosen to differ from one another and to sit far away from the defaults: a
+ * transposition turns the test red.
  *
  * @phpstan-type NumberConfig array{decimal_separator: string, thousand_separator: string, decimal_digits: int, quantity_digits: int, money_digits: int, symbol_position: string, currency_symbols: array<string, string>}
  * @phpstan-type PdfConfig array{page_size: string, orientation: string, margin_mm: float, min_column_width_mm: float, max_columns: int|null, overflow: string, font_family: string, font_size_pt: float, repeat_header: bool}
@@ -35,7 +36,7 @@ use ValueError;
 #[CoversClass(SettingsFactory::class)]
 final class SettingsFactoryTest extends TestCase
 {
-    // ---------------------------------------------------------------- sayılar
+    // ---------------------------------------------------------------- numbers
 
     #[Test]
     public function numbersMapsEveryConfigKeyToItsOwnProperty(): void
@@ -53,7 +54,8 @@ final class SettingsFactoryTest extends TestCase
         self::assertSame(',', $numbers->decimalSeparator);
         self::assertSame('.', $numbers->thousandSeparator);
 
-        // Üç basamak alanı üç FARKLI değer taşıyor; ikisi yer değiştirse burası kırılır.
+        // The three digit fields carry three DIFFERENT values; if two of them were transposed,
+        // this is where it would break.
         self::assertSame(4, $numbers->decimalDigits);
         self::assertSame(6, $numbers->quantityDigits);
         self::assertSame(5, $numbers->moneyDigits);
@@ -63,8 +65,8 @@ final class SettingsFactoryTest extends TestCase
     }
 
     /**
-     * Aynı yer değiştirmeyi bir de DAVRANIŞ üzerinden yakalar: basamak sayıları alan tipine
-     * göre okunur, dolayısıyla yanlış slota düşen bir değer burada tipiyle birlikte görünür.
+     * Catches the same transposition through BEHAVIOUR as well: the digit counts are read by
+     * field type, so a value that landed in the wrong slot shows up here together with its type.
      */
     #[Test]
     public function digitsLandInTheSlotTheirFieldTypeReadsFrom(): void
@@ -75,16 +77,17 @@ final class SettingsFactoryTest extends TestCase
             'money_digits' => 5,
         ]));
 
-        self::assertSame(6, $numbers->digitsFor(FieldType::Quantity), 'Miktar basamağı quantity_digits olmalı.');
-        self::assertSame(5, $numbers->digitsFor(FieldType::Money), 'Para basamağı money_digits olmalı.');
-        self::assertSame(4, $numbers->digitsFor(FieldType::Decimal), 'Ondalık basamağı decimal_digits olmalı.');
+        self::assertSame(6, $numbers->digitsFor(FieldType::Quantity), 'The quantity digits must be quantity_digits.');
+        self::assertSame(5, $numbers->digitsFor(FieldType::Money), 'The money digits must be money_digits.');
+        self::assertSame(4, $numbers->digitsFor(FieldType::Decimal), 'The decimal digits must be decimal_digits.');
     }
 
     #[Test]
     public function separatorsAreNotTransposed(): void
     {
-        // Ayraçlar aynı tipte olduğu için ters bağlanmaları da sessizdir; ayırt edici
-        // (ve gerçek hayatta asla karışmayacak) simgelerle bakıyoruz.
+        // Because the separators have the same type, binding them the wrong way round is
+        // silent too; we look at it with distinctive symbols (ones that would never get mixed
+        // up in real life).
         $numbers = SettingsFactory::numbers(self::numberConfig([
             'decimal_separator' => '#',
             'thousand_separator' => '~',
@@ -98,7 +101,7 @@ final class SettingsFactoryTest extends TestCase
     #[DataProvider('symbolPositions')]
     public function symbolPositionStringBecomesTheEnumCase(string $configured, SymbolPosition $expected): void
     {
-        // Kapsayıcı yalnız düz dizi taşır; enum'a dönüşüm burada, bir kez yapılır.
+        // The container only carries plain arrays; the conversion to the enum happens here, once.
         $numbers = SettingsFactory::numbers(self::numberConfig(['symbol_position' => $configured]));
 
         self::assertSame($expected, $numbers->symbolPosition);
@@ -117,7 +120,8 @@ final class SettingsFactoryTest extends TestCase
     #[Test]
     public function anUnknownSymbolPositionFailsLoudly(): void
     {
-        // Tek koruma bundle'ın `enumNode()`'u; çerçevesiz çağrıda hata sessiz kalmamalı.
+        // The only protection is the bundle's `enumNode()`; called outside the framework, the
+        // error must not stay silent.
         $this->expectException(ValueError::class);
 
         SettingsFactory::numbers(self::numberConfig(['symbol_position' => 'left']));
@@ -129,7 +133,7 @@ final class SettingsFactoryTest extends TestCase
         $numbers = SettingsFactory::numbers(self::numberConfig(['currency_symbols' => []]));
 
         self::assertSame([], $numbers->currencySymbols);
-        // Simge tanımlı değilse para birimi KODU simge yerine geçer.
+        // If no symbol is defined, the currency CODE stands in for the symbol.
         self::assertSame('EUR', $numbers->symbolFor('EUR'));
     }
 
@@ -146,12 +150,12 @@ final class SettingsFactoryTest extends TestCase
         self::assertSame('1.234,50 ₺', $numbers->applySymbol('1.234,50', '₺'));
     }
 
-    // ---------------------------------------------------------------- tarihler
+    // ---------------------------------------------------------------- dates
 
     #[Test]
     public function datesMapsEveryConfigKeyToItsOwnProperty(): void
     {
-        // Dört alan da string; hepsi birbirinden farklı olsun ki bir kayma görünür olsun.
+        // All four fields are strings; let each one differ from the others so that a shift becomes visible.
         $dates = SettingsFactory::dates([
             'date_pattern' => 'Y-m-d',
             'datetime_pattern' => 'Y-m-d H:i:s',
@@ -202,7 +206,8 @@ final class SettingsFactoryTest extends TestCase
         self::assertSame(9.5, $pdf->fontSizePt);
         self::assertFalse($pdf->repeatHeader);
 
-        // Dört kenar da aynı değeri almalı; biri atlanırsa çıktı görünürde "biraz kaymış" olur.
+        // All four edges must take the same value; if one is skipped, the output merely looks
+        // "slightly off".
         self::assertSame(7.5, $pdf->page->marginTopMm);
         self::assertSame(7.5, $pdf->page->marginRightMm);
         self::assertSame(7.5, $pdf->page->marginBottomMm);
@@ -210,11 +215,12 @@ final class SettingsFactoryTest extends TestCase
     }
 
     /**
-     * Yön SAKLANMAKLA kalmaz, ölçüye UYGULANIR.
+     * The orientation is not merely STORED, it is APPLIED to the measurements.
      *
-     * `Orientation` alanını doğru kurup `->landscape()` çağırmayı unutmak sessiz bir hatadır:
-     * `@page` kuralı doğru yazılırdı ama kolon bütçesi dikey enden hesaplanır, yani sayfa
-     * yatay basılırken kolonlar dikeye göre bölünürdü.
+     * Setting the `Orientation` field correctly but forgetting to call `->landscape()` is a
+     * silent bug: the `@page` rule would be written correctly, but the column budget is
+     * computed from the portrait width, so the page would print in landscape while the columns
+     * were split for portrait.
      */
     #[Test]
     public function theOrientationIsAppliedToTheMeasurementsNotJustStored(): void
@@ -226,11 +232,11 @@ final class SettingsFactoryTest extends TestCase
     }
 
     /**
-     * `margin_mm: 10` yazan bir yaml dosyası buraya `int(10)` olarak düşer.
+     * A yaml file that says `margin_mm: 10` lands here as `int(10)`.
      *
-     * Symfony'nin `FloatNode`u tam sayıyı kabul eder ama ÇEVİRMEZ (bkz. `FloatNode::validateType`;
-     * kastı yerel değişkene yapar, düğümün değerine değil). Fabrika kasti atmazsa `Page`in
-     * float alanlarına int sızar.
+     * Symfony's `FloatNode` accepts a whole number but DOES NOT CONVERT it (see
+     * `FloatNode::validateType`; it casts into a local variable, not into the node's value).
+     * Unless the factory casts deliberately, an int leaks into `Page`'s float fields.
      */
     #[Test]
     public function aWholeNumberMarginArrivesAsAFloat(): void
@@ -246,10 +252,11 @@ final class SettingsFactoryTest extends TestCase
     }
 
     /**
-     * Bütçe üç ayardan kurulur ve üçü de gerçekten okunur.
+     * The budget is built from three settings and all three really are read.
      *
-     * A4 yatayda kullanılabilir en 297 − 2×10 = 277 mm; 50 mm asgari kolonla 5 kolon sığar,
-     * `max_columns` onu 3'e çeker. Değer taşınmasaydı burası 5 kalırdı.
+     * On A4 landscape the usable width is 297 − 2×10 = 277 mm; with a 50 mm minimum column
+     * width 5 columns fit, and `max_columns` pulls that down to 3. Had the value not been
+     * carried, this would have stayed at 5.
      */
     #[Test]
     public function theColumnBudgetIsBuiltFromMinWidthAndMax(): void
@@ -279,24 +286,25 @@ final class SettingsFactoryTest extends TestCase
     {
         $pdf = SettingsFactory::pdf(self::pdfConfig(['overflow' => $configured, 'min_column_width_mm' => 50.0]));
 
-        // `Overflow` bütçenin İÇİNDE özel; davranışından okuyoruz: Shrink hiç bölmez, çapa
-        // da tanımaz — kaç kolon olursa olsun tek grup döner.
+        // `Overflow` is private INSIDE the budget; we read it from its behaviour: Shrink never
+        // splits and does not recognise anchors either — however many columns there are, a
+        // single group comes back.
         $columns = self::wideColumns(12);
         $groups = $pdf->budget->split($columns, $pdf->page);
 
         self::assertSame(
             Overflow::Shrink === $expected ? 1 : 3,
             count($groups),
-            'Taşma stratejisi bütçeye ulaşmamış olabilir.',
+            'The overflow strategy may not have reached the budget.',
         );
     }
 
     /** @return iterable<string, array{string, Overflow}> */
     public static function overflowNames(): iterable
     {
-        // 12 kolon / 5 kapasite: next_page_set üç gruba böler, drop tek gruba indirir
-        // (ama 5 kolon kalır), shrink hiç bölmez. `drop` da tek grup döndürdüğü için
-        // ayırt edici sayı 3 ↔ 1'dir.
+        // 12 columns / capacity 5: next_page_set splits into three groups, drop reduces it to a
+        // single group (but 5 columns remain), shrink never splits. Because `drop` also returns
+        // a single group, the distinguishing number is 3 ↔ 1.
         yield 'next_page_set' => ['next_page_set', Overflow::NextPageSet];
         yield 'shrink' => ['shrink', Overflow::Shrink];
     }
@@ -304,7 +312,8 @@ final class SettingsFactoryTest extends TestCase
     #[Test]
     public function anUnknownPageSizeFailsLoudly(): void
     {
-        // Tek koruma bundle'ın `enumNode()`'u; çerçevesiz çağrıda hata sessiz kalmamalı.
+        // The only protection is the bundle's `enumNode()`; called outside the framework, the
+        // error must not stay silent.
         $this->expectException(ValueError::class);
 
         SettingsFactory::pdf(self::pdfConfig(['page_size' => 'a2']));
@@ -318,7 +327,7 @@ final class SettingsFactoryTest extends TestCase
         SettingsFactory::pdf(self::pdfConfig(['overflow' => 'wrap']));
     }
 
-    // ---------------------------------------------------------------- kök ayarlar
+    // ---------------------------------------------------------------- root settings
 
     #[Test]
     public function settingsMapsEveryConfigKeyToItsOwnProperty(): void
@@ -334,13 +343,14 @@ final class SettingsFactoryTest extends TestCase
             'max_rows_per_sheet' => 25_000,
         ], $numbers, $dates);
 
-        // Alt ayarlar kopyalanmaz, aynı örnek taşınır.
+        // The sub-settings are not copied, the very same instance is carried through.
         self::assertSame($numbers, $settings->numbers);
         self::assertSame($dates, $settings->dates);
 
         self::assertSame('tr', $settings->defaultLocale);
         self::assertSame('-', $settings->emptyText);
-        // İki boole anahtarı yer değiştirseydi dışa aktarmada 'Evet'/'Hayır' ters çıkardı.
+        // Had the two boolean keys been transposed, the export would have produced
+        // 'Evet'/'Hayır' the wrong way round.
         self::assertSame('app.bool.evet', $settings->boolTrueKey);
         self::assertSame('app.bool.hayir', $settings->boolFalseKey);
         self::assertSame(25_000, $settings->maxRowsPerSheet);
@@ -349,7 +359,8 @@ final class SettingsFactoryTest extends TestCase
     #[Test]
     public function anEmptyEmptyTextIsKeptAsIsAndNotReplacedByADefault(): void
     {
-        // Boş metin anlamlı bir seçimdir: hücre hiç yaratılmaz. Fabrika buna dokunmamalı.
+        // An empty text is a meaningful choice: the cell is never created at all. The factory
+        // must not touch it.
         $settings = SettingsFactory::settings([
             'default_locale' => 'en',
             'empty_text' => '',
@@ -361,10 +372,10 @@ final class SettingsFactoryTest extends TestCase
         self::assertSame('', $settings->emptyText);
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     /**
-     * Tam bir sayı yapılandırması; testin ilgilendiği anahtarlar üzerine yazılır.
+     * A complete number configuration; the keys the test cares about are written over it.
      *
      * @param array<string, mixed> $overrides
      *
@@ -387,7 +398,7 @@ final class SettingsFactoryTest extends TestCase
     }
 
     /**
-     * Tam bir PDF yapılandırması; bundle'ın ağacının ürettiği varsayılanlarla aynı.
+     * A complete PDF configuration; identical to the defaults the bundle's tree produces.
      *
      * @param array<string, mixed> $overrides
      *
@@ -412,7 +423,7 @@ final class SettingsFactoryTest extends TestCase
     }
 
     /**
-     * Bütçeyi zorlayacak kadar çok, genişliği verilmemiş kolon.
+     * Enough columns, with no width given, to put the budget under strain.
      *
      * @return list<Column>
      */
@@ -423,7 +434,7 @@ final class SettingsFactoryTest extends TestCase
         for ($i = 0; $i < $count; ++$i) {
             $columns[] = new Column(
                 key: 'k'.$i,
-                label: 'Kolon '.$i,
+                label: 'Column '.$i,
                 type: FieldType::String,
                 align: Align::Left,
                 width: null,

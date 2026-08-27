@@ -27,11 +27,12 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 use Throwable;
 
 /**
- * Yazıcı ayarlarının `tabula.yaml`'dan YAZILAN DOSYAYA kadar gittiğini doğrular.
+ * Verifies that the writer settings travel all the way from `tabula.yaml` TO THE WRITTEN FILE.
  *
- * Ayarın değer nesnesine ulaştığını görmek yetmez: bu refactor'ün var olma sebebi, doğrulanan
- * ve taşınan ama kimsenin OKUMADIĞI ölü bir ayardı (`max_rows_per_sheet`). Bu yüzden buradaki
- * iddialar konteynerden çıkan `Tabula` ile gerçek dosya yazıp baytlara/çalışma kitabına bakar.
+ * Seeing a setting reach the value object is not enough: the reason this refactor exists was a
+ * dead setting (`max_rows_per_sheet`) that was validated and carried around but that NOBODY
+ * READ. That is why the assertions here write a real file with the `Tabula` that comes out of
+ * the container and then look at the bytes / at the workbook.
  */
 final class WriterConfigurationTest extends TestCase
 {
@@ -95,7 +96,7 @@ final class WriterConfigurationTest extends TestCase
     }
 
     /**
-     * PDF için ayrı bir yazma yolu: kâğıt bütçesinin görünür olması altı kolon ister.
+     * A separate writing path for the PDF: six columns are needed for the paper budget to become visible.
      *
      * @param array<string, mixed> $config
      */
@@ -133,7 +134,7 @@ final class WriterConfigurationTest extends TestCase
     #[Test]
     public function csvDefaultsProduceASemicolonFileWithABom(): void
     {
-        $contents = (string) file_get_contents($this->write([], Format::Csv, 'varsayilan.csv'));
+        $contents = (string) file_get_contents($this->write([], Format::Csv, 'default.csv'));
 
         self::assertStringStartsWith("\xEF\xBB\xBF", $contents);
         self::assertStringContainsString('Kod;Ünvan', $contents);
@@ -143,7 +144,7 @@ final class WriterConfigurationTest extends TestCase
     #[Test]
     public function csvConfigurationReachesTheWrittenFile(): void
     {
-        // Makineye giden besleme: RFC 4180 — virgül, BOM yok, LF.
+        // The feed that goes to a machine: RFC 4180 — comma, no BOM, LF.
         $config = ['csv' => [
             'delimiter' => ',',
             'escape' => '',
@@ -161,7 +162,7 @@ final class WriterConfigurationTest extends TestCase
     #[Test]
     public function anEscapeWrittenAsNullIsReadAsDisabledRatherThanCrashing(): void
     {
-        // `escape: ~` yazan kişi "kaçışı kapat" demek istiyordur; ham null bir TypeError'du.
+        // Whoever writes `escape: ~` means "turn escaping off"; a raw null was a TypeError.
         $contents = (string) file_get_contents(
             $this->write(['csv' => ['escape' => null]], Format::Csv, 'kacissiz.csv'),
         );
@@ -172,10 +173,10 @@ final class WriterConfigurationTest extends TestCase
     /** @return iterable<string, array{array<string, mixed>}> */
     public static function invalidCsvCharacters(): iterable
     {
-        // En sık tuzak: YAML tek tırnakta '\\' İKİ karakterdir.
-        yield 'iki karakterli kaçış' => [['escape' => '\\\\']];
-        yield 'iki karakterli ayraç' => [['delimiter' => '||']];
-        yield 'çok baytlı ayraç' => [['delimiter' => 'ş']];
+        // The most frequent trap: in single-quoted YAML, '\\' is TWO characters.
+        yield 'two-character escape' => [['escape' => '\\\\']];
+        yield 'two-character delimiter' => [['delimiter' => '||']];
+        yield 'multi-byte delimiter' => [['delimiter' => 'ş']];
     }
 
     /**
@@ -185,8 +186,8 @@ final class WriterConfigurationTest extends TestCase
     #[DataProvider('invalidCsvCharacters')]
     public function anInvalidCsvCharacterFailsAtSetupNotHalfwayThroughTheFile(array $csv): void
     {
-        // Yazma anında patlarsa hata ham bir ValueError olur (TabulaException DEĞİL) ve
-        // diskte yalnız BOM içeren bir kalıntı bırakır.
+        // If it blew up at writing time, the error would be a raw ValueError (NOT a
+        // TabulaException) and it would leave a remnant on disk containing nothing but the BOM.
         $this->expectException(WriterException::class);
 
         $this->write(['csv' => $csv], Format::Csv, 'olmaz.csv');
@@ -197,7 +198,7 @@ final class WriterConfigurationTest extends TestCase
     #[Test]
     public function xlsxDefaultsFreezeTheHeaderAndAddAnAutoFilter(): void
     {
-        $sheet = IOFactory::load($this->write([], Format::Xlsx, 'varsayilan.xlsx'))->getActiveSheet();
+        $sheet = IOFactory::load($this->write([], Format::Xlsx, 'default.xlsx'))->getActiveSheet();
 
         self::assertSame('A2', $sheet->getFreezePane());
         self::assertNotSame('', $sheet->getAutoFilter()->getRange());
@@ -214,7 +215,7 @@ final class WriterConfigurationTest extends TestCase
             'auto_filter' => false,
         ]];
 
-        $spreadsheet = IOFactory::load($this->write($config, Format::Xlsx, 'sade.xlsx'));
+        $spreadsheet = IOFactory::load($this->write($config, Format::Xlsx, 'plain.xlsx'));
         $sheet = $spreadsheet->getActiveSheet();
 
         self::assertNull($sheet->getFreezePane());
@@ -222,8 +223,9 @@ final class WriterConfigurationTest extends TestCase
         self::assertFalse($sheet->getStyle('A1')->getFont()->getBold());
         self::assertSame('Ionsis ERP', $spreadsheet->getProperties()->getCreator());
 
-        // Süsler kapalıyken bile kolon hizalaması uygulanmalı: hizalama, otomatik filtre
-        // koşulunun İÇİNDE kalırsa sessizce düşerdi.
+        // Even with the decoration switched off, the column alignment must be applied:
+        // had the alignment stayed INSIDE the auto-filter condition, it would have dropped
+        // silently.
         self::assertNotSame('', (string) $sheet->getStyle('A2')->getAlignment()->getHorizontal());
     }
 
@@ -237,28 +239,28 @@ final class WriterConfigurationTest extends TestCase
         );
         $sheet = IOFactory::load($path)->getActiveSheet();
 
-        // A = `code`, ZORUNLU alan → zorunlu rengi genel başlık rengini ezer.
+        // A = `code`, a REQUIRED field → the required colour overrides the general header colour.
         self::assertSame('FFAA0000', $sheet->getStyle('A1')->getFill()->getStartColor()->getARGB());
-        // B = `name`, zorunlu değil → genel başlık rengi.
+        // B = `name`, not required → the general header colour.
         self::assertSame('FFDDEEFF', $sheet->getStyle('B1')->getFill()->getStartColor()->getARGB());
     }
 
     /** @return iterable<string, array{string}> */
     public static function invalidColours(): iterable
     {
-        // PhpSpreadsheet ayrıştıramadığı rengi SESSİZCE yutar: '#...' başlığı bembeyaz
-        // bırakır, boş dize ise simsiyah bir bant basar. İkisi de kabul edilmemeli.
-        yield 'css diyezi' => ['#F2F2F2'];
-        yield 'renk adı' => ['lightgray'];
-        yield 'boş' => [''];
+        // PhpSpreadsheet SILENTLY swallows a colour it cannot parse: a '#...' leaves the header
+        // pure white, while an empty string prints a jet-black band. Neither may be accepted.
+        yield 'css hash' => ['#F2F2F2'];
+        yield 'colour name' => ['lightgray'];
+        yield 'empty' => [''];
     }
 
     #[Test]
     #[DataProvider('invalidColours')]
     public function anInvalidColourIsRejectedInsteadOfSilentlyPaintingSomethingElse(string $colour): void
     {
-        // Boş dize config ağacında (cannotBeEmpty), diğerleri değer nesnesinde reddedilir;
-        // ikisi de kurulum anında ve gürültüyle patlamalı.
+        // The empty string is rejected in the config tree (cannotBeEmpty), the others in the
+        // value object; both must blow up at set-up time and loudly.
         $this->expectException(Throwable::class);
 
         $this->write(['xlsx' => ['header_fill' => $colour]], Format::Xlsx, 'kotu-renk.xlsx');
@@ -267,16 +269,17 @@ final class WriterConfigurationTest extends TestCase
     // ---------------------------------------------------------------- PDF
 
     /**
-     * Varsayılan A4 YATAY olmalı.
+     * The default A4 must be LANDSCAPE.
      *
-     * Mevcut ERP tüm listeleri A4 dikey basıyordu; on kolonlu bir fatura listesinin son
-     * kolonları kâğıdın dışında kalıyor, kullanıcı eksiği ancak Excel çıktısıyla
-     * karşılaştırınca fark ediyordu. Yatay kâğıt kullanılabilir eni 190 → 277 mm yapar.
+     * The system this replaces printed every list on A4 portrait; the last columns of a
+     * ten-column invoice list fell off the edge of the paper, and the user only noticed what
+     * was missing by comparing it against the Excel output. Landscape paper takes the usable
+     * width from 190 to 277 mm.
      */
     #[Test]
     public function pdfDefaultsProduceAnA4LandscapePage(): void
     {
-        PdfDocument::at($this->writePdf([], 'varsayilan.pdf'))->assertPaper(Page::a4()->landscape());
+        PdfDocument::at($this->writePdf([], 'default.pdf'))->assertPaper(Page::a4()->landscape());
     }
 
     #[Test]
@@ -288,10 +291,11 @@ final class WriterConfigurationTest extends TestCase
     }
 
     /**
-     * Kolon bütçesi de yapılandırmadan gelmeli.
+     * The column budget must come from the configuration as well.
      *
-     * Altı kolon, sayfa başına en fazla iki kolon → üç sayfa takımı, yani üç kâğıt.
-     * `max_columns` taşınmasaydı A5'e üç kolon sığar ve iki kâğıt çıkardı.
+     * Six columns, at most two columns per page → three page sets, that is, three sheets of
+     * paper. Had `max_columns` not been carried, three columns would have fitted on the A5 and
+     * two sheets would have come out.
      */
     #[Test]
     public function thePdfColumnBudgetFromConfigurationReachesTheWrittenFile(): void
@@ -303,37 +307,38 @@ final class WriterConfigurationTest extends TestCase
             'max_columns' => 2,
         ]];
 
-        PdfDocument::at($this->writePdf($config, 'bolunmus.pdf'))->assertPageCount(3);
+        PdfDocument::at($this->writePdf($config, 'split.pdf'))->assertPageCount(3);
     }
 
     /**
-     * `max_columns: ~` "tavan yok" demektir, çökme sebebi değil.
+     * `max_columns: ~` means "no cap", not a reason to crash.
      *
-     * `csv.escape` ile birebir aynı tuzak: Symfony'nin `IntegerNode`u null'ı "Expected int,
-     * but got null" diye reddeder, oysa devralınan bir değeri geri almanın tek yolu `~`
-     * yazmaktır. Bu yüzden düğüm `integerNode` değil, doğrulamalı bir `scalarNode`.
+     * Exactly the same trap as `csv.escape`: Symfony's `IntegerNode` rejects null with
+     * "Expected int, but got null", whereas writing `~` is the only way to take back an
+     * inherited value. That is why the node is not an `integerNode` but a `scalarNode` with
+     * validation.
      */
     #[Test]
     public function aMaxColumnsWrittenAsNullIsReadAsNoCapRatherThanCrashing(): void
     {
         $config = ['pdf' => ['page_size' => 'a5', 'orientation' => 'portrait', 'max_columns' => null]];
 
-        // A5 dikeyde 128 mm / 22 mm = 5 kolon; altı kolon iki gruba (5 + 1) düşer.
+        // On A5 portrait, 128 mm / 22 mm = 5 columns; six columns fall into two groups (5 + 1).
         PdfDocument::at($this->writePdf($config, 'tavansiz.pdf'))->assertPageCount(2);
     }
 
     /** @return iterable<string, array{array<string, mixed>, string}> */
     public static function invalidPdfConfigurations(): iterable
     {
-        yield 'bilinmeyen kâğıt' => [['page_size' => 'a2'], 'tabula.pdf.page_size'];
-        yield 'bilinmeyen yön' => [['orientation' => 'yatay'], 'tabula.pdf.orientation'];
-        yield 'bilinmeyen taşma' => [['overflow' => 'wrap'], 'tabula.pdf.overflow'];
-        // Yazı tipi boş kalırsa Dompdf Latin-1 çekirdek yazı tipine düşer ve "ş ğ ı İ"
-        // harfleri SESSİZCE basılmaz.
-        yield 'boş yazı tipi' => [['font_family' => ''], 'tabula.pdf.font_family'];
-        yield 'null yazı tipi' => [['font_family' => null], 'tabula.pdf.font_family'];
-        yield 'sıfır kolon tavanı' => [['max_columns' => 0], 'tabula.pdf.max_columns'];
-        yield 'metin kolon tavanı' => [['max_columns' => 'hepsi'], 'tabula.pdf.max_columns'];
+        yield 'unknown paper size' => [['page_size' => 'a2'], 'tabula.pdf.page_size'];
+        yield 'unknown orientation' => [['orientation' => 'sideways'], 'tabula.pdf.orientation'];
+        yield 'unknown overflow' => [['overflow' => 'wrap'], 'tabula.pdf.overflow'];
+        // If the font family is left empty, Dompdf falls back to a Latin-1 core font and the
+        // letters "ş ğ ı İ" are SILENTLY not printed.
+        yield 'empty font family' => [['font_family' => ''], 'tabula.pdf.font_family'];
+        yield 'null font family' => [['font_family' => null], 'tabula.pdf.font_family'];
+        yield 'zero column cap' => [['max_columns' => 0], 'tabula.pdf.max_columns'];
+        yield 'textual column cap' => [['max_columns' => 'all-of-them'], 'tabula.pdf.max_columns'];
     }
 
     /**
@@ -350,11 +355,12 @@ final class WriterConfigurationTest extends TestCase
     }
 
     /**
-     * Aralık kuralı ağaçta değil, DEĞER NESNESİNDE yaşar (bkz. `pdf` düğümündeki not).
+     * The range rule lives not in the tree but IN THE VALUE OBJECT (see the note on the `pdf` node).
      *
-     * Ama yaşadığı yerde gerçekten çalışmalı: sıfır punto Dompdf'te istisna fırlatmaz,
-     * satır yüksekliğini sıfır hesaplar ve tabloyu görünmez bir şeride indirir — kullanıcıya
-     * "boş PDF" olarak döner ve nedeni çıktıya bakarak anlaşılamaz.
+     * But where it lives it really must work: a font size of zero does not make Dompdf throw an
+     * exception, it computes a row height of zero and reduces the table to an invisible strip —
+     * which comes back to the user as an "empty PDF" whose cause cannot be worked out by
+     * looking at the output.
      */
     #[Test]
     public function aNonPositiveFontSizeIsRejectedByTheValueObject(): void
@@ -364,7 +370,7 @@ final class WriterConfigurationTest extends TestCase
         $this->writePdf(['pdf' => ['font_size_pt' => 0.0]], 'gorunmez.pdf');
     }
 
-    // ---------------------------------------------------------------- config ağacı
+    // ---------------------------------------------------------------- config tree
 
     #[Test]
     public function anUnknownLineEndingNameIsRejectedByTheConfigTree(): void
@@ -377,8 +383,8 @@ final class WriterConfigurationTest extends TestCase
     #[Test]
     public function theFactoryRefusesAnUnknownLineEndingNameInsteadOfFallingBackToCrlf(): void
     {
-        // `SettingsFactory` public statik bir API; config ağacına yarın yeni bir ad eklenirse
-        // üçlü operatör onu sessizce CRLF'e düşürürdü.
+        // `SettingsFactory` is a public static API; if a new name is added to the config tree
+        // tomorrow, a ternary operator would silently drop it to CRLF.
         $this->expectException(InvalidArgumentException::class);
 
         SettingsFactory::csv([

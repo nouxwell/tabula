@@ -21,91 +21,91 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx as SpreadsheetXlsxWriter;
 
 /**
- * PhpSpreadsheet ile yazan .xlsx yazıcı.
+ * An .xlsx writer built on PhpSpreadsheet.
  *
- * `CsvWriter`in aksine burada gerçek bir akış YOKTUR: xlsx bir ZIP arşividir, paylaşılan
- * dize tablosu ve stil tablosu ancak son satır bilindiğinde yazılabilir. Bu yüzden
- * PhpSpreadsheet çalışma kitabını bellekte tutar ve bunu değiştiremeyiz. Değiştirebildiğimiz
- * — ve mevcut ERP'nin kaçırdığı — üç şey var:
+ * Unlike `CsvWriter`, there is NO real streaming here: xlsx is a ZIP archive, and the shared string
+ * table and the style table can only be written once the last row is known. That is why
+ * PhpSpreadsheet keeps the workbook in memory, and we cannot change that. What we can change — and
+ * what the system this replaces missed — are three things:
  *
- *  1. `close()` dosyayı DOĞRUDAN diske yazar. Eski motor `ob_start()` açıp writer'ı
- *     `php://output`a bastırıyor, `ob_get_clean()` ile tüm arşivi tek bir PHP dizesine
- *     alıyor ve o dizeyi dosyaya yazıyordu: çalışma kitabının yanında bir de dosya boyutu
- *     kadar ikinci kopya. Elli bin satırlık bir dışa aktarma bu yüzden `memory_limit`e
- *     takılıyordu.
- *  2. Boş hücre HİÇ yaratılmaz (bkz. `writeRow()`), stiller aralık üzerinden uygulanır
- *     (bkz. `applyColumnAlignment()`). İkisi de "kolay" yolun satır×kolon kadar nesne
- *     ürettiği yerler.
- *  3. Değerler tipli yazılır: sayı sayı, metin metin kalır. Eski motor her şeyi
- *     `setCellValue()` ile yazıyor, varsayılan bağlayıcı da "0501" gibi bir kodu 501'e,
- *     "12.05" gibi bir seri numarasını tarihe çeviriyordu.
+ *  1. `close()` writes the file STRAIGHT to disk. The old engine opened `ob_start()`, pushed the
+ *     writer to `php://output`, pulled the whole archive into a single PHP string with
+ *     `ob_get_clean()` and wrote that string into the file: a second copy the size of the file,
+ *     right next to the workbook. That is why a fifty-thousand-row export hit `memory_limit`.
+ *  2. An empty cell is NEVER created at all (see `writeRow()`), and styles are applied over ranges
+ *     (see `applyColumnAlignment()`). Both are places where the "easy" way produces as many objects
+ *     as rows×columns.
+ *  3. Values are written with an explicit type: a number stays a number, text stays text. The old
+ *     engine wrote everything with `setCellValue()`, and the default binder turned a code like
+ *     "0501" into 501 and a serial number like "12.05" into a date.
  *
- * Yaşam döngüsü `Writer` arayüzündeki sırayla aynıdır; ihlaller `WriterException` fırlatır.
+ * The lifecycle is exactly the order given in the `Writer` interface; violations throw
+ * `WriterException`.
  */
 final class XlsxWriter implements Writer
 {
-    /** Excel'in sayfa adı sınırı. */
+    /** Excel's sheet-name limit. */
     private const int TITLE_MAX_LENGTH = 31;
 
     /**
-     * Excel'in sayfa adında yasakladığı karakterler.
+     * The characters Excel forbids in a sheet name.
      *
-     * Liste PhpSpreadsheet'in `Worksheet::INVALID_CHARACTERS` sabitiyle birebir aynıdır;
-     * oradaki sabit `private` olduğu için kopyalandı. Adı önden temizlemezsek
-     * `setTitle()` doğrulaması istisna fırlatır ve dışa aktarma, kullanıcının hiç
-     * kontrol edemediği bir veri değeri ("Satış/İade" gibi bir grup adı) yüzünden ölür.
+     * The list is identical to PhpSpreadsheet's `Worksheet::INVALID_CHARACTERS` constant; it was
+     * copied because that constant is `private`. If we do not clean the name up front,
+     * `setTitle()`'s validation throws and the export dies because of a data value the user has no
+     * control over whatsoever (a group name such as "Sales/Return").
      *
      * @var list<string>
      */
     private const array INVALID_TITLE_CHARACTERS = ['*', ':', '/', '\\', '?', '[', ']'];
 
-    /** Adı tamamen yasak karakterlerden ibaret olan sayfalar için taban ad. */
-    private const string FALLBACK_TITLE = 'Sayfa';
+    /** The base name for sheets whose name consists entirely of forbidden characters. */
+    private const string FALLBACK_TITLE = 'Sheet';
 
     private ?Spreadsheet $spreadsheet = null;
 
-    /** Şu an yazılan sayfa; sayfa yokken null. */
+    /** The sheet currently being written; null while there is no sheet. */
     private ?Worksheet $sheet = null;
 
-    /** `open()` ile verilen hedef yol. */
+    /** The target path given to `open()`. */
     private ?string $path = null;
 
-    /** @var list<Column> aktif sayfanın kolonları */
+    /** @var list<Column> the columns of the active sheet */
     private array $columns = [];
 
     /**
-     * Kolon harfleri, kolonlarla aynı sırada.
+     * The column letters, in the same order as the columns.
      *
-     * Her hücrede yeniden hesaplamak yerine sayfa başında bir kez üretilir; koordinat
-     * kurmak `$letters[$i].$row` kadar ucuza iner.
+     * Produced once at the start of the sheet instead of being recomputed for every cell; building
+     * a coordinate comes down to something as cheap as `$letters[$i].$row`.
      *
      * @var list<string>
      */
     private array $letters = [];
 
-    /** Son kolonun harfi — otomatik filtre ve başlık aralığı için. */
+    /** The letter of the last column — for the auto filter and the header range. */
     private string $lastLetter = 'A';
 
-    /** Kaçıncı sayfadayız; 0 ise hazır (varsayılan) sayfa henüz kullanılmadı. */
+    /** Which sheet we are on; 0 means the ready-made (default) sheet has not been used yet. */
     private int $sheetIndex = 0;
 
     /**
-     * Kullanılmış sayfa adları (küçük harfe katlanmış) — ad tekilleştirme için.
+     * The sheet names already used (folded to lower case) — for de-duplicating names.
      *
      * @var array<string, true>
      */
     private array $usedTitles = [];
 
-    /** Sıradaki veri satırı; başlık 1. satırda olduğu için veri 2'den başlar. */
+    /** The next data row; since the header sits on row 1, data starts at 2. */
     private int $nextRow = 2;
 
-    /** @var list<string> yazılan dosya yolları */
+    /** @var list<string> the file paths written */
     private array $paths = [];
 
     /**
-     * Görünüm ayarları (üretici adı, başlık renkleri, dondurma/süzme).
+     * The appearance options (producer name, header colours, freeze/filter).
      *
-     * Renklerin ARGB biçimi ve varsayılanların gerekçesi `XlsxOptions` üzerindedir.
+     * The ARGB format of the colours and the rationale behind the defaults live on `XlsxOptions`.
      */
     public function __construct(
         private readonly XlsxOptions $options = new XlsxOptions(),
@@ -118,18 +118,19 @@ final class XlsxWriter implements Writer
             throw WriterException::alreadyOpen();
         }
 
-        // Hedef daha İLK adımda denetlenir. Xlsx'te dosya ancak `close()`ta yazıldığından,
-        // yazılamaz bir yol tüm satırlar işlendikten SONRA patlardı: kullanıcı dakikalarca
-        // bekleyip "izin yok" hatası alırdı. Kontrol bir `is_dir()` kadar ucuz.
+        // The target is checked at the VERY FIRST step. Since in xlsx the file is only written in
+        // `close()`, an unwritable path would blow up AFTER every row had been processed: the user
+        // would wait for minutes and then get a "permission denied" error. The check is as cheap as
+        // an `is_dir()`.
         $this->guardTarget($path);
 
         $spreadsheet = new Spreadsheet();
         $spreadsheet->getProperties()->setCreator($this->options->creator);
 
-        // Varsayılan sayfa BURADA SİLİNMEZ. `new Spreadsheet()` "Worksheet" adıyla bir
-        // sayfa yaratır; onu silip sonra `createSheet()` demek gereksiz nesne trafiği,
-        // hiç dokunmamak ise her dosyanın başında boş bir sekme bırakmak olurdu.
-        // Bunun yerine ilk `startSheet()` o sayfayı devralır (bkz. `sheetIndex`).
+        // The default sheet IS NOT DELETED HERE. `new Spreadsheet()` creates a sheet named
+        // "Worksheet"; deleting it and then calling `createSheet()` would be needless object
+        // traffic, while not touching it at all would leave an empty tab at the start of every
+        // file. Instead the first `startSheet()` takes that sheet over (see `sheetIndex`).
         $this->spreadsheet = $spreadsheet;
         $this->path = $path;
         $this->sheet = null;
@@ -145,23 +146,23 @@ final class XlsxWriter implements Writer
     {
         $spreadsheet = $this->spreadsheet ?? throw WriterException::notOpened();
 
-        // Önceki sayfa `finishSheet()` görmeden yenisi başlatıldıysa sessizce bitiririz —
-        // `CsvWriter` ile aynı davranış. Fırlatmak yerine kapatmak, sayfa stratejisi
-        // değiştiğinde boru hattının fazladan bir çağrı yapmak zorunda kalmamasını sağlar.
+        // If a new sheet is started before the previous one has seen `finishSheet()`, we finish it
+        // silently — the same behaviour as `CsvWriter`. Closing instead of throwing means the
+        // pipeline does not have to make an extra call when the sheet strategy changes.
         $this->finalizeSheet();
 
         $sheet = 0 === $this->sheetIndex
             ? $spreadsheet->getActiveSheet()
             : $spreadsheet->createSheet();
 
-        // 2. argüman false: çıktı dosyasında formül yok, dolayısıyla yeniden adlandırmada
-        // adlandırılmış formülleri taramanın anlamı da yok. 3. argüman (doğrulama) açık
-        // bırakıldı; adı kendimiz temizlesek de kütüphanenin son savunmasını kapatmayız.
+        // 2nd argument false: there are no formulas in the output file, so scanning named formulas
+        // on a rename makes no sense either. The 3rd argument (validation) was left on; even though
+        // we clean the name ourselves, we do not switch off the library's last line of defence.
         $sheet->setTitle($this->resolveTitle($name), false, true);
 
-        // Kütüphane adı yine de değiştirmiş olabilir (bizim harf katlamamızla kendi
-        // karşılaştırması ayrışırsa kendi sonekini ekler); kayda GERÇEK adı yazarız,
-        // yoksa sonraki sayfa aynı adı boşta sanır.
+        // The library may have changed the name anyway (if its own comparison diverges from our
+        // case folding it appends a suffix of its own); we record the REAL name, otherwise the next
+        // sheet would believe that name is still free.
         $this->usedTitles[mb_strtolower($sheet->getTitle())] = true;
 
         ++$this->sheetIndex;
@@ -175,7 +176,7 @@ final class XlsxWriter implements Writer
     }
 
     /**
-     * @param list<Cell> $cells kolonlarla aynı sırada
+     * @param list<Cell> $cells in the same order as the columns
      */
     public function writeRow(array $cells): void
     {
@@ -185,45 +186,48 @@ final class XlsxWriter implements Writer
         $index = 0;
 
         foreach ($cells as $cell) {
-            // Kolon sayısından fazla hücre gelirse harfi anında türetiriz: boru hattı
-            // hücreleri zaten kolon listesinden ürettiği için bu olmamalı, ama olursa
-            // veriyi sessizce düşürmek en kötü davranış olurdu.
+            // If more cells arrive than there are columns, we derive the letter on the spot: this
+            // should not happen, since the pipeline builds the cells from the column list itself,
+            // but if it does, dropping the data silently would be the worst possible behaviour.
             $letter = $this->letters[$index] ?? Coordinate::stringFromColumnIndex($index + 1);
             ++$index;
 
             $value = $cell->value;
 
             if ($cell->isEmpty()) {
-                // GERÇEKTEN boş hücre HİÇ yaratılmaz. PhpSpreadsheet her hücre için bir nesne
-                // tutar; "boş yaz" ile "hiç yazma" Excel'de aynı görünür ama bellekte satır×kolon
-                // kadar fark eder. Eski motor tam olarak boş hücreleri de yazıyordu.
+                // A cell that is REALLY empty is NEVER created. PhpSpreadsheet keeps an object for
+                // every cell; "write empty" and "do not write at all" look the same in Excel but
+                // differ in memory by as much as rows×columns. The old engine wrote exactly those
+                // empty cells too.
                 //
-                // Ölçüt `null === $value` DEĞİL `isEmpty()`: `TabulaSettings::$emptyText` bir
-                // yer tutucu ("-", "—") olarak ayarlandığında değer null ama METİN doludur ve
-                // o yer tutucunun yazılması gerekir. Aşağıdaki `default` kolu bunu halleder.
+                // The criterion is `isEmpty()`, NOT `null === $value`: when
+                // `TabulaSettings::$emptyText` is set to a placeholder ("-", "—") the value is null
+                // but the TEXT is filled in, and that placeholder has to be written. The `default`
+                // arm below takes care of it.
                 continue;
             }
 
             $coordinate = $letter.$row;
 
-            // Hepsi AÇIK tiple yazılır. `setCellValue()` varsayılan bağlayıcıdan geçer ve
-            // sayıya benzeyen dizeleri sayıya, tarihe benzeyenleri tarihe çevirir: baştaki
-            // sıfırı yiyen cari kodlar ve tarihe dönen seri numaraları hep buradan çıkar.
+            // Everything is written with an EXPLICIT type. `setCellValue()` goes through the default
+            // binder and turns strings that look like numbers into numbers and ones that look like
+            // dates into dates: account codes that lose their leading zero and serial numbers that
+            // turn into dates all come from there.
             match (true) {
                 is_string($value) => $sheet->setCellValueExplicit($coordinate, $value, DataType::TYPE_STRING),
                 is_int($value), is_float($value) => $sheet->setCellValueExplicit($coordinate, $value, DataType::TYPE_NUMERIC),
                 is_bool($value) => $sheet->setCellValueExplicit($coordinate, $value, DataType::TYPE_BOOL),
-                // Beklenmedik bir tip (ör. DateTime, Stringable) geldiğinde tahmin yürütmeyiz:
-                // hücrenin zaten yerelleştirilmiş `text` gösterimi var, metin olarak o yazılır.
+                // When an unexpected type arrives (e.g. DateTime, Stringable) we do not guess: the
+                // cell already has a localised `text` representation, and that is written as text.
                 default => $sheet->setCellValueExplicit($coordinate, $cell->text, DataType::TYPE_STRING),
             };
 
             if (null !== $cell->numberFormat) {
-                // Biçim kolon başına değil, HÜCRE başına uygulanır: `Field::currency()` bir
-                // kapanış olabildiği için aynı kolonda satır satır farklı para birimi —
-                // dolayısıyla farklı biçim kodu — çıkabilir. Maliyet göründüğü kadar ağır
-                // değil; PhpSpreadsheet aynı stili hash'leyip tek bir kayıtta paylaştırır,
-                // hücrede duran yalnızca bir tamsayı indeks olur.
+                // The format is applied per CELL, not per column: because `Field::currency()` can be
+                // a closure, the same column can end up with a different currency — and therefore a
+                // different format code — row by row. The cost is not as heavy as it looks;
+                // PhpSpreadsheet hashes an identical style and shares it in a single record, so all
+                // that sits in the cell is an integer index.
                 $sheet->getStyle($coordinate)
                     ->getNumberFormat()
                     ->setFormatCode($cell->numberFormat);
@@ -243,44 +247,45 @@ final class XlsxWriter implements Writer
     }
 
     /**
-     * Çalışma kitabını diske yazar ve belleği bırakır.
+     * Writes the workbook to disk and releases the memory.
      *
-     * `CsvWriter::close()`un aksine BU METOT FIRLATABİLİR: xlsx'te tüm iş son anda
-     * yapıldığı için buradaki bir hata "dosya hiç yazılamadı" demektir; sessizce yutulursa
-     * çağıran var olmayan bir dosyayı kullanıcıya sunar.
+     * Unlike `CsvWriter::close()`, THIS METHOD CAN THROW: in xlsx all the work is done at the very
+     * last moment, so an error here means "the file was never written"; swallowed silently, the
+     * caller would offer the user a file that does not exist.
      *
-     * @return list<string> yazılan dosya yolları
+     * @return list<string> the file paths written
      */
     public function close(): array
     {
         $spreadsheet = $this->spreadsheet;
 
         if (null === $spreadsheet) {
-            // Zaten kapalı: art arda çağrılabilsin, `finally` içinde kullanılabilsin.
+            // Already closed: so that it can be called repeatedly and used inside a `finally`.
             return $this->paths;
         }
 
-        // Açık kalan sayfa varsa önce bitiririz; yoksa otomatik filtre ve hizalama hiç
-        // uygulanmadan dosya kapanır.
+        // If a sheet is still open we finish it first; otherwise the file is closed without the
+        // auto filter and the alignment ever having been applied.
         $this->finalizeSheet();
 
         $path = $this->path ?? throw WriterException::notOpened();
 
-        // `finally` içinde koşulsuz `unset()` edebilmek için baştan tanımlanır; `try`
-        // içinde tanımlansaydı kurucu patladığında tanımsız değişken kalırdı.
+        // Defined up front so that `unset()` can be called unconditionally inside `finally`; had it
+        // been defined inside the `try`, the variable would be undefined if the constructor blew up.
         $writer = null;
 
         try {
-            // DOĞRUDAN DİSKE. Ara tampon yok, `php://output` yok, dizeye alma yok.
+            // STRAIGHT TO DISK. No intermediate buffer, no `php://output`, no pulling into a string.
             $writer = new SpreadsheetXlsxWriter($spreadsheet);
             $writer->save($path);
         } catch (SpreadsheetException $exception) {
             throw ExportException::unwritableTarget($path, $exception->getMessage());
         } finally {
-            // Worksheet ile Spreadsheet birbirini tutar; PHP'nin sayaç tabanlı çöp toplayıcısı
-            // bu döngüyü kendi başına çözemez, bellek istek sonuna kadar elde kalır.
-            // `disconnectWorksheets()` bağı koparır, `unset()` son referansı düşürür — aynı
-            // süreçte peş peşe dışa aktarma yapan uzun ömürlü işçiler (messenger) için şart.
+            // Worksheet and Spreadsheet hold on to each other; PHP's refcount-based garbage
+            // collector cannot break that cycle on its own, and the memory stays held until the end
+            // of the request. `disconnectWorksheets()` severs the link and `unset()` drops the last
+            // reference — essential for long-lived workers (messenger) that run export after export
+            // in the same process.
             $spreadsheet->disconnectWorksheets();
             unset($writer, $spreadsheet);
 
@@ -296,39 +301,39 @@ final class XlsxWriter implements Writer
         return $this->paths;
     }
 
-    /** Hedef yolun yazılabilir olduğunu `open()` anında doğrular. */
+    /** Verifies at `open()` time that the target path is writable. */
     private function guardTarget(string $path): void
     {
         if ('' === trim($path)) {
-            throw ExportException::unwritableTarget($path, 'hedef yol boş');
+            throw ExportException::unwritableTarget($path, 'the target path is empty');
         }
 
         if (is_file($path)) {
             if (!is_writable($path)) {
-                throw ExportException::unwritableTarget($path, 'dosya var ve salt okunur');
+                throw ExportException::unwritableTarget($path, 'the file exists and is read-only');
             }
 
             return;
         }
 
-        // `dirname()` göreli yollarda '.' döner; `is_dir('.')` de doğru cevabı verir.
+        // `dirname()` returns '.' for relative paths; `is_dir('.')` gives the right answer too.
         $directory = \dirname($path);
 
         if (!is_dir($directory)) {
-            throw ExportException::unwritableTarget($path, sprintf('"%s" dizini yok', $directory));
+            throw ExportException::unwritableTarget($path, sprintf('the "%s" directory does not exist', $directory));
         }
 
         if (!is_writable($directory)) {
-            throw ExportException::unwritableTarget($path, sprintf('"%s" dizinine yazma izni yok', $directory));
+            throw ExportException::unwritableTarget($path, sprintf('no write permission for the "%s" directory', $directory));
         }
     }
 
-    /** Başlık satırını yazar, kolon genişliklerini kurar ve başlığı dondurur. */
+    /** Writes the header row, sets up the column widths and freezes the header. */
     private function writeHeader(Worksheet $sheet): void
     {
         if ([] === $this->columns) {
-            // Boru hattı kolonsuz sayfa göndermez (`Schema::only()` boş seçimi zaten
-            // reddeder); yine de burada patlamak yerine boş bir sayfa bırakmayı yeğliyoruz.
+            // The pipeline does not send a column-less sheet (`Schema::only()` already rejects an
+            // empty selection); even so, we prefer leaving an empty sheet here to blowing up.
             $this->lastLetter = 'A';
 
             return;
@@ -337,25 +342,25 @@ final class XlsxWriter implements Writer
         foreach ($this->columns as $index => $column) {
             $letter = Coordinate::stringFromColumnIndex($index + 1);
             $this->letters[] = $letter;
-            $this->lastLetter = $letter; // döngü bitince son kolonun harfi elde kalır
+            $this->lastLetter = $letter; // when the loop ends, the last column's letter is left behind
 
-            // Başlık da AÇIK tiple yazılır: "2024" ya da "12.05" gibi bir kolon adı
-            // varsayılan bağlayıcı tarafından sayıya/tarihe çevrilirdi.
+            // The header is written with an EXPLICIT type as well: a column name such as "2024" or
+            // "12.05" would be turned into a number/date by the default binder.
             $sheet->setCellValueExplicit($letter.'1', $column->label, DataType::TYPE_STRING);
 
             $dimension = $sheet->getColumnDimension($letter);
 
             if (null === $column->width) {
-                // Otomatik genişlik kaydetme anında, yazı tipi metrikleriyle hesaplanır;
-                // bedeli vardır ama şemada genişlik verilmemişse tek makul davranış budur.
+                // Automatic width is computed at save time from the font metrics; it has a price,
+                // but if the schema gives no width this is the only sensible behaviour.
                 $dimension->setAutoSize(true);
             } else {
                 $dimension->setWidth($column->width);
             }
         }
 
-        // Başlık stili tek aralıkta uygulanır; kolon kolon uygulamak aynı stili
-        // kolon sayısı kadar kez hash'letirdi.
+        // The header style is applied over a single range; applying it column by column would have
+        // the same style hashed as many times as there are columns.
         $header = $sheet->getStyle('A1:'.$this->lastLetter.'1');
         $header->getFont()->setBold($this->options->boldHeader);
         $header->getFill()
@@ -369,9 +374,9 @@ final class XlsxWriter implements Writer
             ->setARGB($this->options->headerBorderColor);
         $header->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
-        // Zorunlu kolonlar açık kırmızı. Dosya bir içe aktarma şablonu olarak indirildiğinde
-        // kullanıcı hangi sütunu boş bırakamayacağını başlığa bakarak görür; eski ERP'nin
-        // şablonlarındaki işe yarayan tek görsel kural buydu, korundu.
+        // Required columns get a light red. When the file is downloaded as an import template, the
+        // user can see from the header which column must not be left empty; this was the one visual
+        // rule in the old templates that actually worked, and it was kept.
         foreach ($this->columns as $index => $column) {
             if (!$column->required) {
                 continue;
@@ -384,20 +389,21 @@ final class XlsxWriter implements Writer
                 ->setARGB($this->options->requiredHeaderFill);
         }
 
-        // "A2'yi dondur" = 1. satır sabit kalsın. Yüz binlik listelerde kaydırırken
-        // başlığın kaybolmaması, kullanıcıdan gelen en eski isteklerden biriydi.
-        // Makineye giden ara dosyalarda kapatılabilir: işe yaramaz ama XML üretir.
+        // "Freeze A2" = row 1 stays put. On lists of a hundred thousand rows, the header not
+        // disappearing while scrolling was one of the oldest requests coming from users.
+        // It can be turned off for intermediate files going to a machine: it is of no use there but
+        // it does produce XML.
         if ($this->options->freezeHeader) {
             $sheet->freezePane('A2');
         }
     }
 
     /**
-     * Sayfayı kapatır: satır sayısı ancak burada bilindiği için otomatik filtre ve
-     * hizalama son adımda uygulanır.
+     * Closes the sheet: since the row count is only known here, the auto filter and the alignment
+     * are applied at this last step.
      *
-     * `finishSheet()`in aksine sayfa yoksa sessizce döner — `startSheet()` ve `close()`
-     * bunu "ne olursa olsun toparla" niyetiyle çağırır.
+     * Unlike `finishSheet()`, it returns silently when there is no sheet — `startSheet()` and
+     * `close()` call it with a "tidy up whatever the state is" intent.
      */
     private function finalizeSheet(): void
     {
@@ -408,10 +414,10 @@ final class XlsxWriter implements Writer
         }
 
         if ([] !== $this->columns) {
-            // Otomatik filtre başlık + veri aralığının TAMAMINI kapsamalı. Eski motor bunu
-            // sabit bir aralıkla ("A1:Z1000") kuruyordu; bin satırdan uzun dışa aktarmalarda
-            // son satırlar filtrenin dışında kalıyor, kullanıcı süzünce veri "kayboluyordu".
-            $lastRow = $this->nextRow - 1; // veri hiç gelmediyse 1 (yalnız başlık)
+            // The auto filter has to cover the WHOLE header + data range. The old engine set it up
+            // with a fixed range ("A1:Z1000"); on exports longer than a thousand rows the last rows
+            // fell outside the filter, and when the user filtered, the data "disappeared".
+            $lastRow = $this->nextRow - 1; // 1 if no data ever arrived (header only)
 
             if ($this->options->autoFilter) {
                 $sheet->setAutoFilter('A1:'.$this->lastLetter.$lastRow);
@@ -427,22 +433,22 @@ final class XlsxWriter implements Writer
         $this->nextRow = 2;
     }
 
-    /** Kolonların yatay hizalamasını `Column::$align` üzerinden uygular. */
+    /** Applies the columns' horizontal alignment from `Column::$align`. */
     private function applyColumnAlignment(Worksheet $sheet): void
     {
         foreach ($this->columns as $index => $column) {
             $letter = $this->letters[$index];
 
-            // Aralık BİLEREK tam kolon ("B1:B1048576"). PhpSpreadsheet stil uygularken
-            // aralığın biçimine bakar:
-            //  - hücre aralığı verilirse (ör. "B2:B50000") aradaki HER koordinat için
-            //    `getCell()` çağırır ve olmayan hücreleri YARATIR — null değerleri hiç
-            //    yazmayarak kazandığımız belleği tek satırda geri verirdik;
-            //  - tam kolon biçiminde ise yalnız var olan hücreler gezilir, boşlar için
-            //    kolonun kendi varsayılan stili (ColumnDimension.xfIndex) güncellenir.
+            // The range is DELIBERATELY a whole column ("B1:B1048576"). PhpSpreadsheet looks at the
+            // shape of the range when it applies a style:
+            //  - given a cell range (e.g. "B2:B50000") it calls `getCell()` for EVERY coordinate in
+            //    between and CREATES the cells that do not exist — we would hand back in a single
+            //    line all the memory we saved by never writing the null values;
+            //  - in whole-column form only the cells that exist are visited, and for the empty ones
+            //    the column's own default style (ColumnDimension.xfIndex) is updated.
             //
-            // Uygulama yalnız 'horizontal' anahtarını birleştirdiği için başlığın kalınlığı,
-            // dolgusu, çizgisi ve hücrelerin sayı biçimi olduğu gibi kalır.
+            // Since the application only merges the 'horizontal' key, the header's boldness, its
+            // fill and its border, and the cells' number format, are all left as they are.
             $sheet->getStyle($letter.'1:'.$letter.AddressRange::MAX_ROW)
                 ->getAlignment()
                 ->setHorizontal(self::horizontalOf($column->align));
@@ -450,18 +456,18 @@ final class XlsxWriter implements Writer
     }
 
     /**
-     * Sayfa adını Excel'in kabul edeceği, o dosyada tekil bir başlığa indirger.
+     * Reduces the sheet name to a title Excel will accept and that is unique within that file.
      *
-     * Ad çoğu zaman VERİDEN gelir (`GroupedSheets` bir alanın değerini sayfa adı yapar),
-     * yani kullanıcı "Satış/İade" ya da 31 karakterden uzun bir müşteri unvanı girdiği anda
-     * dışa aktarma patlayabilir. Burada temizlemek, orada patlamamak demektir.
+     * The name usually comes FROM THE DATA (`GroupedSheets` turns a field's value into the sheet
+     * name), which means the export can blow up the moment a user enters "Sales/Return" or a
+     * customer title longer than 31 characters. Cleaning up here means not blowing up there.
      */
     private function resolveTitle(string $name): string
     {
         $title = str_replace(self::INVALID_TITLE_CHARACTERS, '-', $name);
 
-        // Kesme işareti başta ya da sonda olamaz: Excel sayfa adını formüllerde tek tırnakla
-        // sarar ve kenardaki tırnak kendi kaçışıyla çakışır.
+        // An apostrophe cannot sit at the start or the end: Excel wraps the sheet name in single
+        // quotes inside formulas, and a quote at the edge clashes with its own escaping.
         $title = trim($title, " '");
         $title = $this->truncate($title, self::TITLE_MAX_LENGTH);
 
@@ -473,12 +479,12 @@ final class XlsxWriter implements Writer
     }
 
     /**
-     * Aynı adı ikinci kez gören sayfaya " (2)", " (3)" … ekler.
+     * Appends " (2)", " (3)" … to a sheet whose name is seen for the second time.
      *
-     * Tekilleştirme şart: Excel aynı adı taşıyan iki sayfası olan bir kitabı "onarılması
-     * gereken dosya" sayar ve içeriği atarak açar. Sonek 31 karakterlik sınıra dahildir;
-     * kırpılan taraf HER ZAMAN taban addır — sonek kırpılsaydı "(2)" ile "(3)" ayırt
-     * edilemez hâle gelirdi.
+     * De-duplication is mandatory: Excel treats a workbook that has two sheets carrying the same
+     * name as a "file that needs repairing" and opens it discarding the content. The suffix counts
+     * towards the 31-character limit; the side that gets truncated is ALWAYS the base name — had
+     * the suffix been truncated, "(2)" and "(3)" would have become indistinguishable.
      */
     private function deduplicate(string $title): string
     {
@@ -497,11 +503,12 @@ final class XlsxWriter implements Writer
     }
 
     /**
-     * Adı en fazla `$length` KARAKTERE indirir.
+     * Reduces the name to at most `$length` CHARACTERS.
      *
-     * Bayt değil karakter: "Ürün Grubu" gibi bir adda `substr()` çok baytlı bir harfin
-     * ortasından keserdi ve ortaya geçersiz UTF-8 çıkardı. PhpSpreadsheet de sınırı
-     * `mb_strlen` ile ölçer; aynı birimi kullanmazsak doğrulamayla ayrışırız.
+     * Characters, not bytes: in a name such as "Ürün Grubu", `substr()` would cut through the middle
+     * of a multi-byte letter and what came out would be invalid UTF-8. PhpSpreadsheet measures the
+     * limit with `mb_strlen` too; if we did not use the same unit we would diverge from its
+     * validation.
      */
     private function truncate(string $value, int $length): string
     {
@@ -515,10 +522,10 @@ final class XlsxWriter implements Writer
     }
 
     /**
-     * `Align`ı Excel'in yatay hizalama koduna çevirir.
+     * Converts an `Align` into Excel's horizontal alignment code.
      *
-     * `Column::$align` bu noktada çözülmüştür, yani `Auto` gelmez; `default` yine de
-     * sola hizalar — hizalanamayan bir kolon yüzünden dışa aktarma durmaz.
+     * `Column::$align` is resolved by this point, so `Auto` never arrives; `default` still aligns
+     * left — the export does not stop because of a column that cannot be aligned.
      */
     private static function horizontalOf(Align $align): string
     {

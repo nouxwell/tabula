@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Balin\Tabula\Contract;
 
 /**
- * Kendi çeviri anahtarını bilen enum.
+ * An enum that knows its own translation key.
  *
- * Zorunlu değildir: `EnumFormatter` sırayla (1) bu arayüzü, (2) mevcut ERP'deki
- * `label(): string` gelenegini, (3) enum'un `value`/`name` değerini dener.
- * Böylece 200'den fazla mevcut enum hiç değiştirilmeden çalışır.
+ * Implementing it is not mandatory: `EnumFormatter` tries, in order, (1) this interface,
+ * (2) the `label(): string` convention of the system this replaces, (3) the `value`/`name`
+ * of the enum. That way more than 200 pre-existing enums work without being touched at all.
  */
 interface TranslatableEnum
 {
-    /** Çeviri kataloğunda aranacak anahtar (ör. `purchase_status.open`). */
+    /** The key to look up in the translation catalogue (e.g. `purchase_status.open`). */
     public function translationKey(): string;
 }

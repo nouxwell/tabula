@@ -20,28 +20,29 @@ use Balin\Tabula\Value\ParserRegistry;
 use Balin\Tabula\Value\ValueResolver;
 
 /**
- * Kütüphanenin giriş noktası.
+ * The entry point of the library.
  *
- * Çerçevesiz kullanımda doğrudan kurulur; Symfony köprüsü aynı nesneyi servis olarak kaydeder.
+ * Without a framework it is constructed directly; the Symfony bridge registers the same object
+ * as a service.
  *
  *     $tabula = new Tabula(new ArrayTranslator($catalogues), $settings);
  *
- * TEK ŞEMA, ÜÇ YÖN — üçü de aynı `Schema` nesnesinden beslenir, bu yüzden dışa aktarılan
- * dosya hiçbir dönüşüm olmadan geri içe aktarılabilir:
+ * ONE SCHEMA, THREE DIRECTIONS — all three are fed from the same `Schema` object, which is why
+ * an exported file can be imported back with no conversion at all:
  *
- *     // 1. dışa aktarma
+ *     // 1. export
  *     $tabula->export($schema)
  *         ->from(ArraySource::of($rows))
  *         ->locale('tr')
  *         ->to(Format::Xlsx)
- *         ->write('/tmp/musteriler.xlsx');
+ *         ->write('/tmp/customers.xlsx');
  *
- *     // 2. boş şablon (1. satır gizli kanonik anahtarlar, 2. satır çeviri, 3. satır veri)
- *     $tabula->template()->write($schema, '/tmp/sablon.xlsx', 'tr');
+ *     // 2. an empty template (row 1 hidden canonical keys, row 2 the translation, row 3 data)
+ *     $tabula->template()->write($schema, '/tmp/template.xlsx', 'tr');
  *
- *     // 3. içe aktarma
- *     $sonuc = $tabula->import($schema)
- *         ->from('/tmp/doldurulmus.xlsx')
+ *     // 3. import
+ *     $result = $tabula->import($schema)
+ *         ->from('/tmp/filled.xlsx')
  *         ->locale('tr')
  *         ->each(static fn (ImportedRow $row) => $repository->save($row->toArray()))
  *         ->run();
@@ -102,14 +103,15 @@ final class Tabula
     }
 
     /**
-     * Boş içe aktarma şablonu üreten yazıcı.
+     * The writer that produces an empty import template.
      *
-     *     $tabula->template()->write($schema, '/tmp/sablon.xlsx', 'tr');
+     *     $tabula->template()->write($schema, '/tmp/template.xlsx', 'tr');
      *
-     * `export()`/`import()`ten farklı olarak ŞEMA ALMAZ. Sebebi tasarımsal: `TemplateBuilder`
-     * durumsuzdur ve Symfony köprüsünde SERVİS olarak kaydedilir, dolayısıyla şemayı
-     * kurucusunda tutamaz — şema her çağrıda `write()`e verilir. Bu metodun şema alıp onu
-     * yok sayması, çağıranı aynı şemayı iki kez taşımaya zorlayan sessiz bir tuzaktı.
+     * Unlike `export()`/`import()`, it TAKES NO SCHEMA. The reason is a design one:
+     * `TemplateBuilder` is stateless and is registered as a SERVICE in the Symfony bridge, so it
+     * cannot keep the schema in its constructor — the schema is handed to `write()` on every
+     * call. Letting this method accept a schema and then ignore it was a silent trap that forced
+     * the caller to carry the same schema twice.
      */
     public function template(): TemplateBuilder
     {

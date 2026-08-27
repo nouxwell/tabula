@@ -14,22 +14,24 @@ use Balin\Tabula\Value\ValueParser;
 use Stringable;
 
 /**
- * Para alanlarının ayrıştırıcısı.
+ * The parser for money fields.
  *
- * Sayı çözümlemesi `NumberFormatter::parse()` ile ORTAKtır (bkz. `NumberParser`); bu
- * sınıfın tek ek işi SİMGEYİ SÖKMEKtir. Dışa aktarma simgeyi hücrenin biçim koduna
- * koyar, metne değil — ama kullanıcı şablonu doldururken "1.234,56 ₺" yapıştırır,
- * başka bir sistemden "$1,234.56" kopyalar.
+ * Number resolution is SHARED with `NumberFormatter::parse()` (see `NumberParser`); the only
+ * extra job of this class is STRIPPING THE SYMBOL. The export puts the symbol into the
+ * cell's format code, not into the text — but while filling in the template the user pastes
+ * "1.234,56 ₺", or copies "$1,234.56" out of another system.
  *
- * Simgeyi elle sökmek gereksiz görünebilir: `NumberFormatter` rakam ve ayırıcı dışındaki
- * her karakteri zaten siliyor. Ama sildiği için tehlikelidir — içinde nokta taşıyan bir
- * simge (`S/.`, `Kč` gibi kodlarla birlikte kullanılan gösterimler) temizlik sonrası
- * "1.234,56." dizesi bırakır; en sağdaki nokta artık ondalık sayılmaz ve değer 123456
- * olarak, yani YÜZ KAT büyük okunur. Muhasebe verisinde yapılabilecek en pahalı hata
- * budur, bu yüzden simge sayıya girmeden önce sökülür.
+ * Stripping the symbol by hand may look unnecessary: `NumberFormatter` already deletes every
+ * character that is neither a digit nor a separator. But it is dangerous precisely because
+ * it deletes them — a symbol that contains a dot (notations such as `S/.`, or the forms used
+ * together with codes like `Kč`) leaves the string "1.234,56." behind after the cleanup; the
+ * right-most dot no longer counts as the decimal point and the value is read as 123456, that
+ * is, a HUNDRED TIMES too large. That is the most expensive mistake that can be made in
+ * accounting data, which is why the symbol is stripped before it reaches the number.
  *
- * Eksi işareti, parantez ve sondaki eksi KORUNUR: işaret tespiti `NumberFormatter`ın
- * içinde ham metin üzerinde yapılır, burada silinirse bir borç sessizce alacağa döner.
+ * The minus sign, the parentheses and the trailing minus are PRESERVED: sign detection is
+ * done inside `NumberFormatter` on the raw text, and deleting them here would silently turn
+ * a debit into a credit.
  */
 final class MoneyParser implements ValueParser
 {
@@ -55,19 +57,21 @@ final class MoneyParser implements ValueParser
             $candidate = $this->stripSymbols($candidate, $field, $numbers);
         }
 
-        // `preferLocalized: true` — bkz. NumberParser. Para tarafında bu daha da kritikti:
-        // simge soyulunca "1.234 ₺" metni "1.234"e dönüyor, kanonik kısayola düşüyor ve 1234
-        // yerine 1.234 okunuyordu. Yani KENDİ dışa aktarmamız kendi içe aktarmamızı bozuyordu
-        // ve geçerli bir float üretildiği için hiçbir yerde hata görünmüyordu.
+        // `preferLocalized: true` — see NumberParser. On the money side this was even more
+        // critical: once the symbol was stripped, the text "1.234 ₺" turned into "1.234",
+        // fell into the canonical shortcut and was read as 1.234 instead of 1234. In other
+        // words OUR OWN export broke OUR OWN import, and because a valid float came out of
+        // it no error showed up anywhere.
         $amount = NumberFormatter::parse($candidate, $numbers, preferLocalized: true);
 
-        // Hata mesajında HAM hücre görünür; simgesi sökülmüş ara hâli değil.
+        // The error message shows the RAW cell, not the intermediate form with the symbol
+        // stripped off.
         if (null === $amount) {
             throw ParseException::notANumber($field, StringParser::describe($raw));
         }
 
-        // Para daima `float`: aynı kolonun bir satırda `int`, diğerinde `float` dönmesi,
-        // tutarı alan tarafta sessiz tip sürprizleri üretir (bkz. NumberParser).
+        // Money is always a `float`: the same column returning `int` on one row and `float`
+        // on the next produces silent type surprises on the receiving side (see NumberParser).
         return (float) $amount;
     }
 
@@ -77,8 +81,8 @@ final class MoneyParser implements ValueParser
 
         foreach ($this->symbolCandidates($field, $numbers) as $symbol) {
             $quoted = preg_quote($symbol, '/');
-            // Yalnız BAŞTAKİ ve SONDAKİ geçiş sökülür; sayının içine karışan bir şey varsa
-            // orası zaten `NumberFormatter`ın temizlik adımının işidir.
+            // Only the LEADING and the TRAILING occurrence is stripped; anything mixed into
+            // the middle of the number is the job of `NumberFormatter`'s cleanup step anyway.
             $text = preg_replace('/^\s*'.$quoted.'\s*|\s*'.$quoted.'\s*$/iu', '', $text) ?? $text;
         }
 
@@ -86,12 +90,12 @@ final class MoneyParser implements ValueParser
     }
 
     /**
-     * Sökülecek simge adayları — uzundan kısaya.
+     * The symbol candidates to strip — longest first.
      *
-     * Sıra önemlidir: "US$" adayı "$"tan önce denenmezse geriye tek başına "US" kalır.
-     * Yapılandırılmış TÜM simgeler (ve kodları) listeye girer, çünkü tek bir listede TRY
-     * ve USD satırları yan yana durabilir; alanın varsayılan para birimi hücredekiyle
-     * aynı olmak zorunda değildir.
+     * The order matters: if the candidate "US$" is not tried before "$", a lone "US" is left
+     * behind. ALL configured symbols (and their codes) go onto the list, because a single
+     * listing can hold TRY and USD rows side by side; the field's default currency does not
+     * have to be the one in the cell.
      *
      * @return list<string>
      */
@@ -118,8 +122,9 @@ final class MoneyParser implements ValueParser
             static function (string $candidate) use ($separators): bool {
                 $candidate = trim($candidate);
 
-                // Sayının parçası olabilecek aday sökülmez: yapılandırmada simge olarak
-                // "." ya da "," duruyorsa onu silmek tutarı bin katına çıkarırdı.
+                // A candidate that could be part of the number is not stripped: if the
+                // configuration holds "." or "," as a symbol, deleting it would multiply the
+                // amount by a thousand.
                 return '' !== $candidate
                     && !in_array($candidate, $separators, true)
                     && 1 !== preg_match('/^[0-9.,\s]+$/u', $candidate);
@@ -134,15 +139,15 @@ final class MoneyParser implements ValueParser
     }
 
     /**
-     * Alanın sabit para birimi kodu.
+     * The field's fixed currency code.
      *
-     * Kapanışla verilen para birimi (`->currency(fn ($row) => $row['currencyCode'])`)
-     * burada ÇÖZÜLEMEZ: kapanış satırı bekler, içe aktarmada ise henüz satır yoktur.
-     * Kapanışı `null` ile çağırmak `TypeError` üretirdi; bu yüzden atlanır (kapanış da,
-     * `null` da tek bir `is_string` denetimiyle elenir) —
-     * kaybedilen tek şey simge sökme kolaylığıdır, sayının kendisi yine doğru okunur
-     * (simge zaten yapılandırılmış diğer adaylarla ya da `NumberFormatter`ın temizlik
-     * adımıyla düşer).
+     * A currency given as a closure (`->currency(fn ($row) => $row['currencyCode'])`) CANNOT
+     * be resolved here: the closure expects a row, and during import there is no row yet.
+     * Calling the closure with `null` would produce a `TypeError`, so it is skipped instead
+     * (both the closure and `null` are filtered out by a single `is_string` check) — the
+     * only thing lost is the convenience of stripping the symbol, the number itself is still
+     * read correctly (the symbol falls away either through the other configured candidates
+     * or through `NumberFormatter`'s cleanup step).
      */
     private function currencyCode(Field $field): ?string
     {

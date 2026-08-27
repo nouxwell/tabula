@@ -8,10 +8,10 @@ use Balin\Tabula\Import\RowError;
 use RuntimeException;
 
 /**
- * İçe aktarma AKIŞI kurulamadığında ya da dosya bütünüyle kullanılamaz olduğunda fırlatılır.
+ * Thrown when the import PIPELINE cannot be set up, or when the file as a whole is unusable.
  *
- * Tek bir hücrenin reddedilmesi istisna DEĞİLDİR — o `RowError` olarak toplanır. Buradaki
- * hatalar "dosyayı hiç işleyemeyiz" sınıfındandır.
+ * A single rejected cell is NOT an exception — that one is collected as a `RowError`. The
+ * failures here belong to the "we cannot process this file at all" class.
  */
 final class ImportException extends RuntimeException implements TabulaException
 {
@@ -20,44 +20,45 @@ final class ImportException extends RuntimeException implements TabulaException
 
     public static function noSource(): self
     {
-        return new self('İçe aktarılacak dosya verilmedi: önce ->from(...) çağırın.');
+        return new self('No file to import was given: call ->from(...) first.');
     }
 
     /**
-     * `->each()` verilmeden `->run()` çağrıldı.
+     * `->run()` was called without `->each()`.
      *
-     * Sessizce "0 satır aktarıldı" dönmek en kötü seçenekti: kütüphane satırları
-     * veritabanına YAZMAZ, yalnız geri çağırıma verir — geri çağırım yoksa iş fiilen
-     * hiç yapılmamış demektir ve kullanıcı bunu ancak veri gelmediğinde fark ederdi.
+     * Silently returning "0 rows imported" was the worst option available: the library does
+     * NOT write rows to the database, it only hands them to the callback — with no callback
+     * the work was effectively never done, and the user would notice only once the data
+     * failed to turn up.
      */
     public static function noHandler(): self
     {
         return new self(
-            'Satır geri çağırımı verilmedi: önce ->each(fn (ImportedRow $row) => ...) çağırın. '
-            .'Tabula satırları ayrıştırır, veritabanına yazmaz; kaydetme işi geri çağırımındır.',
+            'No row callback was given: call ->each(fn (ImportedRow $row) => ...) first. '
+            .'Tabula parses the rows, it does not write them to the database; persisting them is the job of your callback.',
         );
     }
 
     public static function fileNotReadable(string $path): self
     {
-        return new self(sprintf('"%s" dosyası okunamıyor.', $path));
+        return new self(sprintf('The file "%s" cannot be read.', $path));
     }
 
     public static function unsupportedFile(string $path): self
     {
         return new self(sprintf(
-            '"%s" tanınmayan bir dosya türü. Desteklenenler: .xlsx, .xls, .csv',
+            '"%s" has an unsupported file type. Supported: .xlsx, .xls, .csv',
             $path,
         ));
     }
 
     public static function emptyFile(string $path): self
     {
-        return new self(sprintf('"%s" boş: başlık satırı bile yok.', $path));
+        return new self(sprintf('"%s" is empty: it does not even have a header row.', $path));
     }
 
     /**
-     * Dosyadaki hiçbir başlık şemayla eşleşmedi.
+     * None of the headers in the file matched the schema.
      *
      * @param list<string> $found
      * @param list<string> $expected
@@ -65,21 +66,21 @@ final class ImportException extends RuntimeException implements TabulaException
     public static function noMatchingColumns(array $found, array $expected): self
     {
         return new self(sprintf(
-            'Dosyadaki hiçbir kolon şemayla eşleşmedi. Dosyada bulunanlar: %s. Beklenenler: %s. '
-            .'Doğru şablonu indirdiğinizden emin olun.',
-            [] === $found ? '(hiç yok)' : implode(', ', $found),
+            'None of the columns in the file matched the schema. Found in the file: %s. Expected: %s. '
+            .'Make sure you downloaded the right template.',
+            [] === $found ? '(none)' : implode(', ', $found),
             implode(', ', $expected),
         ));
     }
 
     /**
-     * `MatchStrategy::Key` istendi ama dosyada anahtar satırı yok.
+     * `MatchStrategy::Key` was requested but the file has no key row.
      */
     public static function keyRowMissing(): self
     {
         return new self(
-            'Anahtar satırı bulunamadı; bu dosya Tabula şablonundan üretilmemiş olabilir. '
-            .'Şablonu yeniden indirin ya da etiketle eşleşmeye izin verin (MatchStrategy::Auto).',
+            'The key row was not found; this file may not have been produced from a Tabula template. '
+            .'Download the template again, or allow matching by label (MatchStrategy::Auto).',
         );
     }
 
@@ -87,14 +88,14 @@ final class ImportException extends RuntimeException implements TabulaException
     public static function unknownRowField(string $key, array $known): self
     {
         return new self(sprintf(
-            'Satırda "%s" diye bir alan yok. Bulunanlar: %s',
+            'The row has no field called "%s". Available: %s',
             $key,
-            [] === $known ? '(hiç yok)' : implode(', ', $known),
+            [] === $known ? '(none)' : implode(', ', $known),
         ));
     }
 
     /**
-     * `ErrorMode::FailFast` altında ilk hata: akış durdu.
+     * The first error under `ErrorMode::FailFast`: the run stopped.
      *
      * @param list<RowError> $errors
      */
@@ -102,13 +103,14 @@ final class ImportException extends RuntimeException implements TabulaException
     {
         $first = $errors[0] ?? null;
 
-        // `$first?->row ?? 0` yerine açık `null` denetimi: PHPStan `?->` operatörünü
-        // `??`nin solunda gereksiz sayıp (nullsafe.neverNull) seviye 8'de hata veriyor,
-        // `?->`yi `->` yapmak ise BOŞ listede ölümcül olurdu. Üretilen metin aynı.
+        // An explicit `null` check instead of `$first?->row ?? 0`: PHPStan treats the `?->`
+        // operator as redundant on the left-hand side of `??` (nullsafe.neverNull) and reports
+        // it as an error at level 8, while turning `?->` into `->` would be fatal on an EMPTY
+        // list. The produced text is the same either way.
         $exception = new self(sprintf(
-            'İçe aktarma ilk hatada durduruldu (satır %d): %s',
+            'Import stopped at the first error (row %d): %s',
             null === $first ? 0 : $first->row,
-            null === $first ? 'bilinmeyen hata' : $first->message,
+            null === $first ? 'unknown error' : $first->message,
         ));
         $exception->rowErrors = $errors;
 

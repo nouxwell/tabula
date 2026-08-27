@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Balin\Tabula\Settings;
 
 /**
- * Kütüphanenin tüm yapılandırması tek yerde.
+ * The whole configuration of the library in one place.
  *
- * Symfony köprüsü bunu `config/packages/tabula.yaml` üzerinden doldurur;
- * çerçevesiz kullanımda doğrudan kurulur.
+ * The Symfony bridge fills this in from `config/packages/tabula.yaml`;
+ * without a framework it is constructed directly.
  */
 final readonly class TabulaSettings
 {
@@ -16,18 +16,18 @@ final readonly class TabulaSettings
         public NumberSettings $numbers = new NumberSettings(),
         public DateSettings $dates = new DateSettings(),
         public string $defaultLocale = 'en',
-        /** Boole değerlerin çeviri anahtarları — TEK aile (ERP'de üç paralel aile vardı). */
+        /** Translation keys for boolean values — a SINGLE family (the system this replaces had three parallel families). */
         public string $boolTrueKey = 'tabula.bool.yes',
         public string $boolFalseKey = 'tabula.bool.no',
-        /** Boş hücrede yazılacak metin. */
+        /** The text written into an empty cell. */
         public string $emptyText = '',
         /**
-         * Bir sayfaya yazılacak azami satır.
+         * The maximum number of rows written to a single sheet.
          *
-         * Varsayılan `SingleSheet` stratejisi bunu taşma koruması olarak kullanır: sayfa
-         * dolunca `Ad (2)` diye devam eder. Varsayılan değer Excel'in gerçek tavanıdır
-         * (1.048.576 satır, başlık dahil), yani normal bir dışa aktarımda hiç devreye girmez.
-         * Açıkça bir `SheetStrategy` verildiğinde bu değer kullanılmaz — strateji kendi kuralını uygular.
+         * The default `SingleSheet` strategy uses this as overflow protection: once a sheet is
+         * full it carries on as `Name (2)`. The default value is Excel's real ceiling
+         * (1,048,576 rows, header included), so it never kicks in on a normal export.
+         * When a `SheetStrategy` is given explicitly this value is not used — the strategy applies its own rule.
          */
         public int $maxRowsPerSheet = 1_048_575,
     ) {

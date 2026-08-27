@@ -9,9 +9,10 @@ use Balin\Tabula\Port\Translator;
 use Balin\Tabula\Settings\TabulaSettings;
 
 /**
- * Biçimlendiricilerin ihtiyaç duyduğu her şey — tek taşıyıcı.
+ * Everything the formatters need — a single carrier.
  *
- * Locale burada AÇIKÇA taşınır; kuyruk işçisinde "istekten gelen dil" yoktur.
+ * The locale is carried here EXPLICITLY; inside a queue worker there is no such thing as
+ * "the language taken from the request".
  */
 final readonly class FormatContext
 {

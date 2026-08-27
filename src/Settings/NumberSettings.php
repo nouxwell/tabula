@@ -7,17 +7,17 @@ namespace Balin\Tabula\Settings;
 use Balin\Tabula\Schema\FieldType;
 
 /**
- * Sayı ve para biçimlendirme ayarları.
+ * Number and currency formatting settings.
  *
- * Varsayılan basamak sayıları ALAN TİPİNE göredir, alan ADINA göre değil.
- * (Mevcut ERP'de 173 satırlık küresel `NumericFieldMap` alan adına bakıyor ve aynı adı
- * kullanan iki modül birbirinin biçimini paylaşmak zorunda kalıyordu.)
- * Alan kendi `decimals()` değerini verirse o kazanır.
+ * The default digit counts follow the FIELD TYPE, not the field NAME.
+ * (In the system this replaces, a 173-line global `NumericFieldMap` looked at the field name,
+ * so two modules using the same name were forced to share each other's format.)
+ * If the field supplies its own `decimals()` value, that one wins.
  */
 final readonly class NumberSettings
 {
     /**
-     * @param array<string, string> $currencySymbols para birimi kodu => simge, ör. ['TRY' => '₺']
+     * @param array<string, string> $currencySymbols currency code => symbol, e.g. ['TRY' => '₺']
      */
     public function __construct(
         public string $decimalSeparator = ',',
@@ -30,7 +30,7 @@ final readonly class NumberSettings
     ) {
     }
 
-    /** Alan kendi basamağını vermemişse tipin varsayılanı. */
+    /** The default for the type, used when the field did not supply its own digit count. */
     public function digitsFor(FieldType $type): int
     {
         return match ($type) {
@@ -50,7 +50,7 @@ final readonly class NumberSettings
         return $this->currencySymbols[$currencyCode] ?? $currencyCode;
     }
 
-    /** Simgeyi sayıya iliştirir. */
+    /** Attaches the symbol to the number. */
     public function applySymbol(string $number, ?string $symbol): string
     {
         if (null === $symbol || '' === $symbol) {
@@ -64,7 +64,7 @@ final readonly class NumberSettings
         };
     }
 
-    /** Excel'in anlayacağı sayı biçim kodu, ör. `#,##0.000`. */
+    /** A number format code Excel understands, e.g. `#,##0.000`. */
     public function excelFormatCode(int $digits): string
     {
         return $digits > 0

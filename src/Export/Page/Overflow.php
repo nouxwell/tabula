@@ -5,36 +5,38 @@ declare(strict_types=1);
 namespace Balin\Tabula\Export\Page;
 
 /**
- * Kolonlar sayfaya sığmadığında ne yapılacağı.
+ * What to do when the columns do not fit on the page.
  *
- * Mevcut ERP'de bu seçim hiç YOKTU: kolon sınırı da yoktu, `table-layout: fixed` altında
- * kolonlar okunamayacak kadar eziliyordu ve tek çare başlığı `<br>` ile elle bölen bir
- * yamaydı. Üç davranış da bilinçli bir tercih olmalı.
+ * In the system this replaces this choice DID NOT EXIST: there was no column limit either, under
+ * `table-layout: fixed` the columns were squeezed until they could not be read, and the only
+ * remedy was a patch that broke the header by hand with `<br>`. All three behaviours must be a
+ * deliberate choice.
  */
 enum Overflow: string
 {
     /**
-     * Kolonları GRUPLARA böl; her grup kendi sayfa takımına basılır.
+     * Split the columns into GROUPS; each group is printed as its own page set.
      *
-     * Çapa kolonlar (`ColumnBudget::anchor()`) her grupta tekrarlanır, böylece ikinci
-     * gruba bakan okuyucu hangi satırda olduğunu bilir. Geniş tabloların kâğıda basılma
-     * biçimi budur; hiçbir veri kaybolmaz.
+     * The anchor columns (`ColumnBudget::anchor()`) are repeated in every group, so a reader
+     * looking at the second group knows which row they are on. This is how wide tables get
+     * printed onto paper; no data is lost.
      */
     case NextPageSet = 'next_page_set';
 
     /**
-     * Düşük öncelikli kolonları ELE, tek grupta kal.
+     * DROP the low-priority columns, stay in a single group.
      *
-     * `Priority::Optional` önce, sonra `Normal` düşer; `Always` asla düşmez.
-     * Tek sayfalık özet çıktılarda doğru seçim — ama VERİ KAYBEDER, bilinçli seçilmeli.
+     * `Priority::Optional` goes first, then `Normal`; `Always` never drops.
+     * The right choice for single-page summary output — but it LOSES DATA, so it has to be chosen
+     * deliberately.
      */
     case Drop = 'drop';
 
     /**
-     * Hiç bölme, hepsini sığdırmaya çalış.
+     * Never split, try to fit them all.
      *
-     * Asgari genişlik kuralı yok sayılır; çok kolonda okunaksız olur. Kolon sayısının
-     * gerçekten sınırlı olduğu ve bölünmesinin istenmediği çıktılar için.
+     * The minimum-width rule is ignored; with many columns the result becomes unreadable. For
+     * output where the column count really is limited and splitting is not wanted.
      */
     case Shrink = 'shrink';
 }

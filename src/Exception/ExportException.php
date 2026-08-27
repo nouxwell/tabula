@@ -7,54 +7,55 @@ namespace Balin\Tabula\Exception;
 use Balin\Tabula\Format;
 use RuntimeException;
 
-/** Dışa aktarma akışı hatalı kurulduğunda fırlatılır. */
+/** Thrown when the export pipeline is set up incorrectly. */
 final class ExportException extends RuntimeException implements TabulaException
 {
     public static function noSource(): self
     {
-        return new self('Veri kaynağı verilmedi: önce ->from(...) çağırın.');
+        return new self('No data source was given: call ->from(...) first.');
     }
 
     /**
-     * PDF motoru kurulu değil.
+     * The PDF engine is not installed.
      *
-     * Dompdf kütüphanenin ZORUNLU bağımlılığı değildir (yalnız `suggest`): Excel/CSV için
-     * dışa aktaran uygulamalar onlarca megabaytlık bir yazı tipi ağacını taşımak zorunda
-     * kalmasın diye. Kontrol yazıcının KURULDUĞU anda yapılır; olmasaydı `Dompdf\Dompdf`
-     * sınıfı ancak `close()` içinde aranır, yani elli bin satır işlendikten SONRA ham bir
-     * `Error` fırlardı — hem geç hem de `TabulaException` olmadığı için çağıranın
-     * `catch (TabulaException)` bloğunu ıskalayan bir hata.
+     * Dompdf is not a REQUIRED dependency of the library (only a `suggest`), so that
+     * applications exporting to Excel/CSV are not forced to carry tens of megabytes of font
+     * tree around. The check runs at the moment the writer is CONSTRUCTED; without it the
+     * `Dompdf\Dompdf` class would only be looked up inside `close()`, meaning a raw `Error`
+     * would be thrown AFTER fifty thousand rows had already been processed — a failure that is
+     * both late and, not being a `TabulaException`, one that slips past the caller's
+     * `catch (TabulaException)` block.
      */
     public static function missingPdfEngine(): self
     {
-        return new self('PDF çıktısı için Dompdf gerekli ama kurulu değil: composer require dompdf/dompdf');
+        return new self('PDF output requires Dompdf, but it is not installed: composer require dompdf/dompdf');
     }
 
     /**
-     * Sayfa/kolon bütçesi verildi ama bu biçimin yazıcısı kâğıt kavramını tanımıyor.
+     * A page/column budget was given, but this format's writer has no concept of paper.
      *
-     * SESSİZCE yok saymak bu fazın ortadan kaldırmak için var olduğu hatanın ta kendisidir:
-     * mevcut ERP'de `setPaper()` çağrısı fiilen dekoratifti ve kimse A5 basıldığını fark
-     * etmiyordu. Bir ayar ya uygulanır ya da yüksek sesle reddedilir.
+     * Ignoring it SILENTLY is the very bug this phase exists to eliminate: in the system this
+     * replaces, the `setPaper()` call was effectively decorative and nobody noticed that A5
+     * was being printed. A setting is either applied or refused out loud.
      */
     public static function pageSettingsUnsupported(Format $format): self
     {
         return new self(sprintf(
-            '->page()/->columns() verildi ama "%s" biçiminin yazıcısı sayfa geometrisini tanımıyor (PageAware değil). '
-            .'Sayfa boyutu yalnız PDF için anlamlıdır; Xlsx ve CSV\'de kâğıt diye bir şey yoktur.',
+            '->page()/->columns() was given, but the writer for the "%s" format does not understand page geometry (it is not PageAware). '
+            .'Page size is only meaningful for PDF; in Xlsx and CSV there is no such thing as paper.',
             $format->value,
         ));
     }
 
     public static function noOutput(): self
     {
-        return new self('Dışa aktarma hiç dosya üretmedi.');
+        return new self('The export produced no file at all.');
     }
 
     public static function noColumns(string $schema, Format $format): self
     {
         return new self(sprintf(
-            '"%s" şemasında "%s" biçimi için yazılacak kolon kalmadı — alanların hepsi Field::only() ile bu biçimin dışında bırakılmış olabilir.',
+            'The "%s" schema has no columns left to write for the "%s" format — all of its fields may have been excluded from this format with Field::only().',
             $schema,
             $format->value,
         ));
@@ -63,7 +64,7 @@ final class ExportException extends RuntimeException implements TabulaException
     public static function invalidPageSize(float $widthMm, float $heightMm): self
     {
         return new self(sprintf(
-            'Sayfa ölçüleri en az 1 mm olmalı; %s × %s mm verildi.',
+            'Page dimensions must be at least 1 mm; %s × %s mm was given.',
             $widthMm,
             $heightMm,
         ));
@@ -71,53 +72,53 @@ final class ExportException extends RuntimeException implements TabulaException
 
     public static function negativeMargin(float $mm): self
     {
-        return new self(sprintf('Kenar boşluğu negatif olamaz; %s mm verildi.', $mm));
+        return new self(sprintf('A margin cannot be negative; %s mm was given.', $mm));
     }
 
     public static function invalidMinColumnWidth(float $mm): self
     {
-        return new self(sprintf('Asgari kolon genişliği pozitif olmalı; %s mm verildi.', $mm));
+        return new self(sprintf('The minimum column width must be positive; %s mm was given.', $mm));
     }
 
     public static function invalidMaxColumns(int $columns): self
     {
-        return new self(sprintf('Azami kolon sayısı en az 1 olmalı; %d verildi.', $columns));
+        return new self(sprintf('The maximum column count must be at least 1; %d was given.', $columns));
     }
 
-    /** Sayfa, tek bir okunabilir kolonu bile alamayacak kadar dar. */
+    /** The page is too narrow to take even one readable column. */
     public static function pageTooNarrow(float $usableMm, float $minWidthMm): self
     {
         return new self(sprintf(
-            'Kullanılabilir sayfa genişliği %s mm, asgari kolon genişliği ise %s mm — tek kolon bile sığmıyor. '
-            .'Sayfayı büyütün (ör. A4 yerine A3), yatay çevirin, kenar boşluğunu azaltın ya da minWidth değerini düşürün.',
+            'The usable page width is %s mm while the minimum column width is %s mm — not even one column fits. '
+            .'Use a larger page (e.g. A3 instead of A4), switch to landscape, reduce the margins, or lower the minWidth value.',
             $usableMm,
             $minWidthMm,
         ));
     }
 
     /**
-     * `Priority::Always` kolonları tek başına sayfaya sığmıyor.
+     * The `Priority::Always` columns do not fit on the page on their own.
      *
-     * Eleme yapmak sözü bozardı: hem `Overflow::Drop` hem `Priority` "Always asla düşmez"
-     * diyor. Sessizce eksik bir belge basmaktansa duruyoruz.
+     * Dropping some of them would break a promise: both `Overflow::Drop` and `Priority` say
+     * "Always is never dropped". Rather than silently printing an incomplete document, we stop.
      */
     public static function mandatoryColumnsExceedBudget(int $mandatory, int $capacity): self
     {
         return new self(sprintf(
-            'Zorunlu (Priority::Always) kolon sayısı %d, sayfa bütçesi ise %d kolon — bunlar elenemez. '
-            .'Sayfayı büyütün (ör. A4 yerine A3), yatay çevirin, minWidth değerini düşürün '
-            .'ya da bazı alanların önceliğini Always olmaktan çıkarın.',
+            'There are %d mandatory (Priority::Always) columns but the page budget is %d columns — and these cannot be dropped. '
+            .'Use a larger page (e.g. A3 instead of A4), switch to landscape, lower the minWidth value, '
+            .'or take the Always priority off some of the fields.',
             $mandatory,
             $capacity,
         ));
     }
 
-    /** Çapa kolonlar bütçenin tamamını yiyor; geriye veri kolonu kalmıyor. */
+    /** The anchor columns eat the whole budget; no data column is left over. */
     public static function anchorsFillTheBudget(int $anchors, int $capacity): self
     {
         return new self(sprintf(
-            'Çapa kolon sayısı (%d) sayfa bütçesini (%d kolon) dolduruyor, geriye veri kolonu kalmıyor. '
-            .'Daha az çapa seçin ya da sayfayı genişletin.',
+            'The anchor column count (%d) fills the entire page budget (%d columns), leaving no room for data columns. '
+            .'Choose fewer anchors or widen the page.',
             $anchors,
             $capacity,
         ));
@@ -125,6 +126,6 @@ final class ExportException extends RuntimeException implements TabulaException
 
     public static function unwritableTarget(string $path, string $reason): self
     {
-        return new self(sprintf('"%s" hedefine yazılamıyor: %s', $path, $reason));
+        return new self(sprintf('Cannot write to the target "%s": %s', $path, $reason));
     }
 }

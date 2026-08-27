@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Balin\Tabula\Settings;
 
-/** Para birimi simgesinin sayıya göre konumu. */
+/** Where the currency symbol sits relative to the number. */
 enum SymbolPosition: string
 {
     case Before = 'before';

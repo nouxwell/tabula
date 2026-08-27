@@ -8,20 +8,20 @@ use Balin\Tabula\Export\Column;
 use Balin\Tabula\Value\Cell;
 
 /**
- * Dosyaya yazan birim.
+ * A unit that writes to a file.
  *
- * Yaşam döngüsü kesin olarak şudur:
+ * The lifecycle is strictly this:
  *
  *     open(path)
  *       startSheet(name, columns)
  *         writeRow(cells) ×N
  *       finishSheet()
- *       ... (birden çok sayfa)
- *     close() → yazılan dosya yolları
+ *       ... (several sheets)
+ *     close() → the file paths written
  *
- * Yazıcı satırları BİRİKTİRMEMELİDİR; her `writeRow()` çağrısı mümkün olduğunca
- * çıktıya doğru ilerlemelidir. `close()` bir liste döndürür çünkü CSV'de çok sayfalı
- * çıktı birden fazla dosya demektir.
+ * A writer MUST NOT ACCUMULATE rows; every `writeRow()` call should move towards the output as far
+ * as it possibly can. `close()` returns a list because in CSV a multi-sheet output means more than
+ * one file.
  */
 interface Writer
 {
@@ -33,14 +33,14 @@ interface Writer
     public function startSheet(string $name, array $columns): void;
 
     /**
-     * @param list<Cell> $cells kolonlarla aynı sırada
+     * @param list<Cell> $cells in the same order as the columns
      */
     public function writeRow(array $cells): void;
 
     public function finishSheet(): void;
 
     /**
-     * @return list<string> yazılan dosya yolları
+     * @return list<string> the file paths written
      */
     public function close(): array;
 }

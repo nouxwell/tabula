@@ -11,20 +11,22 @@ use Balin\Tabula\Value\FormatContext;
 use Balin\Tabula\Value\ValueFormatter;
 
 /**
- * Boole alanları.
+ * Boolean fields.
  *
- * Hücreye yazılan değer ham `true/false` DEĞİL, çevrilmiş metindir (Evet/Hayır).
- * Sebebi Excel: gerçek boole yazılırsa hücrede yerel Excel diline göre TRUE/DOĞRU
- * görünür ve şablondaki açılır liste ile eşleşmez.
+ * The value written into the cell is NOT a raw `true/false` but the translated text
+ * (Yes/No). The reason is Excel: if a real boolean is written, the cell shows TRUE/DOĞRU
+ * according to Excel's own language and no longer matches the drop-down list in the
+ * template.
  *
- * Eski ERP'nin hatası tam olarak buydu: hücre metnini bir çeviri ailesinden
- * (`general.yes`), şablonun doğrulama listesini BAŞKA bir aileden (`form.true`)
- * üretiyordu; sonuçta yazılan değer kendi izin listesinde bulunmuyor, Excel dosyayı
- * "onarılması gerekiyor" diye açıyordu. Burada tek kaynak vardır:
- * `TabulaSettings::$boolTrueKey` / `$boolFalseKey` — şablon üreticisi de aynı ikiliyi okur.
+ * That was exactly the bug in the system this replaces: it produced the cell text
+ * from one translation family (`general.yes`) and the template's validation list from
+ * ANOTHER one (`form.true`); the value it wrote was therefore not in its own allow-list, and
+ * Excel opened the file saying it "needs to be repaired". Here there is a single source:
+ * `TabulaSettings::$boolTrueKey` / `$boolFalseKey` — the template generator reads the very
+ * same pair.
  *
- * Girdi tarafı bilerek geniştir; veri tabanından `1`, CSV'den `'true'`, kullanıcının
- * doldurduğu şablondan `'Evet'` gelebilir.
+ * The input side is deliberately wide; `1` can arrive from the database, `'true'` from a
+ * CSV, and `'Evet'` from a template a Turkish user filled in.
  */
 final class BoolFormatter implements ValueFormatter
 {
@@ -44,8 +46,8 @@ final class BoolFormatter implements ValueFormatter
 
         $value = $this->toBool($raw);
 
-        // Tanınmayan değer de boş hücredir: "belirsiz"i uydurma bir Hayır'a çevirmek,
-        // dışa aktarımı okuyan kişiye yanlış bilgi vermek olur.
+        // An unrecognised value is an empty cell too: turning "unknown" into a made-up No
+        // would hand false information to whoever reads the export.
         if (null === $value) {
             return Cell::empty($context->settings->emptyText, $align);
         }
@@ -53,11 +55,11 @@ final class BoolFormatter implements ValueFormatter
         $settings = $context->settings;
         $text = $context->trans($value ? $settings->boolTrueKey : $settings->boolFalseKey);
 
-        // Cell::text → value === text: Excel'de de, CSV/PDF'te de aynı metin.
+        // Cell::text → value === text: the same text in Excel and in CSV/PDF alike.
         return Cell::text($text, $align);
     }
 
-    /** Tanınmayan ya da boş her şey için `null` (= boş hücre). */
+    /** `null` (= an empty cell) for anything unrecognised or empty. */
     private function toBool(mixed $raw): ?bool
     {
         if (null === $raw) {
@@ -68,7 +70,7 @@ final class BoolFormatter implements ValueFormatter
             return $raw;
         }
 
-        // Doctrine tinyint(1), SQL COUNT'ları ve JSON API'leri 0/1 üretir.
+        // Doctrine tinyint(1), SQL COUNTs and JSON APIs all produce 0/1.
         if (is_int($raw)) {
             return 0 !== $raw;
         }
@@ -81,7 +83,7 @@ final class BoolFormatter implements ValueFormatter
             return null;
         }
 
-        // İçe aktarmada kullanıcı kendi dilinde yazar; Türkçe karşılıklar da tanınır.
+        // On import the user writes in their own language; the Turkish forms are recognised too.
         return match (mb_strtolower(trim($raw), 'UTF-8')) {
             '1', 'true', 'yes', 'on', 'y', 't', 'evet', 'e' => true,
             '0', 'false', 'no', 'off', 'n', 'f', 'hayır', 'hayir', 'h' => false,

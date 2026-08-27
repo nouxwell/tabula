@@ -7,16 +7,16 @@ namespace Balin\Tabula\Export\Sheet;
 use Balin\Tabula\Value\FormatContext;
 
 /**
- * Satırların sayfalara nasıl bölüneceği.
+ * How rows are split across sheets.
  *
- * Boru hattı her satır için `sheetFor()` çağırır ve dönen ad DEĞİŞTİĞİNDE yeni sayfa açar.
- * Bu yüzden strateji saf ve öngörülebilir olmalıdır.
+ * The pipeline calls `sheetFor()` for every row and opens a new sheet WHENEVER the returned name
+ * CHANGES. That is why the strategy has to be pure and predictable.
  */
 interface SheetStrategy
 {
     /**
-     * @param int   $rowIndex 0'dan başlayan genel satır sırası
-     * @param mixed $row      ham satır
+     * @param int   $rowIndex the overall row index, starting at 0
+     * @param mixed $row      the raw row
      */
     public function sheetFor(int $rowIndex, mixed $row, FormatContext $context): string;
 }

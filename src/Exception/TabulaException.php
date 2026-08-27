@@ -7,10 +7,10 @@ namespace Balin\Tabula\Exception;
 use Throwable;
 
 /**
- * Kütüphanenin fırlattığı tüm istisnaların ortak arayüzü.
+ * The common interface of every exception this library throws.
  *
- * Tüketici tek bir `catch (TabulaException $e)` ile kütüphane kaynaklı hataları
- * kendi hatalarından ayırabilir.
+ * A consumer can tell library-originated failures apart from its own with a single
+ * `catch (TabulaException $e)`.
  */
 interface TabulaException extends Throwable
 {

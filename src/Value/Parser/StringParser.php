@@ -14,42 +14,44 @@ use Stringable;
 use UnitEnum;
 
 /**
- * Metin alanlarının ayrıştırıcısı — `StringFormatter`ın ters yönü.
+ * The parser for text fields — the reverse direction of `StringFormatter`.
  *
- * Asıl işi "dizeye çevir" değil, EXCEL'İN BOZDUĞUNU ONARMAKTIR. Kullanıcı hücreye
- * `8691234567890123` yazdığında Excel bunu sayı sanar ve okuyucuya `8.6912345678901E+15`
- * float'ı olarak geri verir; düz `(string)` cast'ı bu barkodu üstel gösterimle
- * veritabanına yazar. Mevcut ERP'nin içe aktarmasında stok kodları, IBAN'lar ve
- * barkodlar tam olarak böyle bozuluyordu. Burada float HER ZAMAN üstelsiz basılır.
+ * Its real job is not "cast it to a string" but REPAIRING WHAT EXCEL BROKE. When the user
+ * types `8691234567890123` into a cell, Excel decides it is a number and hands the reader
+ * back the float `8.6912345678901E+15`; a plain `(string)` cast then writes that barcode
+ * into the database in exponential notation. In the import of the system this package
+ * replaces, stock codes, IBANs and barcodes were broken in exactly this way. Here a float is
+ * ALWAYS printed without an exponent.
  *
- * Bu sınıf aynı zamanda TÜM ayrıştırıcıların ortak yardımcılarını taşır
- * (`isBlank()`, `clean()`, `describe()`): tıpkı `MoneyFormatter`ın kendi sayı
- * ayrıştırıcısını yazmak yerine `NumberFormatter::parse()` çağırması gibi. Bu paketin
- * var oluş sebebi, aynı `normalize()` metodunun sekiz sınıfa kopyalanmış olmasıydı;
- * ayrıştırıcı tarafında aynı hatayı tekrarlamıyoruz.
+ * This class also carries the helpers shared by ALL parsers (`isBlank()`, `clean()`,
+ * `describe()`): just like `MoneyFormatter` calling `NumberFormatter::parse()` instead of
+ * writing its own number parser. This package exists because the same `normalize()` method
+ * had been copied into eight classes; we are not repeating that mistake on the parser side.
  *
- * Diğer ayrıştırıcılar KATIdır (okunamayan hücre `ParseException` fırlatır), bu sınıf
- * fırlatmaz: sözleşmede "notAString" diye bir hata yoktur, çünkü her skaler değerin bir
- * metin karşılığı vardır. Metne çevrilemeyen tek şey (dizi/kaynak/`__toString`siz nesne)
- * bir okuyucudan zaten gelemez; geldiğinde boş hücre sayılır.
+ * The other parsers are STRICT (an unreadable cell throws a `ParseException`), this one is
+ * not: there is no "notAString" error in the contract, because every scalar value has a text
+ * equivalent. The only thing that cannot be turned into text (an array, a resource, an
+ * object without `__toString`) cannot come out of a reader in the first place; if it does,
+ * it counts as an empty cell.
  */
 final class StringParser implements ValueParser
 {
     /**
-     * Görünmez boşluklar: kırılmaz boşluk aileleri + BOM.
+     * Invisible whitespace: the non-breaking space family plus the BOM.
      *
-     * `trim()` bunları TANIMAZ. Elektronik tablolardan gelen hücrelerde kırılmaz boşluk
-     * sıradan bir kalıntıdır; UTF-8 BOM'u ise CSV'nin ilk hücresine yapışır. Temizlenmezse
-     * "boş görünen ama boş olmayan" hücreler zorunlu alan denetimini geçer ve veritabanına
-     * görünmez karakter yazılır.
+     * `trim()` does NOT recognise these. In cells coming from spreadsheets a non-breaking
+     * space is ordinary debris; the UTF-8 BOM sticks to the first cell of a CSV. Left
+     * uncleaned, "cells that look empty but are not" pass the required-field check and
+     * invisible characters get written into the database.
      */
     private const array INVISIBLE_SPACES = ["\u{00A0}", "\u{202F}", "\u{2009}", "\u{FEFF}"];
 
     /**
-     * Ondalık kısmı basarken kullanılan azami hassasiyet.
+     * The maximum precision used when printing the decimal part.
      *
-     * PHP'nin `(string)` dönüşümü `precision` ini ayarına bakar ve 14'ün üstünde üstel
-     * gösterime kaçar; `%.14F` hem yerelden bağımsızdır hem de üstel üretmez.
+     * PHP's `(string)` conversion honours the `precision` ini setting and escapes into
+     * exponential notation above 14; `%.14F` is both locale-independent and never produces
+     * an exponent.
      */
     private const int FLOAT_PRECISION = 14;
 
@@ -66,15 +68,15 @@ final class StringParser implements ValueParser
 
         $text = self::clean($this->stringify($raw, $context));
 
-        // Yalnızca görünmez karakterden ibaret hücre de boştur.
+        // A cell consisting of nothing but invisible characters is empty as well.
         return '' === $text ? null : $text;
     }
 
     /**
-     * Hücre BOŞ mu? Tüm ayrıştırıcıların ortak kuralı.
+     * Is the cell EMPTY? The rule shared by every parser.
      *
-     * Boşluk bir HATA DEĞİLDİR: zorunluluk denetimi alanı bilen içe aktarma döngüsünde
-     * yapılır, burada değil. Ayrıştırıcı yalnızca "değer yok" der.
+     * Emptiness is NOT AN ERROR: the required-field check happens in the import loop, which
+     * knows the field — not here. The parser only says "there is no value".
      */
     public static function isBlank(mixed $raw): bool
     {
@@ -89,19 +91,19 @@ final class StringParser implements ValueParser
         return is_string($raw) && '' === self::clean($raw);
     }
 
-    /** Görünmez boşlukları normal boşluğa indirger ve kırpar. */
+    /** Reduces invisible whitespace to an ordinary space and trims. */
     public static function clean(string $text): string
     {
         return trim(str_replace(self::INVISIBLE_SPACES, ' ', $text));
     }
 
     /**
-     * Hata mesajlarında görünecek ham gösterim.
+     * The raw representation shown in error messages.
      *
-     * `ParseException` mesajları doğrudan kullanıcıya gider ve "hangi değer" bilgisini
-     * taşımak zorundadır; "geçersiz değer" diyen bir mesaj kullanıcıya hiçbir şey
-     * anlatmaz. Metne dönmeyen tipler için değerin kendisi değil TİPİ yazılır — hata
-     * mesajı üretirken ikinci bir hata çıkarmak kabul edilemez.
+     * `ParseException` messages go straight to the user and are obliged to carry the "which
+     * value" information; a message that only says "invalid value" tells the user nothing.
+     * For types that do not turn into text, the TYPE is printed rather than the value itself
+     * — producing a second error while producing an error message is unacceptable.
      */
     public static function describe(mixed $raw): string
     {
@@ -146,7 +148,8 @@ final class StringParser implements ValueParser
             return $raw;
         }
 
-        // Excel'in metin kolonunu sayıya çevirmesi: barkod/stok kodu/IBAN buradan geçer.
+        // Excel turning a text column into a number: barcodes/stock codes/IBANs come
+        // through here.
         if (is_float($raw)) {
             return self::floatToText($raw);
         }
@@ -156,15 +159,15 @@ final class StringParser implements ValueParser
         }
 
         if (is_bool($raw)) {
-            // `(string) false` boş dize üretir; metin kolonunda bu, veriyi sessizce yutmaktır.
-            // Dışa aktarma da aynı ikiliyi yazdığı için gidiş-dönüş kapanır.
+            // `(string) false` produces an empty string; in a text column that silently
+            // swallows data. The export writes the same pair, so the round trip closes.
             $settings = $context->settings;
 
             return $context->trans($raw ? $settings->boolTrueKey : $settings->boolFalseKey);
         }
 
-        // Doctrine enumType kolonları skaler projeksiyonlarda bile enum ÖRNEĞİ döndürür;
-        // dizi kaynaklı yeniden içe aktarmalarda bu değerler ayrıştırıcıya kadar gelebilir.
+        // Doctrine enumType columns return an enum INSTANCE even in scalar projections; in
+        // re-imports from an array source those values can reach the parser.
         if ($raw instanceof BackedEnum) {
             return (string) $raw->value;
         }
@@ -177,31 +180,33 @@ final class StringParser implements ValueParser
             return (string) $raw;
         }
 
-        // Metin alanına düşen tarih şema hatasıdır ama değer kurtarılabilir; nötr ISO
-        // benzeri gösterim yazılır (desen tahmin etmek bu sınıfın işi değil).
+        // A date landing in a text field is a schema mistake, but the value can still be
+        // salvaged; a neutral ISO-like representation is written (guessing a pattern is not
+        // this class's job).
         if ($raw instanceof DateTimeInterface) {
             return $raw->format('Y-m-d H:i:s');
         }
 
         if (is_array($raw)) {
-            // Türkçe karakterler ve yollar okunur kalsın: ç / \/ kaçışları yok.
+            // Keep Turkish characters and paths readable: no `ç` or `\/` escaping.
             $json = json_encode($raw, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
 
             return false === $json ? '' : $json;
         }
 
-        // Buraya düşen değer bir okuyucudan gelemez (kaynak/`__toString`siz nesne).
-        // Boş bırakılır; zorunluysa hatayı içe aktarma döngüsü üretir.
+        // A value that lands here cannot have come from a reader (a resource, or an object
+        // without `__toString`). It is left empty; if the field is required, the import loop
+        // produces the error.
         return '';
     }
 
     /**
-     * Float'ı ÜSTELSİZ basar.
+     * Prints a float WITHOUT an exponent.
      *
-     * Tam sayı değerli float doğrudan basamaklarıyla yazılır: `8.69123456789E+12` değil
-     * `8691234567890`. 2^53 üstündeki değerlerde basamakların bir kısmı zaten float'ın
-     * kendi yuvarlamasıdır — ama üstel gösterim de aynı bilgiyi taşımaz, üstelik
-     * veritabanına yazıldığında hiç düzeltilemez hâle gelir.
+     * A float with an integral value is written out with its digits: `8691234567890`, not
+     * `8.69123456789E+12`. Above 2^53 part of those digits is already the float's own
+     * rounding — but the exponential form does not carry that information either, and once
+     * it has been written to the database it can never be corrected.
      */
     private static function floatToText(float $value): string
     {

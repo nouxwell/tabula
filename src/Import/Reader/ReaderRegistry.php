@@ -7,16 +7,16 @@ namespace Balin\Tabula\Import\Reader;
 use Balin\Tabula\Exception\ImportException;
 
 /**
- * Dosyadan okuyucuya eşleme.
+ * Maps a file to a reader.
  *
- * Seçim UZANTIYA göredir, içeriğe göre değil: kullanıcının yüklediği dosyanın ilk
- * baytlarını koklamak (sihirli sayı) daha "akıllı" görünür ama pratikte yanlış soruyu
- * çözer — bir kullanıcı .xlsx uzantılı bir CSV gönderdiğinde ona "bu dosya CSV, uzantısını
- * düzeltin" demek, dosyayı sessizce kabul edip sonra "hiçbir kolon eşleşmedi" demekten
- * çok daha yararlıdır.
+ * The choice is made BY EXTENSION, not by content: sniffing the first bytes of the file the
+ * user uploaded (the magic number) looks "smarter" but in practice solves the wrong problem —
+ * when a user sends a CSV with an .xlsx extension, telling them "this file is a CSV, correct
+ * the extension" is far more useful than silently accepting the file and then saying "no
+ * column matched".
  *
- * Öndeki okuyucu kazanır: `with()` ile eklenen özel bir okuyucu yerleşiği ezer
- * (bkz. `FormatterRegistry` — aynı desen, aynı gerekçe).
+ * The reader at the front wins: a custom reader added with `with()` overrides a built-in one
+ * (see `FormatterRegistry` — the same pattern, the same reasoning).
  */
 final class ReaderRegistry
 {
@@ -28,22 +28,22 @@ final class ReaderRegistry
         $this->readers = array_values($readers);
     }
 
-    /** Yerleşik okuyucularla kurulu kayıt defteri. */
+    /** A registry wired up with the built-in readers. */
     public static function default(): self
     {
         return new self(new XlsxReader(), new CsvReader());
     }
 
-    /** Özel okuyucuları BAŞA ekleyerek yerleşikleri ezer. */
+    /** Overrides the built-ins by prepending the custom readers. */
     public function with(Reader ...$readers): self
     {
         return new self(...array_values($readers), ...$this->readers);
     }
 
     /**
-     * Bu yolu okuyabilecek ilk okuyucu.
+     * The first reader able to read this path.
      *
-     * @throws ImportException uzantıyı tanıyan okuyucu yoksa
+     * @throws ImportException when no reader recognises the extension
      */
     public function for(string $path): Reader
     {
@@ -56,7 +56,7 @@ final class ReaderRegistry
         throw ImportException::unsupportedFile($path);
     }
 
-    /** Bu yol için bir okuyucu var mı — istisna fırlatmadan sormak isteyenler için. */
+    /** Is there a reader for this path — for those who want to ask without an exception. */
     public function supports(string $path): bool
     {
         foreach ($this->readers as $reader) {

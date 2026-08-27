@@ -24,18 +24,19 @@ use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
- * Köprünün GERÇEKTEN kabloladığını kanıtlar.
+ * Proves that the bridge REALLY DOES wire things up.
  *
- * Bundle'ın varlık sebebi tek bir cümledir: ana uygulamadaki `App\: resource: '../src/'`
- * globu `vendor/` altını görmez, dolayısıyla kütüphane kendi servislerini kaydetmezse
- * tek bir tanesi bile otomatik oluşmaz. Bunu "dosya var mı" diye bakarak doğrulamak
- * anlamsız; burada GERÇEK bir `ContainerBuilder` kurulur, uzantı yüklenir, kapsayıcı
- * DERLENİR ve servisler dışarı alınır. Derlenmeyen bir kapsayıcı, yazım hatası taşıyan
- * bir referansı ya da eksik bir servisi zaten yakalayamazdı.
+ * The bundle's reason for existing is a single sentence: the host application's
+ * `App\: resource: '../src/'` glob does not see under `vendor/`, so unless the library
+ * registers its own services, not a single one of them comes into being automatically.
+ * Verifying that by checking "does the file exist" would be meaningless; here a REAL
+ * `ContainerBuilder` is set up, the extension is loaded, the container is COMPILED and the
+ * services are pulled out. A container that is not compiled could not have caught a reference
+ * with a typo in it or a missing service in the first place.
  *
- * Kapsayıcıya iki dış girdi verilir; ikisi de gerçek bir Symfony çekirdeğinde hazır gelir:
- *  - `%kernel.default_locale%` parametresi (yapılandırmanın varsayılanı buna işaret eder),
- *  - `TranslatorInterface` servisi (köprü `service(TranslatorInterface::class)` kurar).
+ * Two external inputs are given to the container; both come ready-made in a real Symfony kernel:
+ *  - the `%kernel.default_locale%` parameter (the configuration's default points at it),
+ *  - the `TranslatorInterface` service (the bridge sets up `service(TranslatorInterface::class)`).
  */
 #[CoversClass(TabulaBundle::class)]
 #[CoversClass(SettingsFactory::class)]
@@ -43,7 +44,7 @@ final class TabulaBundleTest extends TestCase
 {
     private const string KERNEL_LOCALE = 'tr';
 
-    // ---------------------------------------------------------------- kapsayıcı ayağa kalkıyor mu
+    // ---------------------------------------------------------------- does the container come up
 
     #[Test]
     public function theContainerCompilesAndTabulaIsRetrievable(): void
@@ -54,9 +55,9 @@ final class TabulaBundleTest extends TestCase
     }
 
     /**
-     * `Tabula` KASITLI olarak `public()` işaretlidir. Uygulama kodu onu tip ipucuyla
-     * enjekte eder ama testler, konsol komutları ve `$container->get()` kullanan eski
-     * kodlar için doğrudan erişim de gerekir.
+     * `Tabula` is DELIBERATELY marked `public()`. Application code injects it by type hint, but
+     * direct access is needed as well for tests, console commands and older code that uses
+     * `$container->get()`.
      */
     #[Test]
     public function tabulaIsThePublicEntryPointOfTheBundle(): void
@@ -66,19 +67,21 @@ final class TabulaBundleTest extends TestCase
         $this->registerSymfonyTranslator($container);
         $this->loadExtension($container, []);
 
-        // Hiçbir şeyi public'e ÇEKMEDEN derliyoruz: bundle'ın kendi verdiği erişim bu.
+        // We compile WITHOUT pulling anything into public: this is the access the bundle
+        // itself grants.
         $container->compile();
 
         self::assertTrue($container->has(Tabula::class));
         self::assertInstanceOf(Tabula::class, $container->get(Tabula::class));
     }
 
-    // ---------------------------------------------------------------- yapılandırma → ayarlar
+    // ---------------------------------------------------------------- configuration → settings
 
     /**
-     * Asıl risk burada: yapılandırma ağacı düzgün tanımlanmış olsa bile değerlerin
-     * `TabulaSettings`'e ULAŞTIĞININ garantisi yok — `loadExtension()` yanlış anahtarı
-     * okusa ya da fabrikaya yanlış sırada argüman geçse kapsayıcı yine derlenirdi.
+     * The real risk is here: even with a properly defined configuration tree there is no
+     * guarantee that the values REACH `TabulaSettings` — had `loadExtension()` read the wrong
+     * key or passed the arguments to the factory in the wrong order, the container would still
+     * have compiled.
      */
     #[Test]
     public function theConfigurationReachesTheResolvedSettings(): void
@@ -120,8 +123,9 @@ final class TabulaBundleTest extends TestCase
         self::assertSame(6, $settings->numbers->moneyDigits);
         self::assertSame(['TRY' => '₺', 'USD' => '$'], $settings->numbers->currencySymbols);
 
-        // Düz dizideki 'before' metni enum örneğine SettingsFactory'de çevrilir; kapsayıcı
-        // hiçbir zaman enum taşımaz (bkz. SettingsFactory sınıf yorumu).
+        // The text 'before' from the plain array is turned into an enum instance in
+        // SettingsFactory; the container never carries an enum (see the SettingsFactory class
+        // comment).
         self::assertSame(SymbolPosition::Before, $settings->numbers->symbolPosition);
 
         self::assertSame('Y-m-d', $settings->dates->datePattern);
@@ -130,7 +134,7 @@ final class TabulaBundleTest extends TestCase
         self::assertSame('yyyy-mm-dd hh:mm:ss', $settings->dates->excelDateTimeFormat);
     }
 
-    /** Ayarları okuyan `Tabula`, kapsayıcıdaki AYNI nesneyi almalı; ikinci bir kopya değil. */
+    /** `Tabula`, which reads the settings, must get THE SAME object as the container has; not a second copy. */
     #[Test]
     public function tabulaReceivesTheSettingsServiceItself(): void
     {
@@ -152,7 +156,7 @@ final class TabulaBundleTest extends TestCase
         self::assertSame('', $settings->emptyText);
         self::assertSame('tabula.bool.yes', $settings->boolTrueKey);
         self::assertSame('tabula.bool.no', $settings->boolFalseKey);
-        // Varsayılan, Excel'in gerçek satır tavanıdır (1.048.576 − başlık satırı).
+        // The default is Excel's real row ceiling (1,048,576 − the header row).
         self::assertSame(1_048_575, $settings->maxRowsPerSheet);
         self::assertSame(',', $settings->numbers->decimalSeparator);
         self::assertSame('.', $settings->numbers->thousandSeparator);
@@ -161,11 +165,12 @@ final class TabulaBundleTest extends TestCase
         self::assertSame('d.m.Y', $settings->dates->datePattern);
     }
 
-    // ---------------------------------------------------------------- varsayılan dil
+    // ---------------------------------------------------------------- default locale
 
     /**
-     * `default_locale` varsayılanı sabit bir metin değil, `%kernel.default_locale%`
-     * parametre referansıdır: kütüphane uygulamanın dilini KENDİLİĞİNDEN devralsın diye.
+     * The default for `default_locale` is not a fixed text but a reference to the
+     * `%kernel.default_locale%` parameter: so that the library inherits the application's
+     * language BY ITSELF.
      */
     #[Test]
     public function theDefaultLocaleFallsBackToTheKernelParameter(): void
@@ -186,11 +191,13 @@ final class TabulaBundleTest extends TestCase
     }
 
     /**
-     * Değerin gerçekten bir PARAMETRE REFERANSI olduğunun kanıtı: parametre yoksa derleme
-     * çöker. Varsayılan sabit bir metin olsaydı bu test yeşil kalırdı.
+     * The proof that the value really is a PARAMETER REFERENCE: without the parameter, the
+     * compilation collapses. Had the default been a fixed text, this test would have stayed
+     * green.
      *
-     * (Derleyici asıl `ParameterNotFoundException`'ı `DefinitionErrorExceptionPass` içinde
-     * yakalayıp DI `RuntimeException`'ına sarar; beklenen tip o yüzden sarmalayıcıdır.)
+     * (The compiler catches the actual `ParameterNotFoundException` inside
+     * `DefinitionErrorExceptionPass` and wraps it in the DI `RuntimeException`; that is why the
+     * expected type is the wrapper.)
      */
     #[Test]
     public function theDefaultLocaleIsAParameterReferenceNotAHardcodedString(): void
@@ -205,7 +212,7 @@ final class TabulaBundleTest extends TestCase
         $container->compile();
     }
 
-    // ---------------------------------------------------------------- çeviri portu
+    // ---------------------------------------------------------------- translation port
 
     #[Test]
     public function theTranslatorPortResolvesToTheSymfonyAdapter(): void
@@ -230,9 +237,9 @@ final class TabulaBundleTest extends TestCase
     }
 
     /**
-     * Alanların yalnızca yapılandırma ağacında durması yetmez; `SymfonyTranslator`'a
-     * ARGÜMAN olarak geçmeleri gerekir. Bu yüzden zincir kapsayıcı üzerinden, uçtan uca
-     * denenir: anahtar yalnızca ikinci alanda (`enum`) var.
+     * It is not enough for the domains merely to sit in the configuration tree; they have to
+     * reach `SymfonyTranslator` as an ARGUMENT. That is why the chain is exercised end to end
+     * through the container: the key exists only in the second domain (`enum`).
      */
     #[Test]
     public function theConfiguredDomainChainReachesTheAdapter(): void
@@ -249,7 +256,7 @@ final class TabulaBundleTest extends TestCase
     #[Test]
     public function theDefaultDomainChainOnlyLooksAtMessages(): void
     {
-        // Karşı kanıt: yukarıdaki testi geçiren şey yapılandırmanın kendisi, tesadüf değil.
+        // The counter-proof: what makes the test above pass is the configuration itself, not coincidence.
         $catalogue = ['enum' => ['purchase_status.open' => 'Açık']];
 
         $translator = $this->compile([], $catalogue)->get(Translator::class);
@@ -271,12 +278,12 @@ final class TabulaBundleTest extends TestCase
         self::assertSame('Açık', $translator->trans('enum@purchase_status.open'));
     }
 
-    // ---------------------------------------------------------------- yapılandırma ağacı reddediyor mu
+    // ---------------------------------------------------------------- does the configuration tree refuse
 
     /**
-     * Ağacın en değerli işi kabul ettikleri değil, REDDETTİKLERİ: `symbol_position: 'sağ'`
-     * sessizce yok sayılsaydı hata ancak aylar sonra, yanlış biçimlenmiş bir Excel'de
-     * fark edilirdi.
+     * The tree's most valuable work is not what it accepts but what it REFUSES: had
+     * `symbol_position: 'sağ'` been silently ignored, the mistake would only have been noticed
+     * months later, in a badly formatted Excel file.
      *
      * @param array<string, mixed> $config
      */
@@ -293,28 +300,29 @@ final class TabulaBundleTest extends TestCase
     /** @return Generator<string, array{array<string, mixed>, string}> */
     public static function invalidConfigurations(): Generator
     {
-        yield 'bilinmeyen simge konumu' => [
+        yield 'unknown symbol position' => [
             ['numbers' => ['symbol_position' => 'sideways']],
             'tabula.numbers.symbol_position',
         ];
 
-        yield 'sayfa başına sıfır satır' => [
+        yield 'zero rows per sheet' => [
             ['max_rows_per_sheet' => 0],
             'tabula.max_rows_per_sheet',
         ];
 
-        yield 'negatif ondalık basamak' => [
+        yield 'negative decimal digits' => [
             ['numbers' => ['decimal_digits' => -1]],
             'tabula.numbers.decimal_digits',
         ];
 
-        yield 'boş alan zinciri' => [
+        yield 'empty domain chain' => [
             ['translation' => ['domains' => []]],
             'tabula.translation.domains',
         ];
 
-        // Yazım hatası sessizce yutulmamalı; aksi hâlde ayar "uygulanmıyor" diye saatler yenir.
-        yield 'tanınmayan anahtar' => [
+        // A typo must not be swallowed silently; otherwise hours are eaten up over a setting
+        // that "is not being applied".
+        yield 'unrecognised key' => [
             ['empty_txt' => '-'],
             'empty_txt',
         ];
@@ -329,18 +337,18 @@ final class TabulaBundleTest extends TestCase
         $this->compile(['numbers' => ['symbol_position' => 'sideways']]);
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     /**
-     * Uzantıyı yükler, derler ve kapsayıcıyı döndürür.
+     * Loads the extension, compiles and returns the container.
      *
-     * Kütüphane servisleri (Tabula dışında) ÖZELDİR; gerçek uygulamada tip ipucuyla
-     * enjekte edilirler, `get()` ile alınmazlar. Test onları gözleyebilmek için derlemeden
-     * ÖNCE public'e çeker — public bir takma ad olmadan `RemovePrivateAliasesPass` port
-     * takma adını derleme sırasında kaldırırdı.
+     * The library's services (apart from Tabula) are PRIVATE; in a real application they are
+     * injected by type hint, not fetched with `get()`. So that it can observe them, the test
+     * pulls them into public BEFORE compiling — without a public alias,
+     * `RemovePrivateAliasesPass` would remove the port alias during compilation.
      *
      * @param array<string, mixed>                 $config
-     * @param array<string, array<string, string>> $catalogue sahte Symfony çevirmeninin kataloğu
+     * @param array<string, array<string, string>> $catalogue the catalogue of the fake Symfony translator
      */
     private function compile(array $config = [], array $catalogue = []): ContainerBuilder
     {
@@ -364,15 +372,16 @@ final class TabulaBundleTest extends TestCase
     {
         $extension = (new TabulaBundle())->getContainerExtension();
 
-        self::assertInstanceOf(ExtensionInterface::class, $extension, 'Bundle bir kapsayıcı uzantısı sunmalı.');
-        self::assertSame('tabula', $extension->getAlias(), 'Yapılandırma kökü `tabula:` olmalı.');
+        self::assertInstanceOf(ExtensionInterface::class, $extension, 'The bundle must offer a container extension.');
+        self::assertSame('tabula', $extension->getAlias(), 'The configuration root must be `tabula:`.');
 
         $extension->load([$config], $container);
     }
 
     /**
-     * Gerçek çekirdekte `translator` servisi hazırdır; burada onun yerine somut bir sahte
-     * kaydedilir, aksi hâlde `service(TranslatorInterface::class)` referansı çözülemez.
+     * In a real kernel the `translator` service is ready-made; here a concrete fake is
+     * registered in its place, otherwise the `service(TranslatorInterface::class)` reference
+     * could not be resolved.
      *
      * @param array<string, array<string, string>> $catalogue
      */

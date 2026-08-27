@@ -19,20 +19,22 @@ use TypeError;
 use UnitEnum;
 
 /**
- * Enum ve sabit seçenek kümesi alanları.
+ * Enum fields and fixed option sets.
  *
- * Çeviri anahtarı üç adımda çözülür — sırayla, ilk tutan kazanır:
- *  1. `TranslatableEnum::translationKey()` — yeni enum'ların tercih edilen yolu.
- *  2. `label()` metodu — mevcut ERP'nin 200'den fazla enum'unda bulunan gelenek;
- *     tek satır bile değiştirmeden çalışsınlar diye desteklenir.
- *  3. `BackedEnum::$value` / `UnitEnum::$name` — hiçbir sözleşme yoksa son çare.
+ * The translation key is resolved in three steps — in order, the first one that holds wins:
+ *  1. `TranslatableEnum::translationKey()` — the preferred route for new enums.
+ *  2. A `label()` method — the convention found in the 200-plus enums of the system this
+ * replaces; it is supported so that they keep working without a single line
+ *     being changed.
+ *  3. `BackedEnum::$value` / `UnitEnum::$name` — the last resort when there is no contract
+ *     at all.
  *
- * Çıkan anahtar HER durumda `trans()`'tan geçer. Anahtar katalogda yoksa
- * `ArrayTranslator` anahtarın kendisini döndürür; yani hücre asla boş kalmaz —
- * eski dışa aktarmada eksik çeviri boş sütun demekti.
+ * The resulting key goes through `trans()` in EVERY case. When the key is not in the
+ * catalogue, `ArrayTranslator` returns the key itself, so the cell is never left empty — in
+ * the legacy export a missing translation meant an empty column.
  *
- * `Options` tipinde değer, alanın seçenek haritasında aranır; bulunan etiket de
- * `trans()`'tan geçirilir, böylece seçenek kümeleri çeviri anahtarı taşıyabilir.
+ * A value of type `Options` is looked up in the field's option map; the label found there is
+ * passed through `trans()` as well, so option sets can carry translation keys.
  */
 final class EnumFormatter implements ValueFormatter
 {
@@ -52,8 +54,8 @@ final class EnumFormatter implements ValueFormatter
 
         $enumClass = $field->getEnumClass();
 
-        // Yapılandırma hatası veriden önce patlasın: yanlış sınıf adıyla kurulmuş bir alan,
-        // ilk satırda değil, ilk denemede görünmeli.
+        // A configuration mistake should blow up before the data does: a field set up with
+        // the wrong class name must surface on the first attempt, not on the first row.
         if (null !== $enumClass && !is_a($enumClass, UnitEnum::class, true)) {
             throw ValueException::notAnEnum($field, $enumClass);
         }
@@ -68,7 +70,8 @@ final class EnumFormatter implements ValueFormatter
 
         $case = $this->hydrate($raw, $enumClass);
 
-        // Enum'a oturmayan değer: uydurma bir etiket üretmek yerine ham hâli yazılır.
+        // A value that does not fit the enum: instead of inventing a label, the raw form is
+        // written.
         if (null === $case) {
             return Cell::text($this->rawText($raw), $align);
         }
@@ -77,11 +80,11 @@ final class EnumFormatter implements ValueFormatter
     }
 
     /**
-     * Ham değeri enum örneğine çevirir.
+     * Turns the raw value into an enum instance.
      *
-     * Doctrine `enumType` kolonları çoğu zaman zaten örnek döndürür; ama skaler
-     * projeksiyonlarda ve dizi kaynaklarında düz `value` gelir — alan bir enum sınıfı
-     * bildirmişse oradan geri hidratlanır.
+     * Doctrine `enumType` columns mostly return an instance already; but in scalar
+     * projections and array sources the plain `value` arrives — if the field declares an
+     * enum class, it is rehydrated from there.
      *
      * @param class-string|null $enumClass
      */
@@ -102,8 +105,8 @@ final class EnumFormatter implements ValueFormatter
         try {
             return $enumClass::tryFrom($raw);
         } catch (TypeError) {
-            // Dize destekli enum'a int (ya da tersi) verilmiş: `strict_types` bunu
-            // TypeError'a çevirir; bizim için bu sadece "eşleşme yok" demektir.
+            // An int was handed to a string-backed enum (or the other way round):
+            // `strict_types` turns that into a TypeError; for us it simply means "no match".
             return null;
         }
     }
@@ -114,7 +117,8 @@ final class EnumFormatter implements ValueFormatter
             return $case->translationKey();
         }
 
-        // Mevcut ERP geleneği: her enum kendi `label()` metoduyla anahtarını verir.
+        // The convention of the system this replaces: every enum hands over its key
+        // through its own `label()` method.
         if (method_exists($case, 'label')) {
             return (string) $case->label();
         }
@@ -126,7 +130,7 @@ final class EnumFormatter implements ValueFormatter
     {
         $options = $field->getOptions();
 
-        // Kapanış seçenekler satırdan türeyebilir (ör. şirkete göre değişen listeler).
+        // Closure options can be derived from the row (e.g. lists that differ per company).
         if ($options instanceof Closure) {
             $options = $options($row);
         }
@@ -137,11 +141,12 @@ final class EnumFormatter implements ValueFormatter
             return Cell::text($this->rawText($raw), $align);
         }
 
-        // Etiketin kendisi de çeviri anahtarı olabilir; düz metinse çevirmen aynen döndürür.
+        // The label itself can be a translation key; if it is plain text, the translator
+        // returns it unchanged.
         return Cell::text($context->trans((string) $options[$key]), $align);
     }
 
-    /** Seçenek haritasında aranacak anahtar; dizi anahtarı olamayan tipler için `null`. */
+    /** The key to look up in the option map; `null` for types that cannot be an array key. */
     private function optionKey(mixed $raw): int|string|null
     {
         if ($raw instanceof BackedEnum) {

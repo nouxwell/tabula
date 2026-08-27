@@ -7,21 +7,21 @@ namespace Balin\Tabula\Export\Writer;
 use Balin\Tabula\Exception\WriterException;
 
 /**
- * Excel yazıcısının görünüm ayarları.
+ * The appearance options of the Excel writer.
  *
- * Renkler PhpSpreadsheet'in beklediği ARGB biçimindedir (`FFRRGGBB`) — baştaki iki hane
- * saydamlıktır ve atlanırsa renk sessizce yanlış çıkar.
+ * The colours are in the ARGB format PhpSpreadsheet expects (`FFRRGGBB`) — the leading two digits
+ * are the alpha channel, and if they are left out the colour silently comes out wrong.
  */
 final readonly class XlsxOptions
 {
     /**
-     * @param string $creator            Dosya özelliklerine yazılan üretici adı
-     * @param string $headerFill         Başlık satırının dolgusu (ARGB)
-     * @param string $requiredHeaderFill Zorunlu kolon başlığının dolgusu (ARGB)
-     * @param string $headerBorderColor  Başlığın altındaki ince çizgi (ARGB)
-     * @param bool   $boldHeader         Başlık kalın yazılsın mı
-     * @param bool   $freezeHeader       Başlık satırı kaydırırken sabit kalsın mı
-     * @param bool   $autoFilter         Başlığa süzme okları eklensin mi
+     * @param string $creator            The producer name written into the file properties
+     * @param string $headerFill         The fill of the header row (ARGB)
+     * @param string $requiredHeaderFill The fill of a required column's header (ARGB)
+     * @param string $headerBorderColor  The thin line underneath the header (ARGB)
+     * @param bool   $boldHeader         Whether the header is written in bold
+     * @param bool   $freezeHeader       Whether the header row stays put while scrolling
+     * @param bool   $autoFilter         Whether filter arrows are added to the header
      */
     public function __construct(
         public string $creator = 'Tabula',
@@ -32,9 +32,9 @@ final readonly class XlsxOptions
         public bool $freezeHeader = true,
         public bool $autoFilter = true,
     ) {
-        // PhpSpreadsheet ayrıştıramadığı rengi sessizce yutar; hata ancak dosya açılınca
-        // görülür. Kurulum anında reddetmek, "ayar çalışmıyor" ya da simsiyah başlık bandı
-        // olarak dönen bir hata raporundan çok daha ucuzdur.
+        // PhpSpreadsheet silently swallows a colour it cannot parse; the mistake only becomes
+        // visible once the file is opened. Rejecting it at construction time is far cheaper than a
+        // bug report that comes back as "the setting does not work" or as a pitch-black header band.
         foreach ([
             'header_fill' => $headerFill,
             'required_header_fill' => $requiredHeaderFill,
@@ -47,10 +47,10 @@ final readonly class XlsxOptions
     }
 
     /**
-     * Süslemesiz çıktı — başka bir sistemin okuyacağı ara dosyalar için.
+     * Undecorated output — for intermediate files that another system will read.
      *
-     * Dondurulmuş satır ve süzme okları makineyi rahatsız etmez ama gereksiz XML üretir;
-     * çok sayfalı büyük çıktıda dosya boyutunu ölçülebilir biçimde şişirir.
+     * A frozen row and filter arrows do not bother a machine, but they do produce needless XML; on
+     * large multi-sheet output they inflate the file size measurably.
      */
     public static function plain(): self
     {

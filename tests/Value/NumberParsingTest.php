@@ -11,11 +11,12 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Sayı ayrıştırma testleri.
+ * Number parsing tests.
  *
- * DQL skaler projeksiyonları sayıları çoğu zaman DİZE olarak döndürür ve eski veride
- * yerelleştirilmiş, simge bulaşmış, muhasebe gösterimli değerler bulunur. Buradaki asıl
- * mesele işaret: bir borcun sessizce alacağa dönmesi kütüphanenin yapabileceği en pahalı hata.
+ * DQL scalar projections most often return numbers as STRINGS, and legacy data contains
+ * localised values, values contaminated with a currency symbol, and values in accounting
+ * notation. The real issue here is the sign: a debit silently turning into a credit is the
+ * most expensive mistake this library could make.
  */
 final class NumberParsingTest extends TestCase
 {
@@ -27,11 +28,11 @@ final class NumberParsingTest extends TestCase
     /** @return iterable<string, array{string, float}> */
     public static function negativeNotations(): iterable
     {
-        yield 'baştaki eksi' => ['-1.234,56', -1234.56];
-        yield 'muhasebe parantezi' => ['(1.234,56)', -1234.56];
-        yield 'sondaki eksi (SAP/ERP)' => ['1.234,56-', -1234.56];
-        yield 'simge önde, eksi sayının önünde' => ['₺ -1.234,56', -1234.56];
-        yield 'parantez ve simge' => ['(1.234,56 ₺)', -1234.56];
+        yield 'leading minus' => ['-1.234,56', -1234.56];
+        yield 'accounting parentheses' => ['(1.234,56)', -1234.56];
+        yield 'trailing minus (SAP/ERP)' => ['1.234,56-', -1234.56];
+        yield 'symbol first, minus in front of the number' => ['₺ -1.234,56', -1234.56];
+        yield 'parentheses and symbol' => ['(1.234,56 ₺)', -1234.56];
     }
 
     #[Test]
@@ -42,7 +43,7 @@ final class NumberParsingTest extends TestCase
             $expected,
             NumberFormatter::parse($raw, $this->turkish()),
             0.0001,
-            sprintf('"%s" işareti kaybetti — muhasebede bu sessiz bir veri bozulmasıdır.', $raw),
+            sprintf('"%s" lost its sign — in accounting that is silent data corruption.', $raw),
         );
     }
 
@@ -57,7 +58,7 @@ final class NumberParsingTest extends TestCase
     #[Test]
     public function canonicalDatabaseStringsAreNotReinterpreted(): void
     {
-        // Doctrine/PDO "1234.5600" döndürür; buradaki nokta HER ZAMAN ondalıktır.
+        // Doctrine/PDO returns "1234.5600"; the dot here is ALWAYS the decimal point.
         self::assertEqualsWithDelta(1234.56, NumberFormatter::parse('1234.5600', $this->turkish()), 0.0001);
         self::assertEqualsWithDelta(-0.5, NumberFormatter::parse('-0.5', $this->turkish()), 0.0001);
     }

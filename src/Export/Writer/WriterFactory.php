@@ -7,14 +7,15 @@ namespace Balin\Tabula\Export\Writer;
 use Balin\Tabula\Format;
 
 /**
- * Biçime göre yazıcı üretir.
+ * Produces a writer for a given format.
  *
- * `ExportBuilder` yazıcıyı doğrudan `new`lemek yerine buradan ister; böylece ayraç/BOM gibi
- * yazıcı ayarları uygulamanın yapılandırmasından gelebilir ve her çağrı yerinde elle
- * `->writer(new CsvWriter(...))` yazmak gerekmez.
+ * `ExportBuilder` asks for the writer here instead of `new`ing it directly; that way writer
+ * settings such as the delimiter or the BOM can come from the application's configuration and
+ * nobody has to write `->writer(new CsvWriter(...))` by hand at every call site.
  *
- * HER ÇAĞRIDA TAZE bir yazıcı dönmelidir: yazıcılar durum taşır (açık dosya tanıtıcısı,
- * aktif sayfa) ve paylaşılan bir örnek eşzamanlı iki dışa aktarmada birbirinin dosyasına yazar.
+ * IT MUST RETURN A FRESH writer ON EVERY CALL: writers carry state (an open file handle, the
+ * active sheet) and a shared instance would write into the other's file during two concurrent
+ * exports.
  */
 interface WriterFactory
 {

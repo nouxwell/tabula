@@ -31,17 +31,17 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Yazıcı fabrikasının sözleşmesi.
+ * The writer factory's contract.
  *
- * Fabrikanın kendisi birkaç satır; asıl değerli olan İKİ SÖZÜ:
+ * The factory itself is a few lines long; what is really valuable are its TWO PROMISES:
  *
- *  1. HER çağrıda TAZE yazıcı döner. Yazıcılar durum taşır (açık dosya tanıtıcısı, aktif
- *     sayfa); paylaşılan tek bir örnek, aynı istekte peş peşe iki dışa aktarma yapan bir
- *     kod yolunda birinin dosyasını diğerinin üzerine yazdırır. Bu, `assertNotSame` ile
- *     "farklı nesne" diye değil, iki yazıcıyı GERÇEKTEN aynı anda çalıştırıp dosyalarına
- *     bakarak da doğrulanır (bkz. `twoWritersFromOneFactory...`).
- *  2. `with()` değiştirmez, KOPYALAR. Uygulamaya özel bir yazıcı (ör. antetli PDF) buraya
- *     bu şekilde takılır ve paylaşılan fabrika servisi kirlenmez.
+ *  1. EVERY call hands out a FRESH writer. Writers carry state (an open file handle, the active
+ *     sheet); a single shared instance would, on a code path that runs two exports back to back
+ *     in the same request, make one of them write over the other's file. This is verified not
+ *     only as "a different object" with `assertNotSame` but by REALLY driving two writers at the
+ *     same time and looking at their files (see `twoWritersFromOneFactory...`).
+ *  2. `with()` does not mutate, it COPIES. An application-specific writer (a letterheaded PDF,
+ *     say) is plugged in this way, and the shared factory service is not polluted.
  */
 #[CoversClass(DefaultWriterFactory::class)]
 final class DefaultWriterFactoryTest extends TestCase
@@ -58,7 +58,7 @@ final class DefaultWriterFactoryTest extends TestCase
         $this->dir->remove();
     }
 
-    // ---------------------------------------------------------------- biçim → sınıf
+    // ---------------------------------------------------------------- format → class
 
     #[Test]
     public function everyBuiltInFormatGetsItsOwnWriterClass(): void
@@ -71,12 +71,12 @@ final class DefaultWriterFactoryTest extends TestCase
     }
 
     /**
-     * Fabrikaya verilen PDF ayarı gerçekten üretilen yazıcıya iniyor mu.
+     * Does the PDF options object given to the factory really reach the writer it produces?
      *
-     * `PdfWriter` ayarını dışarı AÇMAZ (yazıcının okunacak bir yüzeyi yok), bu yüzden iddia
-     * çıktının kendisinden okunur: A5 dikey kâğıt PDF'in `MediaBox`ında 419×595 punto olur.
-     * "Nesne kuruldu" demek burada yetmezdi — bu fazın var olma sebebi, kurulan ama
-     * uygulanmayan bir sayfa ayarıydı.
+     * `PdfWriter` does NOT expose its options (the writer has no surface to read them off), so
+     * the assertion is read from the output itself: A5 portrait paper comes out as 419×595
+     * points in the PDF's `MediaBox`. Saying "the object was constructed" would not be enough
+     * here — the reason this phase exists is a page setting that was configured but not applied.
      */
     #[Test]
     public function thePdfOptionsGivenToTheFactoryReachTheWriterItProduces(): void
@@ -94,7 +94,7 @@ final class DefaultWriterFactoryTest extends TestCase
         self::assertStringContainsString('MediaBox [0.000 0.000 419.528 595.276]', (string) file_get_contents($path));
     }
 
-    // ---------------------------------------------------------------- ★ taze yazıcı
+    // ---------------------------------------------------------------- ★ a fresh writer
 
     #[Test]
     public function everyCallHandsOutAFreshWriter(): void
@@ -107,12 +107,12 @@ final class DefaultWriterFactoryTest extends TestCase
     }
 
     /**
-     * "Farklı nesne" iddiasının somut bedeli.
+     * The concrete cost behind the "a different object" claim.
      *
-     * Fabrika tek bir örneği paylaştırsaydı ikinci `open()` "zaten açık" diye reddedilir,
-     * reddedilmeseydi de iki dışa aktarma aynı dosya tanıtıcısına yazardı. Aşağıdaki
-     * senaryo bilerek İÇ İÇE geçirildi: gerçek hayatta bir dışa aktarma başka bir
-     * dışa aktarmayı tetikleyen bir olay dinleyicisiyle kolayca bu hâle gelir.
+     * Had the factory shared a single instance, the second `open()` would be refused as "already
+     * open" — and had it not been refused, the two exports would write into the same file handle.
+     * The scenario below is INTERLEAVED on purpose: in real life it easily gets this way through
+     * an event listener where one export triggers another.
      */
     #[Test]
     public function twoWritersFromOneFactoryDoNotWriteIntoEachOthersFile(): void
@@ -122,17 +122,17 @@ final class DefaultWriterFactoryTest extends TestCase
         $first = $factory->for(Format::Csv);
         $second = $factory->for(Format::Csv);
 
-        $firstPath = $this->dir->file('birinci.csv');
-        $secondPath = $this->dir->file('ikinci.csv');
+        $firstPath = $this->dir->file('first.csv');
+        $secondPath = $this->dir->file('second.csv');
 
         $first->open($firstPath);
-        $first->startSheet('Birinci', self::columns());
+        $first->startSheet('First', self::columns());
 
         $second->open($secondPath);
-        $second->startSheet('İkinci', self::columns());
+        $second->startSheet('Second', self::columns());
 
-        $first->writeRow([Cell::text('bir')]);
-        $second->writeRow([Cell::text('iki')]);
+        $first->writeRow([Cell::text('one')]);
+        $second->writeRow([Cell::text('two')]);
 
         self::assertSame([$firstPath], $first->close());
         self::assertSame([$secondPath], $second->close());
@@ -140,11 +140,11 @@ final class DefaultWriterFactoryTest extends TestCase
         $firstBytes = (string) file_get_contents($firstPath);
         $secondBytes = (string) file_get_contents($secondPath);
 
-        self::assertStringContainsString('bir', $firstBytes);
-        self::assertStringNotContainsString('iki', $firstBytes);
+        self::assertStringContainsString('one', $firstBytes);
+        self::assertStringNotContainsString('two', $firstBytes);
 
-        self::assertStringContainsString('iki', $secondBytes);
-        self::assertStringNotContainsString('bir', $secondBytes);
+        self::assertStringContainsString('two', $secondBytes);
+        self::assertStringNotContainsString('one', $secondBytes);
     }
 
     // ---------------------------------------------------------------- with()
@@ -157,16 +157,16 @@ final class DefaultWriterFactoryTest extends TestCase
         $factory = (new DefaultWriterFactory())->with(Format::Csv, static fn (): Writer => $replacement);
 
         self::assertSame($replacement, $factory->for(Format::Csv));
-        // Yalnız verilen biçim değişmeli; diğerleri yerleşik kalmalı.
+        // Only the given format may change; the others must stay built-in.
         self::assertInstanceOf(XlsxWriter::class, $factory->for(Format::Xlsx));
     }
 
     /**
-     * Geçersiz kılma EZBERLENMEMELİ.
+     * The override must NOT be memoised.
      *
-     * Kapanışın sonucu bir kez üretilip saklanırsa fabrikanın tüm varlık sebebi —
-     * her çağrıda taze yazıcı — geri alınmış olur; üstelik bu sefer kütüphane değil,
-     * kütüphaneyi kuran uygulama sorumlu görünür.
+     * If the closure's result is produced once and kept, the factory's whole reason for existing
+     * — a fresh writer on every call — is undone; and this time it is the application wiring the
+     * library up, not the library itself, that appears to be at fault.
      */
     #[Test]
     public function theOverrideIsAskedOnceForEveryCall(): void
@@ -186,7 +186,7 @@ final class DefaultWriterFactoryTest extends TestCase
         $second = $factory->for(Format::Csv);
         $third = $factory->for(Format::Csv);
 
-        self::assertSame(3, $calls, 'Kapanış üç kez sorulmalıydı; ezberlenmiş olabilir.');
+        self::assertSame(3, $calls, 'The closure should have been asked three times; it may have been memoised.');
         self::assertNotSame($first, $second);
         self::assertNotSame($second, $third);
     }
@@ -201,18 +201,18 @@ final class DefaultWriterFactoryTest extends TestCase
 
         self::assertNotSame($original, $overridden);
 
-        // Kaynak fabrika kapsayıcıda PAYLAŞILAN bir servistir; `with()` onu kirletseydi
-        // tek bir çağrı yerinin özel yazıcısı tüm uygulamaya bulaşırdı.
+        // The source factory is a SHARED service in the container; had `with()` polluted it, one
+        // call site's custom writer would spread to the whole application.
         self::assertInstanceOf(CsvWriter::class, $original->for(Format::Csv));
         self::assertSame($replacement, $overridden->for(Format::Csv));
     }
 
-    // ---------------------------------------------------------------- ayarlar yazıcıya iniyor mu
+    // ---------------------------------------------------------------- do the options reach the writer
 
     #[Test]
     public function theCsvOptionsGivenToTheFactoryReachTheWriterItProduces(): void
     {
-        $path = $this->dir->file('besleme.csv');
+        $path = $this->dir->file('feed.csv');
 
         $this->tabula(new DefaultWriterFactory(CsvOptions::rfc4180()))->export(self::schema())
             ->from(ArraySource::of([['code' => '0042', 'name' => 'Öz Güneş A.Ş.']]))
@@ -222,15 +222,15 @@ final class DefaultWriterFactoryTest extends TestCase
 
         $bytes = (string) file_get_contents($path);
 
-        // Fabrikaya verilen ayar yazıcıya inmeseydi burada BOM'lu, noktalı virgüllü
-        // (yani Türkçe Excel'e göre) bir dosya olurdu.
+        // Had the options given to the factory not reached the writer, what would be here is a
+        // file with a BOM and semicolons (that is, one tuned for Turkish Excel).
         self::assertStringStartsWith("Kod,Ünvan\r\n", $bytes);
     }
 
     #[Test]
     public function theXlsxOptionsGivenToTheFactoryReachTheWriterItProduces(): void
     {
-        $path = $this->dir->file('sade.xlsx');
+        $path = $this->dir->file('plain.xlsx');
 
         $this->tabula(new DefaultWriterFactory(xlsx: XlsxOptions::plain()))->export(self::schema())
             ->from(ArraySource::of([['code' => '0042', 'name' => 'Öz Güneş A.Ş.']]))
@@ -244,7 +244,7 @@ final class DefaultWriterFactoryTest extends TestCase
         self::assertSame('', $sheet->getAutoFilter()->getRange());
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     private function tabula(DefaultWriterFactory $writers): Tabula
     {
@@ -263,7 +263,7 @@ final class DefaultWriterFactoryTest extends TestCase
     }
 
     /**
-     * Yazıcıyı boru hattı olmadan elle sürmek için tek kolonluk çözülmüş başlık.
+     * A single resolved column header, for driving the writer by hand without the pipeline.
      *
      * @return list<Column>
      */

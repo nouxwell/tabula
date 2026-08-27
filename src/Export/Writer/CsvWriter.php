@@ -10,48 +10,48 @@ use Balin\Tabula\Export\Column;
 use Balin\Tabula\Value\Cell;
 
 /**
- * Yerel PHP akışlarıyla (fopen/fputcsv) yazan CSV yazıcı.
+ * A CSV writer that writes through native PHP streams (fopen/fputcsv).
  *
- * PhpSpreadsheet burada BİLEREK kullanılmadı. Mevcut ERP, sonunda tek bir düz metin
- * dosyası kaydedecek olmasına rağmen önce bellekte koca bir `Spreadsheet` nesnesi
- * kuruyor, tüm satırları hücre nesnesi olarak oraya dolduruyor ve en sonda `Csv`
- * writer'ıyla diske basıyordu: elli bin satırlık bir dışa aktarma yüzlerce megabayt
- * RAM ve saniyelerce CPU demekti. Burada satır, `writeRow()` çağrısının içinde doğrudan
- * dosya tanıtıcısına gider; bellekte duran tek şey o anki satırdır. Akış gerçekten akar.
+ * PhpSpreadsheet was DELIBERATELY not used here. Even though it would end up saving a single
+ * plain-text file, the system this replaces first built a huge `Spreadsheet` object in memory,
+ * filled every row into it as cell objects and only at the very end dumped it to disk with the
+ * `Csv` writer: a fifty-thousand-row export meant hundreds of megabytes of RAM and seconds of CPU.
+ * Here the row goes straight to the file handle inside the `writeRow()` call; the only thing left
+ * in memory is the row at hand. The stream really does stream.
  *
- * ÇOK SAYFA: CSV'nin sayfa kavramı yoktur. Bu yüzden her `startSheet()` YENİ BİR DOSYA
- * açar — ilk sayfa `open()`'a verilen yolun kendisidir, sonrakiler "<taban>-<ad>.csv"
- * olur. `close()` üretilen tüm yolları oluşturulma sırasıyla döndürür; bunları tek bir
- * arşivde toplamak (ya da kullanıcıya ayrı ayrı sunmak) çağıranın işidir.
+ * SEVERAL SHEETS: CSV has no concept of a sheet. That is why every `startSheet()` opens A NEW FILE
+ * — the first sheet is the path given to `open()` itself, the later ones become
+ * "<stem>-<name>.csv". `close()` returns every path produced, in creation order; collecting them
+ * into a single archive (or offering them to the user one by one) is the caller's job.
  */
 final class CsvWriter implements Writer
 {
     /**
-     * UTF-8 imzası (BOM).
+     * The UTF-8 signature (BOM).
      *
-     * Excel, imzasız bir CSV'yi sistemin kod sayfasıyla açar — Türkçe Windows'ta cp1254 —
-     * ve "ş ğ ı İ ö ç ü" harfleri daha ilk satırda bozulur. Dosyanın UTF-8 olduğunu
-     * Excel'e söyleyen başka bir işaret yoktur; bu üç bayt pazarlık konusu değildir.
-     * Sadece makine tarafından tüketilecek (ör. başka bir sisteme aktarılacak) dosyalarda
-     * imza gereksiz kalabileceği için yapılandırılabilir bırakıldı.
+     * Excel opens a CSV without a signature using the system code page — cp1254 on a Turkish
+     * Windows — and the letters "ş ğ ı İ ö ç ü" are mangled on the very first line. There is no
+     * other marker that tells Excel the file is UTF-8; these three bytes are not up for
+     * negotiation. It was left configurable because the signature can be unnecessary for files
+     * that are only ever consumed by a machine (e.g. to be imported into another system).
      */
     private const string BOM = "\xEF\xBB\xBF";
 
-    /** @var resource|null aktif sayfanın dosya tanıtıcısı; sayfa yokken null */
+    /** @var resource|null the file handle of the active sheet; null while there is no sheet */
     private $handle;
 
-    /** `open()` ile verilen yol; ilk sayfanın dosyası ve diğer adların türetildiği taban. */
+    /** The path given to `open()`; the first sheet's file and the stem the other names are derived from. */
     private ?string $basePath = null;
 
-    /** Şu an yazılan dosyanın yolu — yazma hatasında mesajda geçsin diye tutulur. */
+    /** The path of the file currently being written — kept so it can appear in the message on a write error. */
     private ?string $currentPath = null;
 
     private bool $opened = false;
 
-    /** Kaçıncı sayfadayız; 0 ise henüz hiç sayfa açılmadı (ilk sayfa taban yolu kullanır). */
+    /** Which sheet we are on; 0 means no sheet has been opened yet (the first sheet uses the base path). */
     private int $sheetIndex = 0;
 
-    /** @var list<string> yazılan dosya yolları, oluşturulma sırasıyla */
+    /** @var list<string> the file paths written, in creation order */
     private array $paths = [];
 
     private readonly string $delimiter;
@@ -65,11 +65,12 @@ final class CsvWriter implements Writer
     private readonly string $lineEnding;
 
     /**
-     * Ayarların GEREKÇELERİ (ayraç neden ';', BOM neden şart, kaçış neden kapatılabilir)
-     * `CsvOptions` üzerinde durur.
+     * The REASONS behind the options (why the delimiter is ';', why the BOM is mandatory, why the
+     * escaping can be turned off) live on `CsvOptions`.
      *
-     * Beş skaleri çağrı yerinde doğru sırada dizmek hataya açıktır ve sessizce yanlış bir
-     * dosya üretir; `CsvOptions::excel()` / `CsvOptions::rfc4180()` niyeti adıyla söyler.
+     * Lining up five scalars in the right order at the call site is error-prone and silently
+     * produces the wrong file; `CsvOptions::excel()` / `CsvOptions::rfc4180()` state the intent by
+     * name.
      */
     public function __construct(CsvOptions $options = new CsvOptions())
     {
@@ -86,8 +87,8 @@ final class CsvWriter implements Writer
             throw WriterException::alreadyOpen();
         }
 
-        // Dosya burada AÇILMAZ. CSV'de dosya sayfayla birlikte doğar; sayfa hiç
-        // başlamazsa diskte boş bir kabuk bırakmanın da anlamı yoktur.
+        // The file IS NOT OPENED here. In CSV a file is born together with a sheet; if no sheet
+        // ever starts there is no point in leaving an empty shell on disk either.
         $this->basePath = $path;
         $this->opened = true;
         $this->sheetIndex = 0;
@@ -103,8 +104,8 @@ final class CsvWriter implements Writer
             throw WriterException::notOpened();
         }
 
-        // Önceki sayfa `finishSheet()` görmeden yenisi başlatıldıysa sessizce kapatırız:
-        // CSV'de sayfa = dosya olduğu için açık kalan tanıtıcı doğrudan sızıntıdır.
+        // If a new sheet is started before the previous one has seen `finishSheet()`, we close it
+        // silently: since a sheet is a file in CSV, a handle left open is a straight leak.
         $this->closeHandle();
 
         $path = 0 === $this->sheetIndex
@@ -114,7 +115,7 @@ final class CsvWriter implements Writer
         ++$this->sheetIndex;
         $this->openFile($path);
 
-        // Başlık satırı: `Column::$label` bu noktada çeviri anahtarı değil, çözülmüş metindir.
+        // The header row: at this point `Column::$label` is not a translation key but resolved text.
         $labels = [];
         foreach ($columns as $column) {
             $labels[] = $column->label;
@@ -124,7 +125,7 @@ final class CsvWriter implements Writer
     }
 
     /**
-     * @param list<Cell> $cells kolonlarla aynı sırada
+     * @param list<Cell> $cells in the same order as the columns
      */
     public function writeRow(array $cells): void
     {
@@ -134,9 +135,10 @@ final class CsvWriter implements Writer
 
         $fields = [];
         foreach ($cells as $cell) {
-            // Excel'e yazılan tipli `value` DEĞİL, yerelleştirilmiş `text` yazılır:
-            // CSV'de hücre tipi diye bir şey yoktur, dosyada ne varsa kullanıcı onu görür.
-            // Ham float yazsaydık "1234.5" çıkar, Türkçe Excel bunu tarih ya da metin sanırdı.
+            // What gets written is NOT the typed `value` but the localised `text`: CSV has no such
+            // thing as a cell type, the user sees whatever is in the file. Had we written the raw
+            // float, "1234.5" would come out and a Turkish Excel would take it for a date or for
+            // text.
             $fields[] = $cell->text;
         }
 
@@ -153,24 +155,25 @@ final class CsvWriter implements Writer
     }
 
     /**
-     * @return list<string> yazılan dosya yolları
+     * @return list<string> the file paths written
      */
     public function close(): array
     {
-        // Bilerek FIRLATMAZ: çağıran bunu `finally` içinde kullanabilsin ve dışa aktarma
-        // ortasında patlayan bir hata bile arkada açık tanıtıcı bırakmasın istiyoruz.
+        // DELIBERATELY DOES NOT THROW: we want the caller to be able to use this inside a
+        // `finally`, so that not even an error blowing up in the middle of an export leaves an
+        // open handle behind.
         $this->closeHandle();
 
         $this->opened = false;
         $this->basePath = null;
         $this->sheetIndex = 0;
 
-        // `paths` sıfırlanmaz; `close()` art arda çağrılırsa aynı listeyi döndürsün.
-        // Yeni bir `open()` listeyi zaten baştan kurar.
+        // `paths` is not reset; if `close()` is called repeatedly it should return the same list.
+        // A new `open()` rebuilds the list from scratch anyway.
         return $this->paths;
     }
 
-    /** Tanıtıcıyı kapatır (fclose tamponu da boşaltır) ve durumu sayfasız hâle getirir. */
+    /** Closes the handle (fclose flushes the buffer too) and puts the state back to "no sheet". */
     private function closeHandle(): void
     {
         if (null === $this->handle) {
@@ -184,10 +187,10 @@ final class CsvWriter implements Writer
 
     private function openFile(string $path): void
     {
-        // Uyarı metnini `error_get_last()` yerine kendi geçici işleyicimizle yakalıyoruz:
-        // `@fopen` sonrası `error_get_last()` çağrının hiç uyarı üretmediği durumda ÖNCEKİ,
-        // alakasız bir hatayı döndürüp mesajı yanıltıcı hâle getirebiliyor. Bu maliyet
-        // dosya başına bir kez ödenir, satır başına değil.
+        // We capture the warning text with our own temporary handler rather than with
+        // `error_get_last()`: after an `@fopen`, in the case where the call produced no warning at
+        // all, `error_get_last()` can return a PREVIOUS, unrelated error and make the message
+        // misleading. This cost is paid once per file, not once per row.
         $reason = null;
         set_error_handler(static function (int $severity, string $message) use (&$reason): bool {
             $reason = $message;
@@ -196,22 +199,22 @@ final class CsvWriter implements Writer
         });
 
         try {
-            // 'wb': ikili kip, çünkü satır sonunu biz belirliyoruz — Windows'ta metin kipi
-            // "\r\n" dizimizi "\r\r\n" yapardı.
+            // 'wb': binary mode, because we are the ones deciding the line ending — in text mode on
+            // Windows our "\r\n" sequence would become "\r\r\n".
             $handle = fopen($path, 'wb');
         } finally {
             restore_error_handler();
         }
 
         if (false === $handle) {
-            throw ExportException::unwritableTarget($path, $reason ?? 'dosya açılamadı');
+            throw ExportException::unwritableTarget($path, $reason ?? 'could not open the file');
         }
 
         $this->handle = $handle;
         $this->currentPath = $path;
 
-        // Yol listeye dosya AÇILIR AÇILMAZ eklenir: akış ortasında hata alsak bile
-        // çağıran yarım kalan dosyayı görüp temizleyebilsin.
+        // The path is added to the list AS SOON AS the file is opened: so that even if we hit an
+        // error mid-stream, the caller can see the half-written file and clean it up.
         $this->paths[] = $path;
 
         if ($this->writeBom) {
@@ -220,15 +223,15 @@ final class CsvWriter implements Writer
     }
 
     /**
-     * Tek satırı diske yazar.
+     * Writes a single row to disk.
      *
-     * `$escape` argümanı AÇIKÇA geçilir: PHP 8.4'ten beri bu parametrenin varsayılanına
-     * güvenmek "deprecated" uyarısı üretir (standart dışı kaçış mekanizması PHP 9'da
-     * varsayılan olarak kapatılacak). Değeri açıkça vermek — '\\' de olsa, '' de olsa —
-     * uyarıyı susturur; bu yüzden PHP 8.5'te tek bir deprecation çıkmaz. Aynı şekilde
-     * satır sonu da 6. argümanla verilir, yoksa fputcsv her satırı "\n" ile bitirir.
+     * The `$escape` argument is passed EXPLICITLY: since PHP 8.4, relying on this parameter's
+     * default emits a "deprecated" warning (the non-standard escaping mechanism will be off by
+     * default in PHP 9). Giving the value explicitly — be it '\\' or '' — silences the warning;
+     * that is why not a single deprecation shows up on PHP 8.5. For the same reason the line ending
+     * is given as the 6th argument, otherwise fputcsv ends every row with "\n".
      *
-     * Argüman sırası: $stream, $fields, $separator, $enclosure, $escape, $eol.
+     * Argument order: $stream, $fields, $separator, $enclosure, $escape, $eol.
      *
      * @param list<string> $fields
      */
@@ -236,25 +239,26 @@ final class CsvWriter implements Writer
     {
         $handle = $this->handle ?? throw WriterException::noActiveSheet();
 
-        // Burası satır başına çalışan sıcak yol: hata yakalama kurulumu bilerek yok,
-        // tek bir dönüş değeri kontrolü var. Uyarının kendisini PHP zaten kendi
-        // kanalına basar; biz yalnız akışı durdururuz.
+        // This is the hot path that runs once per row: no error-handling set-up on purpose, just a
+        // single return-value check. PHP prints the warning itself on its own channel; all we do is
+        // stop the stream.
         $written = fputcsv($handle, $fields, $this->delimiter, $this->enclosure, $this->escape, $this->lineEnding);
 
         if (false === $written) {
-            // Disk doldu ya da akış koptu. Sessizce yutulursa kullanıcı eksik bir dosyayı
-            // tam sanıp indirir — mevcut ERP'de tam olarak bu oluyordu.
-            throw ExportException::unwritableTarget($this->currentPath ?? '(bilinmeyen)', 'satır yazılamadı (disk dolu ya da akış kapanmış olabilir)');
+            // The disk filled up or the stream broke. Swallowed silently, the user downloads an
+            // incomplete file believing it is complete — which is exactly what used to happen in
+            // the system this replaces.
+            throw ExportException::unwritableTarget($this->currentPath ?? '(unknown)', 'could not write the row (the disk may be full or the stream may have been closed)');
         }
     }
 
     /**
-     * İkinci ve sonraki sayfalar için dosya yolu türetir.
+     * Derives the file path for the second and later sheets.
      *
-     * Uzantı taban yoldan alınır (yoksa 'csv'), böylece "/tmp/rapor.csv" tabanı için
-     * ikinci sayfa "/tmp/rapor-sayfa-2.csv" olur. Dizin kısmına hiç dokunulmaz — yol
-     * dizesi olduğu gibi kesilip eklenir; `dirname()` kullanmak "rapor.csv" gibi göreli
-     * yolları "./rapor-...csv" hâline getirirdi.
+     * The extension is taken from the base path (or 'csv' if there is none), so for the base
+     * "/tmp/report.csv" the second sheet becomes "/tmp/report-sheet-2.csv". The directory part is
+     * never touched — the path string is cut and appended as it is; using `dirname()` would turn a
+     * relative path such as "report.csv" into "./report-...csv".
      */
     private function derivePath(string $sheetName): string
     {
@@ -267,14 +271,15 @@ final class CsvWriter implements Writer
         $slug = $this->slugify($sheetName);
 
         if ('' === $slug) {
-            // Ad tamamen sembolden ibaretse (ya da boşsa) sıraya düşeriz; dosya adı boş kalmamalı.
-            $slug = 'sayfa-'.($this->sheetIndex + 1);
+            // If the name consists entirely of symbols (or is empty) we fall back to the index; the
+            // file name must not be left empty.
+            $slug = 'sheet-'.($this->sheetIndex + 1);
         }
 
         $path = $stem.'-'.$slug.'.'.$extension;
 
-        // İki sayfa aynı ada sadeleşirse (ör. "Ürün A" ve "Ürün-A") ikincisi birincisinin
-        // üzerine yazardı; sıra numarası ekleyerek çakışmayı kırıyoruz.
+        // If two sheets reduce to the same name (e.g. "Product A" and "Product-A") the second would
+        // overwrite the first; we break the collision by appending the index.
         if (in_array($path, $this->paths, true)) {
             $path = $stem.'-'.$slug.'-'.($this->sheetIndex + 1).'.'.$extension;
         }
@@ -283,13 +288,13 @@ final class CsvWriter implements Writer
     }
 
     /**
-     * Sayfa adını dosya adında güvenle kullanılabilecek bir parçaya indirger.
+     * Reduces the sheet name to a fragment that can safely be used in a file name.
      *
-     * Türkçe harfler ASCII karşılıklarına çevrilir: dosya adı indirme başlığından
-     * (Content-Disposition) zip girdisine kadar birçok yerden geçiyor ve bu katmanların
-     * her biri UTF-8'i doğru taşımıyor — "Ürün Listesi.csv" kullanıcının diskine
-     * "ÃœrÃ¼n Listesi.csv" olarak düşebiliyor. Adın kendisi (sayfa başlığı) zaten
-     * dosyanın İÇİNDE değil, sadece adında sadeleşir.
+     * Turkish letters are converted to their ASCII counterparts: a file name passes through many
+     * layers, from the download header (Content-Disposition) all the way to a zip entry, and not
+     * every one of those layers carries UTF-8 correctly — "Ürün Listesi.csv" can land on the user's
+     * disk as "ÃœrÃ¼n Listesi.csv". The name itself (the sheet title) is only reduced in the file
+     * name, not INSIDE the file.
      */
     private function slugify(string $name): string
     {
@@ -304,7 +309,8 @@ final class CsvWriter implements Writer
 
         $lower = strtolower($ascii);
 
-        // Geriye kalan her şey (boşluk, nokta, eğik çizgi, çevrilemeyen unicode) tireye döner.
+        // Everything else that is left (spaces, dots, slashes, untranslatable unicode) turns into a
+        // hyphen.
         $slug = preg_replace('/[^a-z0-9]+/', '-', $lower) ?? '';
 
         return trim($slug, '-');

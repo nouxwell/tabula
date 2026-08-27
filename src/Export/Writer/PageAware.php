@@ -8,30 +8,31 @@ use Balin\Tabula\Export\Page\ColumnBudget;
 use Balin\Tabula\Export\Page\Page;
 
 /**
- * Sayfa geometrisini SONRADAN kabul edebilen yazıcı.
+ * A writer that can accept page geometry AFTER THE FACT.
  *
- * `Writer` arayüzü kâğıttan hiç haberdar değildir ve öyle kalmalıdır: CSV'nin ve xlsx'in
- * sayfa boyutu diye bir kavramı yoktur, `open()/startSheet()/writeRow()` imzalarına `Page`
- * sızdırmak iki yazıcıyı da hiç kullanmayacakları bir kavrama bağlar, üstelik "bu yazıcı
- * sayfa ayarını yok sayıyor" gibi sessiz bir yalana kapı açardı.
+ * The `Writer` interface knows nothing at all about paper, and it must stay that way: CSV and xlsx
+ * have no concept of a page size, leaking `Page` into the `open()/startSheet()/writeRow()`
+ * signatures would tie both writers to a concept they will never use, and on top of that it would
+ * open the door to a silent lie such as "this writer ignores the page setting".
  *
- * `ExportBuilder` bu yüzden dışa aktarma başına sayfa ayarını yazıcıya BU arayüz üzerinden
- * iter — arayüzü desteklemeyen yazıcıya hiç dokunmadan:
+ * That is why `ExportBuilder` pushes the per-export page setting to the writer through THIS
+ * interface — without touching a writer that does not support it at all:
  *
  *     if ($writer instanceof PageAware) {
  *         $writer = $writer->withPage($page, $budget);
  *     }
  *
- * Yani kâğıt bilgisi `Writer` sözleşmesine değil, yalnız onu gerçekten kullanan yazıcıya
- * ulaşır.
+ * So the paper information reaches only the writer that actually uses it, not the `Writer`
+ * contract.
  *
- * null geçilen argüman "elimdekini koru" demektir; böylece yalnız sayfayı büyütüp bütçeye
- * dokunmamak (ya da tersi) mümkün olur. `withPage(null, null)` da geçerlidir ve hiçbir şeyi
- * değiştirmez.
+ * A null argument means "keep what I have"; that is what makes it possible to enlarge only the
+ * page without touching the budget (or the other way round). `withPage(null, null)` is valid too
+ * and changes nothing.
  *
- * Dönüş `static`tir çünkü ayar YERİNDE DEĞİŞTİRİLMEZ, yeni bir örnek döner: aynı yazıcı
- * örneği (ör. `ExportBuilder::writer()` ile elle verilmiş bir örnek) birden çok dışa
- * aktarmada paylaşılıyor olabilir ve birinin A3'ü diğerinin çıktısına sızmamalıdır.
+ * The return type is `static` because the setting IS NOT APPLIED IN PLACE, a new instance is
+ * returned: the same writer instance (e.g. one handed over by hand through
+ * `ExportBuilder::writer()`) may be shared across several exports, and one export's A3 must not
+ * bleed into another one's output.
  */
 interface PageAware
 {

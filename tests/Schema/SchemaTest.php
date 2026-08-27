@@ -15,19 +15,21 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Şema, tablonun tek doğruluk kaynağıdır; bu yüzden burada test edilen iki şey kritiktir:
+ * The schema is the single source of truth for the table, which makes the two things tested
+ * here critical:
  *
- *  1. Sessiz yutma yok — bilinmeyen ya da çift anahtar her zaman hata olur. Eski ERP'de
- *     istemciden gelen tanınmayan kolon adı sessizce atılıyordu ve kullanıcı eksik kolonu
- *     ancak dosyayı açtığında fark ediyordu.
- *  2. `only()` İSTENEN SIRAYI korur — istemcideki kolon seçici kolonları sürükleyip
- *     sıralayabildiği için, seçim sırası tanım sırasını ezmek zorundadır.
+ *  1. Nothing is swallowed silently — an unknown or duplicate key is always an error. In the
+ *     system this replaces, an unrecognised column name coming from the client was
+ *     silently dropped, and the user only noticed the missing column once they opened the
+ *     file.
+ *  2. `only()` preserves the REQUESTED ORDER — the column picker on the client can drag and
+ *     reorder columns, so the selection order has to override the definition order.
  */
 #[CoversClass(Schema::class)]
 #[CoversClass(SchemaException::class)]
 final class SchemaTest extends TestCase
 {
-    // ---------------------------------------------------------------- kuruluş
+    // ---------------------------------------------------------------- construction
 
     #[Test]
     public function makeStoresTheName(): void
@@ -39,7 +41,7 @@ final class SchemaTest extends TestCase
     public function makeRejectsABlankName(): void
     {
         $this->expectException(SchemaException::class);
-        $this->expectExceptionMessage('Şema adı boş olamaz.');
+        $this->expectExceptionMessage('The schema name cannot be empty.');
 
         Schema::make('   ');
     }
@@ -70,7 +72,7 @@ final class SchemaTest extends TestCase
         self::assertSame('balance', $fields['balance']->getKey());
     }
 
-    // ---------------------------------------------------------------- değişmezlik
+    // ---------------------------------------------------------------- immutability
 
     #[Test]
     public function fieldsReturnsACloneAndDoesNotMutateTheOriginal(): void
@@ -79,7 +81,7 @@ final class SchemaTest extends TestCase
         $extended = $schema->fields(Field::string('taxNumber'));
 
         self::assertNotSame($schema, $extended);
-        self::assertSame(['code', 'name', 'balance'], $schema->getKeys(), 'Özgün şema büyümemeli.');
+        self::assertSame(['code', 'name', 'balance'], $schema->getKeys(), 'The original schema must not grow.');
         self::assertSame(['code', 'name', 'balance', 'taxNumber'], $extended->getKeys());
     }
 
@@ -113,13 +115,13 @@ final class SchemaTest extends TestCase
         self::assertSame(['code', 'name', 'balance'], $schema->getKeys());
     }
 
-    // ---------------------------------------------------------------- çift anahtar
+    // ---------------------------------------------------------------- duplicate key
 
     #[Test]
     public function duplicateFieldKeyInASingleCallThrows(): void
     {
         $this->expectException(SchemaException::class);
-        $this->expectExceptionMessage('"customer" şemasında "code" alanı birden fazla kez tanımlandı.');
+        $this->expectExceptionMessage('The "customer" schema defines the field "code" more than once.');
 
         Schema::make('customer')->fields(
             Field::string('code'),
@@ -130,9 +132,9 @@ final class SchemaTest extends TestCase
     #[Test]
     public function duplicateFieldKeyAcrossTwoCallsAlsoThrows(): void
     {
-        // Sessiz üzerine yazma yok: ikinci çağrı da aynı korumadan geçer.
+        // No silent overwrite: the second call goes through the same guard.
         $this->expectException(SchemaException::class);
-        $this->expectExceptionMessage('birden fazla kez tanımlandı');
+        $this->expectExceptionMessage('more than once');
 
         self::customerSchema()->fields(Field::string('code'));
     }
@@ -146,7 +148,7 @@ final class SchemaTest extends TestCase
         self::assertInstanceOf(InvalidArgumentException::class, $exception);
     }
 
-    // ---------------------------------------------------------------- alan erişimi
+    // ---------------------------------------------------------------- field access
 
     #[Test]
     public function fieldReturnsTheDefinition(): void
@@ -158,12 +160,12 @@ final class SchemaTest extends TestCase
         self::assertFalse($schema->has('nope'));
     }
 
-    /** Hata mesajı tanımlı anahtarları sayar — yazım hatasını ayıklamanın en hızlı yolu. */
+    /** The error message enumerates the defined keys — the fastest way to track down a typo. */
     #[Test]
     public function unknownFieldThrowsAndListsTheKnownKeys(): void
     {
         $this->expectException(SchemaException::class);
-        $this->expectExceptionMessage('"customer" şemasında "cod" diye bir alan yok. Tanımlı alanlar: code, name, balance');
+        $this->expectExceptionMessage('The "customer" schema has no field called "cod". Defined fields: code, name, balance');
 
         self::customerSchema()->field('cod');
     }
@@ -172,7 +174,7 @@ final class SchemaTest extends TestCase
     public function unknownFieldOnAnEmptySchemaSaysThereAreNone(): void
     {
         $this->expectException(SchemaException::class);
-        $this->expectExceptionMessage('Tanımlı alanlar: (hiç yok)');
+        $this->expectExceptionMessage('Defined fields: (none)');
 
         Schema::make('customer')->field('code');
     }
@@ -180,8 +182,9 @@ final class SchemaTest extends TestCase
     // ---------------------------------------------------------------- only()
 
     /**
-     * Sözleşmenin en kritik maddesi: sonuç TANIM sırasında değil, İSTENEN sırada gelir.
-     * İstemcideki kolon seçici sıralamayı kullanıcıya bıraktığı için buna bağımlıdır.
+     * The most critical clause of the contract: the result comes back in the REQUESTED order,
+     * not in the DEFINITION order. The column picker on the client leaves the ordering up to
+     * the user, so it depends on this.
      */
     #[Test]
     public function onlyPreservesTheRequestedOrderNotTheDefinitionOrder(): void
@@ -191,7 +194,7 @@ final class SchemaTest extends TestCase
         self::assertSame(['balance', 'code'], $schema->only(['balance', 'code'])->getKeys());
         self::assertSame(['name', 'balance', 'code'], $schema->only(['name', 'balance', 'code'])->getKeys());
 
-        // Aynı şemadan iki farklı sıra istenebilir; şema kendisi hiç değişmez.
+        // Two different orders can be requested from the same schema; the schema itself never changes.
         self::assertSame(['code', 'name', 'balance'], $schema->getKeys());
     }
 
@@ -219,7 +222,7 @@ final class SchemaTest extends TestCase
     public function onlyRejectsAnUnknownKeyInsteadOfSwallowingIt(): void
     {
         $this->expectException(SchemaException::class);
-        $this->expectExceptionMessage('"customer" şemasında "iban" diye bir alan yok. Tanımlı alanlar: code, name, balance');
+        $this->expectExceptionMessage('The "customer" schema has no field called "iban". Defined fields: code, name, balance');
 
         self::customerSchema()->only(['code', 'iban']);
     }
@@ -228,7 +231,7 @@ final class SchemaTest extends TestCase
     public function onlyRejectsAnEmptySelection(): void
     {
         $this->expectException(SchemaException::class);
-        $this->expectExceptionMessage('"customer" şemasından en az bir alan seçilmeli.');
+        $this->expectExceptionMessage('At least one field must be selected from the "customer" schema.');
 
         self::customerSchema()->only([]);
     }
@@ -236,7 +239,7 @@ final class SchemaTest extends TestCase
     #[Test]
     public function onlyCollapsesARepeatedKey(): void
     {
-        // Alanlar anahtara göre tutulduğu için aynı anahtar iki kez istenirse tek kolon çıkar.
+        // Fields are held by key, so asking for the same key twice yields a single column.
         self::assertSame(['code'], self::customerSchema()->only(['code', 'code'])->getKeys());
     }
 
@@ -290,7 +293,7 @@ final class SchemaTest extends TestCase
 
         $required = $schema->required();
 
-        // Liste olmalı: anahtarlar 0..n, yazıcıya doğrudan verilebilsin.
+        // It must be a list: keys 0..n, so it can be handed straight to a writer.
         self::assertSame([0, 1], array_keys($required));
         self::assertSame(['code', 'taxNumber'], array_map(static fn (Field $f): string => $f->getKey(), $required));
     }
@@ -301,7 +304,7 @@ final class SchemaTest extends TestCase
         self::assertSame([], self::customerSchema()->required());
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     private static function customerSchema(): Schema
     {

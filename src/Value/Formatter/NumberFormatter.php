@@ -13,14 +13,14 @@ use Balin\Tabula\Value\ValueFormatter;
 use Stringable;
 
 /**
- * Tam sayı, ondalık ve miktar alanlarının biçimlendiricisi.
+ * The formatter for integer, decimal and quantity fields.
  *
- * Hücreye İKİ gösterim birden konur: Excel'e çıplak sayı + biçim kodu, CSV/PDF'e
- * yerelleştirilmiş metin. Mevcut ERP sayıyı yalnız metin olarak yazıyordu; Excel
- * kolonu metin olduğu için toplanmıyor, sıralanmıyor, filtrelenmiyordu.
+ * BOTH representations are put into the cell: a bare number plus a format code for Excel,
+ * and localised text for CSV/PDF. The system this replaces wrote the number as text
+ * only; because the Excel column was text, it could not be summed, sorted or filtered.
  *
- * Basamak sayısı önce alanın kendi `decimals()` değerinden, o yoksa TİPİN
- * varsayılanından gelir (alan ADINA bakan küresel harita yok — bkz. NumberSettings).
+ * The digit count comes from the field's own `decimals()` first, and from the TYPE's default
+ * when the field has none (there is no global map keyed by field NAME — see NumberSettings).
  */
 final class NumberFormatter implements ValueFormatter
 {
@@ -38,16 +38,16 @@ final class NumberFormatter implements ValueFormatter
 
         $formatter = $field->getFormatter();
         if (null !== $formatter) {
-            // Alan biçimlendirmeyi tümüyle devraldıysa sayı mantığı hiç çalışmaz:
-            // sonuç metindir, Excel'de de metin kalır (kullanıcının açık tercihi).
+            // If the field has taken formatting over entirely, the number logic never runs:
+            // the result is text and stays text in Excel too (the user's explicit choice).
             return Cell::text((string) $formatter($raw, $row), $align);
         }
 
         $numbers = $context->settings->numbers;
         $number = self::parse($raw, $numbers);
 
-        // Okunamayan değer TEK satırı boşaltır, dışa aktarmayı düşürmez:
-        // 40 bin satırlık bir raporun tek bozuk hücre yüzünden ölmesi kabul edilemez.
+        // An unreadable value empties THAT ONE cell, it does not bring the export down:
+        // a 40,000-row report dying because of a single broken cell is unacceptable.
         if (null === $number) {
             return Cell::empty($context->settings->emptyText, $align);
         }
@@ -64,33 +64,35 @@ final class NumberFormatter implements ValueFormatter
     }
 
     /**
-     * Ham değeri sayıya çevirir; çeviremezse `null` döner (istisna ATMAZ).
+     * Converts a raw value to a number; returns `null` when it cannot (it does NOT throw).
      *
-     * MoneyFormatter da bunu kullanır: ayrıştırma mantığının kopyalanması, bu paketin
-     * ortadan kaldırmak için var olduğu hatanın (aynı `normalize()` metodunun sekiz ayrı
-     * sınıfa yapıştırılmış olması) aynısı olurdu.
+     * MoneyFormatter uses this too: copying the parsing logic would be the very mistake this
+     * package exists to eliminate (the same `normalize()` method pasted into eight separate
+     * classes).
      *
-     * Dize ayrıştırması gerekiyor çünkü Doctrine `DECIMAL` kolonlarını ve DQL skaler
-     * projeksiyonlarını DİZE olarak döndürür ("1234.5600"). Üstelik ara katmanlardan
-     * hâlihazırda yerelleştirilmiş dizeler de gelebilir ("1.234,56"); mevcut ERP'nin
-     * yaptığı düz `(float)` dönüşümü bu dizeyi sessizce 1.0 yapıyordu.
-     */
-    /**
-     * @param bool $preferLocalized Metnin YERELLEŞTİRİLMİŞ bir gösterimden geldiği biliniyorsa `true`.
+     * String parsing is needed because Doctrine returns `DECIMAL` columns and DQL scalar
+     * projections as STRINGS ("1234.5600"). On top of that, already localised strings can
+     * arrive from intermediate layers ("1.234,56"); the plain `(float)` cast performed by the
+     * system this replaces turned that string silently into 1.0.
      *
-     * Aynı dize, geldiği yöne göre farklı anlama gelir ve bu ayrım AÇIK olmalıdır:
+     * @param bool $preferLocalized `true` when the text is known to come from a LOCALISED representation.
      *
-     *  - Dışa aktarma tarafında değer çoğunlukla veritabanı skalerinden gelir ("1234.5600"),
-     *    orada tek başına nokta HER ZAMAN ondalıktır — kanonik okuma doğrudur.
-     *  - İçe aktarma tarafında metin, bizim ürettiğimiz şablondan ya da kullanıcının kendi
-     *    yerelinde Excel'e yazdığı hücreden gelir. Türkçe ayarlarla `Field::money('balance')`
-     *    1234 değerini "1.234 ₺" diye yazar; bunu kanonik okumak 1.234 verir — SESSİZCE
-     *    1000 KATLIK sapma, üstelik geçerli bir float üretildiği için kimse fark etmez.
+     * The same string means different things depending on which direction it came from, and
+     * that distinction has to be EXPLICIT:
      *
-     * `true` verildiğinde kanonik kısayol atlanır ve yapılandırılmış ayıraçlar kazanır.
-     * Kanonik dizeler yine doğru okunur: "1234.5600" ondalıktan sonra 4 hane taşıdığı için
-     * binlik gruplaması sayılmaz. Kaybedilen tek şey bilimsel gösterimdir ("1e3") — o da
-     * elektronik tablodan zaten yerel `float` olarak gelir, dize olarak değil.
+     *  - On the export side the value mostly comes from a database scalar ("1234.5600"), and
+     *    there a lone dot is ALWAYS the decimal point — the canonical reading is correct.
+     *  - On the import side the text comes either from the template we produced, or from a
+     *    cell the user typed into Excel in their own locale. With Turkish settings,
+     *    `Field::money('balance')` writes the value 1234 as "1.234 ₺"; reading that
+     *    canonically gives 1.234 — a SILENT 1000-FOLD deviation that nobody notices, because
+     *    a perfectly valid float comes out of it.
+     *
+     * When `true` is given, the canonical shortcut is skipped and the configured separators
+     * win. Canonical strings are still read correctly: "1234.5600" carries 4 digits after
+     * the decimal point, so it does not count as thousands grouping. The only thing lost is
+     * scientific notation ("1e3") — and that arrives from a spreadsheet as a native `float`
+     * anyway, not as a string.
      */
     public static function parse(mixed $raw, NumberSettings $numbers, bool $preferLocalized = false): int|float|null
     {
@@ -103,11 +105,12 @@ final class NumberFormatter implements ValueFormatter
         }
 
         if (is_float($raw)) {
-            // NAN/INF sayı değildir; number_format bunları anlamsız metne çevirir.
+            // NAN/INF are not numbers; number_format turns them into meaningless text.
             return is_finite($raw) ? $raw : null;
         }
 
-        // BCMath\Number, Brick\Math gibi sayı nesneleri metinleşebiliyorsa dize yolundan geçer.
+        // Number objects such as BCMath\Number or Brick\Math go down the string path when
+        // they can be turned into text.
         if ($raw instanceof Stringable) {
             $raw = (string) $raw;
         }
@@ -121,11 +124,12 @@ final class NumberFormatter implements ValueFormatter
             return null;
         }
 
-        // Kanonik hâl — veritabanının döndürdüğü "1234.5600", "-0.5", "1e3".
-        // Buradaki tek başına nokta HER ZAMAN ondalıktır; "1.234" = 1.234.
+        // The canonical form — "1234.5600", "-0.5", "1e3" as returned by the database.
+        // A lone dot here is ALWAYS the decimal point; "1.234" = 1.234.
         //
-        // İçe aktarmada bu kısayol ATLANIR: oradaki metin yerelleştirilmiş bir gösterimden
-        // gelir ve "1.234" binlik gruplu 1234 demektir (bkz. $preferLocalized).
+        // On import this shortcut is SKIPPED: the text there comes from a localised
+        // representation, where "1.234" means 1234 with thousands grouping
+        // (see $preferLocalized).
         if (!$preferLocalized && is_numeric($text)) {
             $canonical = $text + 0;
 
@@ -136,15 +140,16 @@ final class NumberFormatter implements ValueFormatter
     }
 
     /**
-     * Negatif gösterimleri tanır.
+     * Recognises the negative notations.
      *
-     * Yalnız baştaki eksiye bakmak yetmez: temizlik adımı parantezleri ve sondaki eksiyi
-     * sildiği için bu biçimler POZİTİF okunur ve işaret sessizce döner. Muhasebe verisinde
-     * bir borcun alacağa dönmesi, bu kütüphanenin yapabileceği en pahalı hatadır.
+     * Looking only at a leading minus is not enough: the cleanup step strips the parentheses
+     * and the trailing minus, so these forms would be read as POSITIVE and the sign would
+     * flip silently. In accounting data, turning a debit into a credit is the most expensive
+     * mistake this library could make.
      *
-     *  - `(1.234,56)`  muhasebe gösterimi
-     *  - `1.234,56-`   SAP/ERP çıktılarında sondaki eksi
-     *  - `₺ -1.234,56` simge önde, eksi sayının hemen önünde
+     *  - `(1.234,56)`  accounting notation
+     *  - `1.234,56-`   trailing minus, as found in SAP/ERP output
+     *  - `₺ -1.234,56` symbol first, minus immediately in front of the number
      */
     private static function isNegative(string $text): bool
     {
@@ -160,14 +165,15 @@ final class NumberFormatter implements ValueFormatter
     }
 
     /**
-     * Ayırıcı taşıyan (ya da simge/boşluk bulaşmış) dizeyi çözer.
+     * Resolves a string that carries separators (or has picked up symbols/whitespace).
      */
     private static function parseLocalized(string $text, NumberSettings $numbers): int|float|null
     {
-        // Eksi işareti temizlikte kaybolacağı için önce alınır.
+        // The minus sign is taken first, because the cleanup would lose it.
         $negative = self::isNegative($text);
 
-        // Kırılmaz/ince boşluklar bazı yerelleştirmelerde binlik ayırıcıdır; normal boşluğa indirgenir.
+        // Non-breaking/thin spaces are the thousands separator in some locales; they are
+        // reduced to an ordinary space.
         $text = str_replace(["\u{00A0}", "\u{202F}", "\u{2009}"], ' ', $text);
 
         $separators = self::separators($numbers);
@@ -207,10 +213,11 @@ final class NumberFormatter implements ValueFormatter
     }
 
     /**
-     * En sağdaki ayırıcının ondalık mı, binlik mi olduğuna karar verir.
+     * Decides whether the right-most separator is the decimal point or a thousands separator.
      *
-     * Belirsizlik kaçınılmazdır ("1.234" hem bin iki yüz otuz dört hem 1,234 olabilir);
-     * kurallar en olası okumayı seçecek şekilde sıralanmıştır.
+     * The ambiguity is unavoidable ("1.234" can be both one thousand two hundred and
+     * thirty-four and 1.234); the rules are ordered so that the most likely reading is
+     * chosen.
      *
      * @param list<string> $separators
      */
@@ -221,40 +228,43 @@ final class NumberFormatter implements ValueFormatter
         array $separators,
         NumberSettings $numbers,
     ): bool {
-        // Ondalık kısım yalnızca rakamdan oluşur.
+        // The decimal part consists of digits only.
         if ('' === $tail || !ctype_digit($tail)) {
             return false;
         }
 
-        // (a) Solunda FARKLI bir ayırıcı varsa en sağdaki kesinlikle ondalıktır: "1.234,56".
+        // (a) If a DIFFERENT separator sits to its left, the right-most one is definitely
+        //     the decimal point: "1.234,56".
         foreach ($separators as $other) {
             if ($other !== $separator && str_contains($head, $other)) {
                 return true;
             }
         }
 
-        // (b) Aynı ayırıcı birden çok kez geçiyorsa gruplayıcıdır: "1.234.567".
+        // (b) If the same separator occurs more than once it is a grouping separator: "1.234.567".
         if (str_contains($head, $separator)) {
             return false;
         }
 
-        // (c) Tek geçiş, yapılandırılmış ondalık ayırıcı: ayar kazanır.
+        // (c) A single occurrence of the configured decimal separator: the setting wins.
         if ($separator === $numbers->decimalSeparator) {
             return true;
         }
 
-        // (d) Tek geçiş, yapılandırılmış binlik ayırıcı: tam üç rakam izliyorsa gruplama
-        //     ("1.234 ₺" → 1234), değilse ondalık ("1.5 ₺" → 1.5).
+        // (d) A single occurrence of the configured thousands separator: grouping when
+        //     exactly three digits follow ("1.234 ₺" → 1234), decimal otherwise
+        //     ("1.5 ₺" → 1.5).
         if ($separator === $numbers->thousandSeparator) {
             return 3 !== strlen($tail);
         }
 
-        // (e) Yapılandırılmamış evrensel aday: kanonik nokta/virgül gibi ondalık say.
+        // (e) A universal candidate that is not configured: treat it as decimal, like the
+        //     canonical dot/comma.
         return true;
     }
 
     /**
-     * Dizede en sağda duran ayırıcı ve bayt konumu.
+     * The right-most separator in the string, and its byte position.
      *
      * @param list<string> $separators
      *
@@ -277,10 +287,10 @@ final class NumberFormatter implements ValueFormatter
     }
 
     /**
-     * Aday ayırıcılar: yapılandırılanlar + evrensel nokta/virgül.
+     * The candidate separators: the configured ones plus the universal dot and comma.
      *
-     * Evrensel olanlar da listededir; Türkçe ayarla çalışırken İngilizce biçimli bir
-     * dize gelirse ("1,234.56") ayırıcı yine tanınsın diye.
+     * The universal ones are on the list as well, so that a string in English format
+     * ("1,234.56") is still recognised while running with Turkish settings.
      *
      * @return list<string>
      */
@@ -294,7 +304,7 @@ final class NumberFormatter implements ValueFormatter
         )));
     }
 
-    /** Yalnız rakamdan oluşan dizeyi sayıya çevirir; PHP_INT_MAX üstünde float'a yükselir. */
+    /** Converts a digits-only string to a number; above PHP_INT_MAX it is promoted to a float. */
     private static function toInteger(string $digits): int|float|null
     {
         return ctype_digit($digits) ? $digits + 0 : null;
@@ -309,7 +319,7 @@ final class NumberFormatter implements ValueFormatter
         return -$value;
     }
 
-    /** Alanın kendi basamağı yoksa tipin varsayılanı; tam sayıda ondalık yoktur. */
+    /** The type's default when the field has no digit count of its own; an integer has no decimals. */
     private static function digitsFor(Field $field, NumberSettings $numbers): int
     {
         if (FieldType::Integer === $field->getType()) {
@@ -320,8 +330,8 @@ final class NumberFormatter implements ValueFormatter
     }
 
     /**
-     * Tam sayı alanı Excel'e gerçekten `int` olarak gider — hücre "1,00" değil "1" görünsün,
-     * kayıt/stok adedi ondalıklı sanılmasın diye.
+     * An integer field really does reach Excel as an `int` — so that the cell shows "1" and
+     * not "1,00", and a record/stock count is not mistaken for a decimal.
      */
     private static function coerceToType(int|float $number, FieldType $type): int|float
     {
@@ -331,10 +341,10 @@ final class NumberFormatter implements ValueFormatter
 
         $rounded = round((float) $number);
 
-        // PHP_INT_MAX dışındaki float'ta (int) dönüşümü uyarı verir ve işareti ters çevirir;
-        // float bırakmak Excel açısından hâlâ sayıdır, yanlış sayıdan iyidir.
-        // Karşılaştırma KATI olmalı: (float) PHP_INT_MAX yukarı yuvarlanarak 2^63 olur,
-        // yani sınırın kendisi int'e sığmaz.
+        // For a float outside PHP_INT_MAX the (int) cast emits a warning and flips the sign;
+        // leaving it as a float is still a number as far as Excel is concerned, which beats
+        // a wrong number. The comparison must be STRICT: (float) PHP_INT_MAX rounds up to
+        // 2^63, so the limit itself does not fit into an int.
         return abs($rounded) < (float) PHP_INT_MAX ? (int) $rounded : $rounded;
     }
 }

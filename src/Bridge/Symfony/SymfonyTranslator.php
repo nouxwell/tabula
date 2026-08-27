@@ -10,36 +10,38 @@ use Symfony\Component\Translation\TranslatorBagInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
- * `Translator` portunun Symfony uygulaması.
+ * The Symfony implementation of the `Translator` port.
  *
- * ÇEVİRİ ALANI SORUNU: Symfony katalogları alanlara (domain) bölünmüştür — ERP'de etiketler
- * `messages`, enum karşılıkları `enum` alanında durur. Ama enum'lar çeviri anahtarını
- * `label(): string` ile döndürür ve o anahtar alan bilgisi TAŞIMAZ. 200'den fazla mevcut
- * enum'a dokunmadan bunu çözmek için iki yol vardır:
+ * THE TRANSLATION DOMAIN PROBLEM: Symfony catalogues are split into domains — in the system
+ * this replaces, labels live in `messages` and enum texts in the `enum` domain. But
+ * enums return their translation key through `label(): string`, and that key CARRIES NO domain
+ * information. There are two ways to solve this without touching more than 200 existing enums:
  *
- *  1. AÇIK ÖNEK — `enum:purchase_status.open`. Önek `addressableDomains` listesindeyse alan
- *     sayılır; aksi hâlde anahtarın parçası kabul edilir (içinde iki nokta geçen anahtarların
- *     yanlışlıkla bölünmesini önler).
- *  2. ALAN ZİNCİRİ — önek yoksa `domains` sırayla denenir ve İLK TANIMLI alan kazanır.
+ *  1. AN EXPLICIT PREFIX — `enum:purchase_status.open`. If the prefix is in the
+ *     `addressableDomains` list it counts as a domain; otherwise it is taken to be part of the
+ *     key (which stops keys containing a colon from being split by accident).
+ *  2. A DOMAIN CHAIN — with no prefix, `domains` are tried in order and the FIRST domain that
+ *     defines the key wins.
  *
- * ISABET TESPİTİ — burası sinsi. İlk sürüm "Symfony ıskada anahtarı geri döndürür" varsayıp
- * dönen dizeyi `strtr($key, $params)` ile karşılaştırıyordu. Bu ÜÇ durumda yanlış sonuç verir
- * (üçü de gerçek `Symfony\Component\Translation\Translator` ile doğrulandı):
+ * HIT DETECTION — this is the treacherous part. The first version assumed "Symfony gives the
+ * key back on a miss" and compared the returned string with `strtr($key, $params)`. That gives
+ * the wrong answer in THREE cases (all three verified against the real
+ * `Symfony\Component\Translation\Translator`):
  *
- *   a) YANLIŞ ISKA — kendi anahtarına eşit çeviri. `messages: ['IBAN' => 'IBAN']` tanımlıdır
- *      ama ıska sanılır ve zincirdeki SONRAKİ alan sessizce kazanır. ERP'de kendine eşit
- *      çeviri hiç de nadir değildir (IBAN, KDV, ISO kodları, birim simgeleri).
- *   b) YANLIŞ ISABET — ICU alanı (`messages+intl-icu`). Iskada ICU biçimlendirici
- *      `%name%` yerleştirmesi YAPMAZ; dönen dize `strtr` sonucuna eşit olmaz, zincir orada
- *      durur ve hücreye ham anahtar yazılır.
- *   c) YANLIŞ ISABET — `|` içeren çoğul anahtarlar. Iskayı `IdentityTranslator` çoğul
- *      seçimiyle biçimlendirir, `strtr` ile değil.
+ *   a) A FALSE MISS — a translation equal to its own key. `messages: ['IBAN' => 'IBAN']` is
+ *      defined but is taken for a miss, and the NEXT domain in the chain silently wins.
+ *      A translation equal to itself is not rare at all (IBAN, VAT, ISO codes, unit symbols).
+ *   b) A FALSE HIT — an ICU domain (`messages+intl-icu`). On a miss the ICU formatter DOES NOT
+ *      substitute `%name%`; the returned string is not equal to the `strtr` result, the chain
+ *      stops right there and the raw key is written into the cell.
+ *   c) A FALSE HIT — plural keys containing `|`. A miss is formatted by `IdentityTranslator`
+ *      with plural selection, not with `strtr`.
  *
- * Çözüm: dönen dizeden isabet ÇIKARMAK yerine kataloğa SORMAK. Symfony'nin gerçek
- * translator'ı (ve Logging/DataCollector sarmalayıcıları) `TranslatorBagInterface` uygular;
- * `defines()` kendi yedek kataloglarını gezmediği için yedek zinciri elle yürünür.
- * `TranslatorBagInterface` uygulamayan bir translator verilirse eski sezgisel yönteme
- * düşülür — kusurlu ama hiç yoktan iyidir.
+ * The fix: ASK the catalogue instead of INFERRING the hit from the returned string. Symfony's
+ * real translator (and the Logging/DataCollector wrappers) implement `TranslatorBagInterface`;
+ * since `defines()` does not walk their fallback catalogues, the fallback chain is walked by
+ * hand. If a translator that does not implement `TranslatorBagInterface` is given, we drop
+ * back to the old heuristic — flawed, but better than nothing at all.
  */
 final readonly class SymfonyTranslator implements Translator
 {
@@ -47,9 +49,9 @@ final readonly class SymfonyTranslator implements Translator
     private array $addressableDomains;
 
     /**
-     * @param list<string>      $domains            sırayla denenecek çeviri alanları
-     * @param list<string>|null $addressableDomains `alan:anahtar` önekiyle erişilebilen alanlar
-     *                                              (null = `$domains` ile aynı)
+     * @param list<string>      $domains            the translation domains, tried in order
+     * @param list<string>|null $addressableDomains the domains reachable with a `domain:key` prefix
+     *                                              (null = the same as `$domains`)
      */
     public function __construct(
         private TranslatorInterface $translator,
@@ -57,10 +59,11 @@ final readonly class SymfonyTranslator implements Translator
         private string $domainSeparator = ':',
         ?array $addressableDomains = null,
     ) {
-        // Açıkça adreslenebilir alanlar zincirin ÜST KÜMESİDİR: zincirde olan her alan
-        // önekle de çağrılabilmelidir, ayrıca zincir dışı alanlar (ör. `validators`) da
-        // listelenebilir. Aksi hâlde önek yalnızca zaten zincirde olan — yani öneke ihtiyaç
-        // duymayan — alanlarda çalışırdı ki bu, özelliğin tam tersi olurdu.
+        // The explicitly addressable domains are a SUPERSET of the chain: every domain in the
+        // chain must also be callable with a prefix, and domains outside the chain (e.g.
+        // `validators`) may be listed as well. Otherwise the prefix would only work for
+        // domains that are already in the chain — that is, exactly the domains that have no
+        // need of a prefix — which would be the very opposite of the feature.
         $this->addressableDomains = array_values(array_unique(
             [...$domains, ...($addressableDomains ?? [])],
         ));
@@ -87,9 +90,9 @@ final readonly class SymfonyTranslator implements Translator
     }
 
     /**
-     * Anahtarı TANIMLAYAN ilk alanı bulur; yedek kataloglar da gezilir.
+     * Finds the first domain that DEFINES the key; the fallback catalogues are walked as well.
      *
-     * ICU alanları ayrı bir katalog alanında (`<domain>+intl-icu`) durduğu için ikisi de sorulur.
+     * Since ICU domains sit in a separate catalogue domain (`<domain>+intl-icu`), both are asked.
      */
     private function findDefiningDomain(string $id, ?string $locale): ?string
     {
@@ -113,9 +116,10 @@ final readonly class SymfonyTranslator implements Translator
     }
 
     /**
-     * `TranslatorBagInterface` uygulamayan translator'lar için yedek sezgisel yöntem.
+     * The fallback heuristic for translators that do not implement `TranslatorBagInterface`.
      *
-     * Yukarıda anlatılan üç kusuru taşır; yalnızca kataloğa soramadığımız için buradadır.
+     * It carries the three defects described above; it is here only because we cannot ask the
+     * catalogue.
      *
      * @param array<string, string> $normalized
      */
@@ -131,8 +135,9 @@ final readonly class SymfonyTranslator implements Translator
             }
         }
 
-        // Hiçbir alanda yok: anahtarın kendisi görünür kalsın — hücre asla boş kalmaz,
-        // ve eksik çeviri çıktıda gözle görülür (sessizce boşluk bırakmaktan iyidir).
+        // In no domain at all: let the key itself stay visible — the cell is never left empty,
+        // and a missing translation is visible to the eye in the output (better than silently
+        // leaving a blank).
         return $miss;
     }
 
@@ -155,14 +160,15 @@ final readonly class SymfonyTranslator implements Translator
 
         $id = substr($key, $position + strlen($this->domainSeparator));
 
-        // `enum:` gibi gövdesiz bir anahtar boş hücre üretirdi; bozuk anahtarı olduğu gibi
-        // göstermek, sessizce boşluk bırakmaktan iyidir.
+        // A key with no body, such as `enum:`, would produce an empty cell; showing the broken
+        // key as it is beats silently leaving a blank.
         return '' === $id ? [null, $key] : [$prefix, $id];
     }
 
     /**
-     * Kütüphane parametreleri sade adla verir (`['count' => 5]`); Symfony ise yer tutucu
-     * biçimini bekler (`['%count%' => 5]`). Zaten yüzdeyle sarılmış adlar olduğu gibi geçer.
+     * The library passes parameters by plain name (`['count' => 5]`); Symfony, on the other
+     * hand, expects the placeholder form (`['%count%' => 5]`). Names already wrapped in
+     * percent signs pass through as they are.
      *
      * @param array<string, string|int|float> $params
      *

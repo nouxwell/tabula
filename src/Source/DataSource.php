@@ -5,14 +5,15 @@ declare(strict_types=1);
 namespace Balin\Tabula\Source;
 
 /**
- * Satır kaynağı.
+ * A source of rows.
  *
- * Tüm uygulamalar TEMBEL olmalıdır: `rows()` bir generator döndürür ve satırlar
- * tüketildikçe üretilir. Boru hattının tamamı akış tabanlı olduğu için bellek
- * satır sayısıyla birlikte büyümez.
+ * Every implementation must be LAZY: `rows()` returns a generator and the rows are produced as
+ * they are consumed. Because the whole pipeline is stream-based, memory does not grow along
+ * with the number of rows.
  *
- * (Mevcut ERP motoru tüm satırları tek bir `Spreadsheet` nesnesine yığıp sonra
- * dizeye çeviriyordu; bu yüzden 10.000 satırlık sert bir tavan konmuştu.)
+ * (The engine of the system this replaces piled every row into a single `Spreadsheet` object
+ * and only then converted them to strings; that is why a hard ceiling of 10,000 rows had been
+ * put in place.)
  */
 interface DataSource
 {
@@ -22,7 +23,7 @@ interface DataSource
     public function rows(): iterable;
 
     /**
-     * Toplam satır sayısı biliniyorsa döner (ilerleme çubuğu için); bilinmiyorsa null.
+     * Returns the total row count if it is known (for a progress bar); null if it is not.
      */
     public function count(): ?int;
 }

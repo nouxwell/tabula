@@ -12,28 +12,29 @@ use Closure;
 use UnitEnum;
 
 /**
- * Alan değerine göre sayfa — her depo/kategori kendi sekmesinde.
+ * A sheet per field value — every warehouse/category in its own tab.
  *
- * DİKKAT: strateji satırları yeniden sıralamaz. Aynı grubun tek sayfada toplanması için
- * veri kaynağı o alana göre SIRALI gelmelidir; aksi hâlde aynı ad birden çok kez açılır.
+ * CAUTION: the strategy does not reorder rows. For a group to end up on a single sheet, the data
+ * source must already arrive SORTED by that field; otherwise the same name is opened more than
+ * once.
  *
- * Değer okuma işi `ValueResolver`e devredilir — burada ikinci bir yol yürüyüşü YAZILMAZ.
- * (Elle yazılmış bir kopya, çözümleyicinin "önce düz anahtarı dene" adımını kaçırdığı için
- * `['c.code' => 'X']` gibi Doctrine projeksiyon satırlarında sessizce yedek ada düşüyordu.)
+ * Reading the value is delegated to `ValueResolver` — a second path walk is NOT WRITTEN here.
+ * (A hand-written copy missed the resolver's "try the flat key first" step and therefore fell
+ * silently back to the fallback name on Doctrine projection rows such as `['c.code' => 'X']`.)
  */
 final readonly class GroupedSheets implements SheetStrategy
 {
     private ValueResolver $resolver;
 
-    /** Yol tabanlı okumayı çözümleyiciye taşıyan taşıyıcı alan; kapanış verildiyse null. */
+    /** The carrier field that hands path-based reading over to the resolver; null if a closure was given. */
     private ?Field $field;
 
     /**
-     * @param string|Closure(mixed): mixed $by alan anahtarı/nokta yolu ya da satırdan değer üreten kapanış
+     * @param string|Closure(mixed): mixed $by field key / dotted path, or a closure that produces a value from the row
      */
     public function __construct(
         private string|Closure $by,
-        private string $fallbackName = 'Diğer',
+        private string $fallbackName = 'Other',
     ) {
         $this->resolver = new ValueResolver();
         $this->field = $by instanceof Closure ? null : Field::string('__sheet')->from($by);
@@ -42,7 +43,7 @@ final readonly class GroupedSheets implements SheetStrategy
     public function sheetFor(int $rowIndex, mixed $row, FormatContext $context): string
     {
         if (null === $this->field) {
-            /** @var Closure $by kapanış verildiğinde taşıyıcı alan kurulmaz */
+            /** @var Closure $by no carrier field is set up when a closure is given */
             $by = $this->by;
 
             return $this->toSheetName($by($row));
@@ -59,8 +60,9 @@ final readonly class GroupedSheets implements SheetStrategy
             $value = $value->name;
         }
 
-        // `false` ÖZEL DURUM: `(string) false` boş dizedir ve boş ad yedek ada düşer.
-        // O zaman "hayır" grubu ile "değeri olmayan" grubu AYNI sayfada birleşirdi — veri kaybı.
+        // `false` IS A SPECIAL CASE: `(string) false` is the empty string, and an empty name falls
+        // back to the fallback name. The "no" group and the "has no value" group would then be
+        // merged onto the SAME sheet — data loss.
         if (is_bool($value)) {
             return $value ? '1' : '0';
         }

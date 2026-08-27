@@ -29,17 +29,18 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 /**
- * Tabula'nın Symfony kablolaması.
+ * Tabula's Symfony wiring.
  *
- * NEDEN GEREKLİ: ana uygulamada servisleri kaydeden tek glob `App\: resource: '../src/'`
- * biçimindedir ve `vendor/` altındaki hiçbir sınıfı görmez. Kütüphane kendi kablolamasını
- * getirmezse tek bir servisi bile otomatik tanımlanmaz. Bu bundle o boşluğu doldurur.
+ * WHY THIS IS NEEDED: in the host application the only glob that registers services is of the
+ * form `App\: resource: '../src/'`, and it sees no class under `vendor/`. If the library does
+ * not bring its own wiring along, not a single one of its services gets autowired. This bundle
+ * fills that gap.
  *
- * Kurulum — `config/bundles.php`:
+ * Installation — `config/bundles.php`:
  *
  *     Balin\Tabula\Bridge\Symfony\TabulaBundle::class => ['all' => true],
  *
- * Yapılandırma — `config/packages/tabula.yaml`:
+ * Configuration — `config/packages/tabula.yaml`:
  *
  *     tabula:
  *         default_locale: '%kernel.default_locale%'
@@ -54,7 +55,7 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
  *         template:
  *             sample_rows: 5
  *
- * Ardından `Balin\Tabula\Tabula` her yere otomatik enjekte edilebilir.
+ * After that, `Balin\Tabula\Tabula` can be autowired anywhere.
  */
 final class TabulaBundle extends AbstractBundle
 {
@@ -64,8 +65,9 @@ final class TabulaBundle extends AbstractBundle
     {
         parent::build($container);
 
-        // Uygulamada Symfony çevirmeni yoksa portu Passthrough'a bağla — aksi hâlde
-        // var olmayan `TranslatorInterface` takma adına bağımlılık tüm konteyneri düşürür.
+        // If the application has no Symfony translator, bind the port to Passthrough —
+        // otherwise a dependency on the non-existent `TranslatorInterface` alias brings the
+        // whole container down.
         $container->addCompilerPass(new TranslatorFallbackPass());
     }
 
@@ -75,11 +77,11 @@ final class TabulaBundle extends AbstractBundle
             ->children()
                 ->scalarNode('default_locale')
                     ->defaultValue('%kernel.default_locale%')
-                    ->info('Çıktı dili verilmediğinde kullanılacak varsayılan dil.')
+                    ->info('The default language used when no output language is given.')
                 ->end()
                 ->scalarNode('empty_text')
                     ->defaultValue('')
-                    ->info('Boş hücrede yazılacak metin (ör. "-"). Boş bırakılırsa hücre hiç yaratılmaz.')
+                    ->info('The text written into an empty cell (e.g. "-"). If left empty, the cell is not created at all.')
                 ->end()
                 ->scalarNode('bool_true_key')->defaultValue('tabula.bool.yes')->end()
                 ->scalarNode('bool_false_key')->defaultValue('tabula.bool.no')->end()
@@ -87,31 +89,31 @@ final class TabulaBundle extends AbstractBundle
                     ->defaultValue(1_048_575)
                     ->min(1)
                     ->max(1_048_575)
-                    ->info('Bir sayfaya yazılacak azami satır. Excel tavanı 1.048.576 satırdır (başlık dahil).')
+                    ->info('The maximum number of rows written to one sheet. Excel\'s ceiling is 1,048,576 rows (header included).')
                 ->end()
 
                 ->arrayNode('translation')
                     ->addDefaultsIfNotSet()
                     ->children()
                         ->arrayNode('domains')
-                            ->info('Sırayla denenecek çeviri alanları. ERP için genellikle ["messages", "enum"].')
+                            ->info('The translation domains, tried in order. In an ERP-style application typically ["messages", "enum"].')
                             ->scalarPrototype()->end()
                             ->defaultValue(['messages'])
                             ->requiresAtLeastOneElement()
-                            // Ortam dosyaları listeyi DARALTMAK için yazılır; derin birleştirme
-                            // açık kalırsa `prod/tabula.yaml` listeyi daraltmak yerine genişletir
-                            // ve aynı alan iki kez sorgulanır.
+                            // Environment files are written to NARROW the list; if deep merging
+                            // is left on, `prod/tabula.yaml` widens the list instead of
+                            // narrowing it and the same domain is queried twice.
                             ->performNoDeepMerging()
                         ->end()
                         ->arrayNode('addressable_domains')
-                            ->info('`alan:anahtar` önekiyle erişilebilen EK alanlar (ör. ["validators"]). `domains` zaten dahildir.')
+                            ->info('EXTRA domains reachable with a `domain:key` prefix (e.g. ["validators"]). `domains` is already included.')
                             ->scalarPrototype()->end()
                             ->defaultValue([])
                             ->performNoDeepMerging()
                         ->end()
                         ->scalarNode('domain_separator')
                             ->defaultValue(':')
-                            ->info('Açık alan öneki ayracı, ör. "enum:purchase_status.open".')
+                            ->info('The separator of the explicit domain prefix, e.g. "enum:purchase_status.open".')
                         ->end()
                     ->end()
                 ->end()
@@ -129,7 +131,7 @@ final class TabulaBundle extends AbstractBundle
                             ->defaultValue('after')
                         ->end()
                         ->arrayNode('currency_symbols')
-                            ->info('Para birimi kodu => simge, ör. TRY: "₺".')
+                            ->info('Currency code => symbol, e.g. TRY: "₺".')
                             ->scalarPrototype()->end()
                             ->defaultValue([])
                         ->end()
@@ -148,14 +150,15 @@ final class TabulaBundle extends AbstractBundle
 
                 ->arrayNode('csv')
                     ->addDefaultsIfNotSet()
-                    ->info('Varsayılanlar Türkçe Excel içindir. Makineye giden besleme için: delimiter "," · escape "" · write_bom false.')
+                    ->info('The defaults target Turkish Excel. For a machine-bound feed: delimiter "," · escape "" · write_bom false.')
                     ->children()
                         ->scalarNode('delimiter')->defaultValue(';')->cannotBeEmpty()->end()
                         ->scalarNode('enclosure')->defaultValue('"')->cannotBeEmpty()->end()
-                        // Kaçış BİLEREK boş bırakılabilir: '' verilince PHP'nin standart dışı
-                        // kaçışı kapanır ve çıktı RFC 4180'e birebir uyar. Bu yüzden burada
-                        // `cannotBeEmpty()` YOK — ama `escape: ~` yazan kişi de "kapat" demek
-                        // istiyordur; null'ı boş dizeye çeviriyoruz, yoksa TypeError'a düşerdi.
+                        // The escape may DELIBERATELY be left empty: passing '' turns off PHP's
+                        // non-standard escaping and the output conforms to RFC 4180 exactly.
+                        // That is why there is NO `cannotBeEmpty()` here — but someone writing
+                        // `escape: ~` also means "turn it off"; we convert null into an empty
+                        // string, otherwise it would end up in a TypeError.
                         ->scalarNode('escape')
                             ->defaultValue('\\')
                             ->beforeNormalization()->ifNull()->then(static fn (): string => '')->end()
@@ -170,7 +173,7 @@ final class TabulaBundle extends AbstractBundle
 
                 ->arrayNode('xlsx')
                     ->addDefaultsIfNotSet()
-                    ->info('Renkler ARGB biçimindedir (FFRRGGBB); baştaki iki hane saydamlıktır.')
+                    ->info('Colours are in ARGB form (FFRRGGBB); the leading two digits are the alpha channel.')
                     ->children()
                         ->scalarNode('creator')->defaultValue('Tabula')->cannotBeEmpty()->end()
                         ->scalarNode('header_fill')->defaultValue('FFF2F2F2')->cannotBeEmpty()->end()
@@ -184,35 +187,36 @@ final class TabulaBundle extends AbstractBundle
 
                 ->arrayNode('template')
                     ->addDefaultsIfNotSet()
-                    ->info('Boş içe aktarma şablonu. Başlık GÖRÜNÜMÜ bilerek burada değil `xlsx` düğümündedir: şablon, dışa aktarılan dosyanın aynası olmalı.')
+                    ->info('The empty import template. The header APPEARANCE deliberately lives in the `xlsx` node rather than here: the template must be a mirror of the exported file.')
                     ->children()
                         ->booleanNode('include_key_row')
                             ->defaultTrue()
-                            ->info('1. satıra kanonik alan anahtarlarını yaz. Kapatmak dosyayı ETİKETLE eşleşmeye mahkûm eder: çevirideki tek bir kelime değişikliği kullanıcıların elindeki tüm şablonları bozar — eski ERP\'nin ölümcül kusuru buydu. Yalnızca şablonu başka bir sisteme yem olarak verirken kapatın.')
+                            ->info('Write the canonical field keys into row 1. Turning it off condemns the file to matching BY LABEL: a single word changed in the translation breaks every template users have on disk — that was the fatal flaw of the system this replaces. Turn it off only when handing the template to another system as a feed.')
                         ->end()
                         ->booleanNode('hide_key_row')
                             ->defaultTrue()
-                            ->info('Anahtar satırı Excel\'de gizlensin mi. Gizli satır dosyada DURMAYA devam eder; kullanıcı teknik anahtarları görmez, içe aktarma yine de görür.')
+                            ->info('Whether the key row is hidden in Excel. A hidden row REMAINS in the file; the user does not see the technical keys, the import still does.')
                         ->end()
-                        // `integerNode` ama null KABUL EDER: `sample_rows: ~` devralınan
-                        // bir değeri geri almanın tek yoludur ve ham `IntegerNode` orada
-                        // "Expected int, but got null" ile patlar. Aynı tuzağa `csv.escape`
-                        // ile `pdf.max_columns` da düşmüştü (bkz. oradaki notlar).
+                        // An `integerNode`, but one that ACCEPTS null: `sample_rows: ~` is the
+                        // only way to take back an inherited value, and a raw `IntegerNode`
+                        // blows up there with "Expected int, but got null". `csv.escape` and
+                        // `pdf.max_columns` had fallen into the same trap (see the notes over
+                        // there).
                         //
-                        // `min()` BİLEREK yok: `TemplateOptions` sıfırın altındaki değeri
-                        // zaten "hiç" sayar ve bu kural değer nesnesinin işidir. Tip
-                        // denetimi ağacın, aralık denetimi değer nesnesinin.
+                        // `min()` is DELIBERATELY absent: `TemplateOptions` already counts a
+                        // value below zero as "none", and that rule is the value object's job.
+                        // Type checking belongs to the tree, range checking to the value object.
                         ->integerNode('sample_rows')
                             ->defaultValue(0)
                             ->beforeNormalization()->ifNull()->then(static fn (): int => 0)->end()
-                            ->info('Başlığın altında önceden biçimlendirilmiş kaç boş satır oluşturulsun. 0 = hiç.')
+                            ->info('How many pre-formatted empty rows are created beneath the header. 0 = none.')
                         ->end()
                     ->end()
                 ->end()
 
                 ->arrayNode('pdf')
                     ->addDefaultsIfNotSet()
-                    ->info('Varsayılan A4 YATAY: dikey kâğıtta on kolonluk bir liste sayfanın dışına taşar ve son kolonlar hiç basılmaz.')
+                    ->info('The default is A4 LANDSCAPE: on portrait paper a ten-column list overflows the page and the last columns are never printed at all.')
                     ->children()
                         ->enumNode('page_size')
                             ->values(['a3', 'a4', 'a5', 'letter', 'legal'])
@@ -222,51 +226,52 @@ final class TabulaBundle extends AbstractBundle
                             ->values(['portrait', 'landscape'])
                             ->defaultValue('landscape')
                         ->end()
-                        // Ölçülerin POZİTİF olması `Page`/`ColumnBudget`/`PdfOptions`
-                        // tarafında zaten denetleniyor ve oradaki mesajlar çözümü de
-                        // söylüyor ("A4 yerine A3, yatay çevirin, boşluğu azaltın…").
-                        // Aynı kuralın yarısını burada `min()` ile tekrarlamak, bu fazın
-                        // ortadan kaldırdığı şeyin — aynı gerçeğin iki yerde yaşamasının —
-                        // küçük bir kopyası olurdu. Tip denetimi ağacın, aralık denetimi
-                        // değer nesnesinin işi.
+                        // That the dimensions are POSITIVE is already checked on the
+                        // `Page`/`ColumnBudget`/`PdfOptions` side, and the messages over there
+                        // also tell you the fix ("use A3 instead of A4, turn it landscape,
+                        // reduce the margin…"). Repeating half of the same rule here with
+                        // `min()` would be a small copy of the very thing this phase did away
+                        // with — the same truth living in two places. Type checking belongs to
+                        // the tree, range checking to the value object.
                         ->floatNode('margin_mm')
                             ->defaultValue(10.0)
-                            ->info('Dört kenara aynı boşluk (mm).')
+                            ->info('The same margin on all four sides (mm).')
                         ->end()
                         ->floatNode('min_column_width_mm')
                             ->defaultValue(22.0)
-                            ->info('Okunabilirlik tabanı. Sayfa bütçesi bundan hesaplanır: (kâğıt eni − boşluklar) ÷ bu değer.')
+                            ->info('The readability floor. The page budget is computed from it: (paper width − margins) ÷ this value.')
                         ->end()
-                        // `integerNode` DEĞİL. `max_columns: ~` (tavan yok) yazan bir
-                        // ortam dosyası `IntegerNode`da "Expected int, but got null" ile
-                        // patlıyor; oysa `~` bu ayarın tek anlamlı sıfırlama biçimi —
-                        // devralınan bir değeri geri almanın başka yolu yok. Aynı tuzağa
-                        // `csv.escape` de düşmüştü (bkz. oradaki null normalizasyonu).
+                        // NOT an `integerNode`. An environment file saying `max_columns: ~`
+                        // (no ceiling) blows up in `IntegerNode` with "Expected int, but got
+                        // null"; yet `~` is the only meaningful way of resetting this setting
+                        // — there is no other way to take back an inherited value.
+                        // `csv.escape` had fallen into the same trap (see the null
+                        // normalisation over there).
                         ->scalarNode('max_columns')
                             ->defaultNull()
-                            ->info('Genişlik elverse bile bu sayıdan fazla kolon basma. null = sert tavan yok.')
+                            ->info('Do not print more columns than this, even if the width would allow it. null = no hard ceiling.')
                             ->validate()
                                 ->ifTrue(static fn (mixed $value): bool => null !== $value && (!is_int($value) || $value < 1))
-                                ->thenInvalid('Azami kolon sayısı en az 1 olmalı ya da "~" (tavan yok) olmalı; %s verildi.')
+                                ->thenInvalid('The maximum column count must be at least 1, or "~" (no ceiling); %s given.')
                             ->end()
                         ->end()
                         ->enumNode('overflow')
                             ->values(['next_page_set', 'drop', 'shrink'])
                             ->defaultValue('next_page_set')
-                            ->info('Sığmayan kolonlar: next_page_set = ayrı sayfa takımı · drop = düşük öncelikliyi ELE (veri kaybeder) · shrink = hepsini sıkıştır.')
+                            ->info('Columns that do not fit: next_page_set = a separate set of pages · drop = DISCARD the low-priority ones (loses data) · shrink = squeeze them all in.')
                         ->end()
-                        // Boş bırakılamaz: `""` CSS'e `"",sans-serif` olarak iner ve Dompdf
-                        // Latin-1 çekirdek yazı tipine düşer — "ş ğ ı İ" o kümede yoktur,
-                        // yani çıktı SESSİZCE eksik harfle basılır.
+                        // Cannot be left empty: `""` lands in the CSS as `"",sans-serif` and
+                        // Dompdf falls back to a Latin-1 core font — "ş ğ ı İ" are not in that
+                        // set, meaning the output is SILENTLY printed with letters missing.
                         ->scalarNode('font_family')
                             ->defaultValue('DejaVu Sans')
                             ->cannotBeEmpty()
-                            ->info('Latin Extended-A kapsayan bir aile olmalı. Dompdf ile gelen tek böyle aile DejaVu Sans\'tır.')
+                            ->info('Must be a family that covers Latin Extended-A. The only such family shipped with Dompdf is DejaVu Sans.')
                         ->end()
                         ->floatNode('font_size_pt')->defaultValue(8.0)->end()
                         ->booleanNode('repeat_header')
                             ->defaultTrue()
-                            ->info('Başlık satırı her sayfada tekrarlansın mı. Kapalıysa ikinci sayfadan sonra hangi kolonun ne olduğu anlaşılmaz.')
+                            ->info('Whether the header row is repeated on every page. With it off, from the second page on there is no telling which column is which.')
                         ->end()
                     ->end()
                 ->end()
@@ -280,7 +285,8 @@ final class TabulaBundle extends AbstractBundle
     {
         $services = $container->services();
 
-        // Ayarlar düz diziden kurulur; kapsayıcı enum örneği taşımak zorunda kalmaz.
+        // The settings are built from a plain array; the container is never forced to carry an
+        // enum instance.
         $services->set(NumberSettings::class)
             ->factory([SettingsFactory::class, 'numbers'])
             ->args([$config['numbers']]);
@@ -293,7 +299,7 @@ final class TabulaBundle extends AbstractBundle
             ->factory([SettingsFactory::class, 'settings'])
             ->args([$config, service(NumberSettings::class), service(DateSettings::class)]);
 
-        // Port → Symfony translator. Alan zinciri yapılandırmadan gelir.
+        // Port → Symfony translator. The domain chain comes from the configuration.
         $services->set(SymfonyTranslator::class)
             ->args([
                 service(TranslatorInterface::class),
@@ -309,10 +315,10 @@ final class TabulaBundle extends AbstractBundle
         $services->set(FormatterRegistry::class)
             ->factory([FormatterRegistry::class, 'default']);
 
-        // İçe aktarmanın iki kayıt defteri. İkisi de yalnız yerleşikleri taşır ve
-        // `with()` ile ÇOĞALTILARAK genişletilir; bu yüzden yapılandırma düğümleri yok.
-        // Bir proje kendi tarih lehçesini ya da kendi dosya türünü tanıtmak istediğinde
-        // bu servisleri kendi tanımıyla ezer (`->factory()` yerine kendi fabrikası).
+        // The import's two registries. Both carry only the built-ins and are extended by being
+        // COPIED with `with()`; that is why they have no configuration nodes. When a project
+        // wants to register its own date dialect or its own file type, it overrides these
+        // services with its own definition (its own factory in place of `->factory()`).
         $services->set(ParserRegistry::class)
             ->factory([ParserRegistry::class, 'default']);
 
@@ -336,13 +342,15 @@ final class TabulaBundle extends AbstractBundle
 
         $services->alias(WriterFactory::class, DefaultWriterFactory::class);
 
-        // `SettingsFactory`den GEÇMEZ: o fabrika, çekirdek ayar sınıflarının enum ya da
-        // türetilmiş değer taşıdığı yerler için var (bkz. sınıf yorumu). `TemplateOptions`
-        // yalnız üç skaler ve paylaşılan `XlsxOptions` taşıdığı için doğrudan kurulabilir.
+        // It does NOT GO THROUGH `SettingsFactory`: that factory exists for the places where
+        // the core settings classes carry an enum or a derived value (see the class comment).
+        // `TemplateOptions` carries only three scalars and the shared `XlsxOptions`, so it can
+        // be built directly.
         //
-        // ★ Görünüm ayarı DIŞA AKTARMAYLA ORTAK servisten gelir: şablon indirip dolduran
-        // kullanıcı, dışa aktardığı dosyayla aynı başlığı görmeli (zorunlu kolonların
-        // kırmızı dolgusu gibi öğrenilmiş tek görsel ipucu iki yerde ayrı bakım istemesin).
+        // ★ The appearance setting comes from the service SHARED WITH EXPORT: a user who
+        // downloads and fills in a template must see the same header as in the file they
+        // exported (so that the one learned visual cue, the red fill of the required columns,
+        // does not need maintaining separately in two places).
         $services->set(TemplateOptions::class)
             ->args([
                 $config['template']['include_key_row'],
@@ -351,8 +359,8 @@ final class TabulaBundle extends AbstractBundle
                 service(XlsxOptions::class),
             ]);
 
-        // `Tabula::template()` kendi yazıcısını kurar; buradaki kayıt, şablon üretimini
-        // `Tabula`ya uğramadan tip ipucuyla enjekte etmek isteyen kod içindir.
+        // `Tabula::template()` sets up its own writer; this registration is for code that wants
+        // to inject template generation by type hint without going through `Tabula`.
         $services->set(TemplateBuilder::class)
             ->args([
                 service(Translator::class),

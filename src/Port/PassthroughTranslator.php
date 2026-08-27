@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Balin\Tabula\Port;
 
 /**
- * Hiçbir şey çevirmez, anahtarı olduğu gibi döndürür.
+ * Translates nothing; returns the key exactly as it came in.
  *
- * Testlerde ve etiketlerin zaten düz metin verildiği durumlarda kullanılır.
+ * Used in tests, and wherever the labels are already given as plain text.
  */
 final class PassthroughTranslator implements Translator
 {

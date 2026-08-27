@@ -30,62 +30,64 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx as SpreadsheetXlsxWriter;
 use UnitEnum;
 
 /**
- * Boş içe aktarma şablonu üretir — gidiş-dönüşün "dönüş" ucunun sözleşmesi.
+ * Produces an empty import template — the contract of the "return" leg of the round trip.
  *
- * ★ YERLEŞİM, BU SINIFIN TAMAMINI AÇIKLAYAN KARARDIR:
+ * ★ THE LAYOUT IS THE DECISION THAT EXPLAINS THIS ENTIRE CLASS:
  *
- *     1. satır → KANONİK ALAN ANAHTARLARI (xlsx'te gizli)
- *     2. satır → çevrilmiş etiketler (kullanıcının okuduğu)
- *     3. satır → veri
+ *     row 1 → CANONICAL FIELD KEYS (hidden in xlsx)
+ *     row 2 → translated labels (what the user reads)
+ *     row 3 → data
  *
- * Dosyanın kimliği anahtardır, başlık METNİ değil. İçe aktarma tarafı hiçbir işarete
- * bakmadan karar verebilir: 1. satırdaki boş olmayan hücrelerin HEPSİ şemadaki bir
- * anahtara oturuyorsa o satır anahtar satırıdır; oturmuyorsa 1. satır etiket başlığıdır
- * ve veri 2. satırdan başlar. Bu yüzden bizim ürettiğimiz şablon kusursuz gidiş-dönüş
- * yapar, kullanıcının elle hazırladığı dosya da çalışmaya devam eder.
+ * The file's identity is the key, not the header TEXT. The import side can reach its decision
+ * without looking at any marker: if EVERY non-blank cell in row 1 lands on a key in the
+ * schema, that row is the key row; if it does not, row 1 is the label header and the data
+ * starts at row 2. This is why a template we produce makes a flawless round trip while a file
+ * the user prepared by hand keeps working too.
  *
- * Eski ERP'de dosyanın kimliği ÇEVRİLMİŞ BAŞLIK DİZESİYDİ: çeviri dosyasındaki tek bir
- * kelime değişikliği, kullanıcıların elindeki tüm şablonları sessizce okunamaz hâle
- * getiriyordu. Buradaki gizli anahtar satırı o kusurun tamiridir.
+ * In the system this replaces the file's identity was the TRANSLATED HEADER STRING: a single
+ * word changed in a translation file silently made every template users had on disk
+ * unreadable. The hidden key row here is the repair of that flaw.
  */
 final class TemplateBuilder
 {
-    /** Excel'in sayfa adı sınırı — `XlsxWriter` ile aynı. */
+    /** Excel's sheet-name limit — the same as in `XlsxWriter`. */
     private const int TITLE_MAX_LENGTH = 31;
 
     /**
-     * Excel'in sayfa adında yasakladığı karakterler.
+     * The characters Excel forbids in a sheet name.
      *
-     * `XlsxWriter::INVALID_TITLE_CHARACTERS` ile birebir aynıdır; oradaki sabit `private`
-     * olduğu için kopyalandı. Ad çoğu zaman şema başlığından, yani çeviriden gelir —
-     * "Satış/İade" gibi tek bir bölü işareti `setTitle()` doğrulamasını patlatır ve şablon
-     * üretimi, kullanıcının hiç kontrol edemediği bir metin yüzünden ölürdü.
+     * Identical to `XlsxWriter::INVALID_TITLE_CHARACTERS`; it was copied because the constant
+     * over there is `private`. The name usually comes from the schema title, that is, from a
+     * translation — a single slash, as in "Sales/Return", blows up `setTitle()`'s validation
+     * and template generation would die over a text the user has no control over whatsoever.
      *
      * @var list<string>
      */
     private const array INVALID_TITLE_CHARACTERS = ['*', ':', '/', '\\', '?', '[', ']'];
 
-    /** Adı tamamen yasak karakterlerden ibaret olan (ya da yardımcı sayfayla çakışan) şablonlar için. */
+    /** For templates whose name consists entirely of forbidden characters (or clashes with the helper sheet). */
     private const string FALLBACK_TITLE = 'Sablon';
 
     /**
-     * Açılır liste kaynaklarının tutulduğu gizli yardımcı sayfa.
+     * The hidden helper sheet that holds the sources of the dropdown lists.
      *
-     * Seçenekler doğrudan doğrulamanın içine de gömülebilirdi ("Evet,Hayır"), ama Excel
-     * gömülü listeyi 255 KARAKTERLE sınırlar ve sınırı aşan dosyayı "onarılması gerekiyor"
-     * diye açar. Otuz durumlu bir sipariş enum'u bu sınırı rahatça aşar. Aralık gösterimi
-     * sınırsızdır, üstelik aynı listeyi paylaşan kolonlar tek bir aralığa bakar.
+     * The options could just as well have been embedded straight into the validation
+     * ("Evet,Hayır"), but Excel limits an embedded list to 255 CHARACTERS and opens a file
+     * that exceeds the limit saying it "needs to be repaired". An order enum with thirty cases
+     * passes that limit comfortably. A range reference has no limit, and on top of that
+     * columns sharing the same list all look at a single range.
      */
     private const string LIST_SHEET_TITLE = '_lists';
 
     /**
-     * Hücre değerinden hem çıktı metnini hem açılır liste seçeneklerini üreten kayıt defteri.
+     * The registry that produces both the output text and the dropdown options from a cell value.
      *
-     * ★ İkisinin AYNI çağrıdan türemesi bu sınıfın ikinci sözleşmesidir. Eski ERP hücreye
-     * yazdığı metni bir çeviri ailesinden (`general.yes`), şablonun izin listesini BAŞKA
-     * bir aileden (`form.true`) üretiyordu; sonuçta kendi yazdığı değer kendi izin
-     * listesinde bulunmuyordu. Burada seçenek listesi, dışa aktarmanın kullandığı
-     * biçimlendiricinin ta kendisine sorularak üretilir — ikisinin ayrışması imkânsızdır.
+     * ★ That the two derive from the SAME call is this class's second contract. The system
+     * this replaces produced the text it wrote into the cell from one translation family
+     * (`general.yes`) and the template's allowed-value list from ANOTHER family (`form.true`);
+     * the upshot was that the value it wrote itself was not in its own allowed-value list.
+     * Here the option list is produced by asking the very formatter the export uses — for the
+     * two to drift apart is impossible.
      */
     private readonly FormatterRegistry $formatters;
 
@@ -98,15 +100,15 @@ final class TemplateBuilder
     }
 
     /**
-     * Şablonu diske yazar.
+     * Writes the template to disk.
      *
-     * @return string yazılan dosyanın yolu (verilen yolun aynısı)
+     * @return string the path of the file written (the same path that was given)
      */
     public function write(Schema $schema, string $path, string $locale): string
     {
-        // `Field::only()` ile yalnız PDF'te görünen bir alan şablonda da olmamalı:
-        // kullanıcıya dolduramayacağı, içe aktarmanın da beklemediği bir kolon sunmak
-        // "bu alan neden çalışmıyor" sorusunu doğurur.
+        // A field that is `Field::only()` visible in PDF must not be in the template either:
+        // offering the user a column they cannot fill in and the import does not expect breeds
+        // the question "why does this field not work".
         $schema = $schema->forFormat(Format::Xlsx);
         $fields = array_values($schema->getFields());
 
@@ -147,9 +149,9 @@ final class TemplateBuilder
             $this->applyDropdowns($spreadsheet, $sheet, $fields, $letters, $firstDataRow, $context);
 
             if ($this->options->xlsx->freezeHeader) {
-                // "A3'ü dondur" = anahtar VE etiket satırlarının ikisi de sabit kalsın.
-                // `XlsxWriter` tek başlık satırı için A2 dondurur; buradaki fark tam olarak
-                // gizli anahtar satırının varlığından gelir.
+                // "Freeze A3" = both the key AND the label row stay fixed. `XlsxWriter` freezes
+                // A2 for its single header row; the difference here comes precisely from the
+                // presence of the hidden key row.
                 $sheet->freezePane('A'.$firstDataRow);
             }
 
@@ -157,7 +159,8 @@ final class TemplateBuilder
                 $sheet->setAutoFilter('A'.$labelRow.':'.$lastLetter.max($labelRow, $lastSampleRow));
             }
 
-            // Kullanıcı dosyayı VERİ sayfasında açsın; gizli "_lists" aktif sekme olamaz zaten.
+            // The user should open the file on the DATA sheet; the hidden "_lists" cannot be
+            // the active tab in any case.
             $spreadsheet->setActiveSheetIndex(0);
 
             $writer = new SpreadsheetXlsxWriter($spreadsheet);
@@ -165,8 +168,9 @@ final class TemplateBuilder
         } catch (SpreadsheetException $exception) {
             throw ExportException::unwritableTarget($path, $exception->getMessage());
         } finally {
-            // Worksheet ile Spreadsheet birbirini tutar; sayaç tabanlı çöp toplayıcı bu
-            // döngüyü çözemez. Peş peşe şablon üreten uzun ömürlü işçilerde şart.
+            // Worksheet and Spreadsheet hold on to each other; a refcount-based garbage
+            // collector cannot break that cycle. Essential in long-lived workers that produce
+            // one template after another.
             $spreadsheet->disconnectWorksheets();
             unset($spreadsheet);
         }
@@ -174,7 +178,7 @@ final class TemplateBuilder
         return $path;
     }
 
-    // ---------------------------------------------------------------- başlık
+    // ---------------------------------------------------------------- header
 
     /**
      * @param list<Field>  $fields
@@ -192,9 +196,10 @@ final class TemplateBuilder
             $letter = $letters[$index];
 
             if (null !== $keyRow) {
-                // Anahtar AÇIK tiple yazılır. Varsayılan bağlayıcı "0501" gibi bir alan
-                // anahtarını 501 sayısına çevirir ve dosya geri okunduğunda hiçbir şeye
-                // eşleşmez — anahtar satırının tüm anlamı birebir eşleşmesinde.
+                // The key is written with an EXPLICIT type. The default binder turns a field
+                // key such as "0501" into the number 501 and, when the file is read back, it
+                // matches nothing at all — the entire meaning of the key row lies in its
+                // matching exactly.
                 $sheet->setCellValueExplicit($letter.$keyRow, $field->getKey(), DataType::TYPE_STRING);
             }
 
@@ -212,8 +217,8 @@ final class TemplateBuilder
         $lastLetter = $letters[\count($letters) - 1];
         $xlsx = $this->options->xlsx;
 
-        // Başlık stili TEK aralıkta uygulanır; kolon kolon uygulamak aynı stili kolon
-        // sayısı kadar kez hash'letirdi.
+        // The header style is applied over a SINGLE range; applying it column by column would
+        // have the same style hashed once per column.
         $header = $sheet->getStyle('A'.$labelRow.':'.$lastLetter.$labelRow);
         $header->getFont()->setBold($xlsx->boldHeader);
         $header->getFill()
@@ -227,8 +232,9 @@ final class TemplateBuilder
             ->setARGB($xlsx->headerBorderColor);
         $header->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
-        // Zorunlu kolonlar açık kırmızı — dışa aktarmayla AYNI kural (bkz. `XlsxWriter`).
-        // Eski ERP'nin şablonlarındaki işe yarayan tek görsel ipucu buydu, korundu.
+        // Required columns in light red — the SAME rule as on export (see `XlsxWriter`).
+        // This was the one visual cue in the templates of the system this replaces that
+        // actually worked, and it was kept.
         foreach ($fields as $index => $field) {
             if (!$field->isRequired()) {
                 continue;
@@ -242,9 +248,9 @@ final class TemplateBuilder
         }
 
         if (null !== $keyRow && $this->options->hideKeyRow) {
-            // Satır GİZLENİR, silinmez: kullanıcı teknik anahtarları görmez ama dosya
-            // onları taşımaya devam eder. Kimliğin dosyada durması, gidiş-dönüşün
-            // çeviriden bağımsız olmasının tek sebebidir.
+            // The row is HIDDEN, not deleted: the user does not see the technical keys, but
+            // the file goes on carrying them. The identity staying inside the file is the sole
+            // reason the round trip is independent of translation.
             $sheet->getRowDimension($keyRow)->setVisible(false);
         }
     }
@@ -257,14 +263,14 @@ final class TemplateBuilder
             return (string) $label($context->locale);
         }
 
-        // Etiket verilmemişse anahtarın kendisi başlık olur — kolon asla başlıksız kalmaz.
+        // If no label was given, the key itself becomes the header — a column is never left headerless.
         return $context->trans($label ?? $field->getKey());
     }
 
-    // ---------------------------------------------------------------- kolon biçimleri
+    // ---------------------------------------------------------------- column formats
 
     /**
-     * Kolon başına sayı biçimi ve hizalama.
+     * Number format and alignment, per column.
      *
      * @param list<Field>  $fields
      * @param list<string> $letters
@@ -274,15 +280,16 @@ final class TemplateBuilder
         foreach ($fields as $index => $field) {
             $letter = $letters[$index];
 
-            // ★ Aralık ZORUNLU olarak "B1:B1048576" biçiminde, yani 1. SATIRDAN başlar.
-            // PhpSpreadsheet'in "tam kolon" tanıması `^[A-Z]+1:[A-Z]+1048576$` desenine
-            // bağlıdır: eşleşirse yalnız kolonun varsayılan stili güncellenir, eşleşmezse
-            // aralık HÜCRE aralığı sayılır ve aradaki bir milyon koordinat için gerçekten
-            // hücre nesnesi YARATILIR. "B3:B1048576" yazmak (veri satırından başlatmak)
-            // içgüdüsel olarak doğru görünür ve dosyayı tek satırda bellekte patlatır.
+            // ★ The range MUST be of the form "B1:B1048576", that is, it has to start at ROW 1.
+            // PhpSpreadsheet's recognition of a "whole column" hinges on the pattern
+            // `^[A-Z]+1:[A-Z]+1048576$`: if it matches, only the column's default style is
+            // updated; if it does not, the range counts as a CELL range and a cell object is
+            // genuinely CREATED for the million coordinates in between. Writing
+            // "B3:B1048576" (starting at the data row) feels instinctively right and blows the
+            // file up in memory in a single line.
             //
-            // Başlık hücreleri bundan etkilenmez: onların kendi stil indeksi var, kolon
-            // varsayılanı yalnız stilsiz hücrelere uygulanır.
+            // The header cells are unaffected by this: they have their own style index, and
+            // the column default is applied only to unstyled cells.
             $range = $letter.'1:'.$letter.AddressRange::MAX_ROW;
 
             $format = $this->numberFormatFor($field);
@@ -298,10 +305,10 @@ final class TemplateBuilder
     }
 
     /**
-     * Alanın Excel sayı biçimi kodu; biçim gerekmiyorsa null (General).
+     * The field's Excel number format code; null (General) if no format is needed.
      *
-     * Miktar kolonuna yazan kullanıcı üç ondalık görür, para kolonuna yazan iki — yani
-     * şablon, dışa aktarmanın ürettiği dosyayla aynı görünür.
+     * A user typing into a quantity column sees three decimals, one typing into a money column
+     * sees two — in other words, the template looks the same as the file the export produces.
      */
     private function numberFormatFor(Field $field): ?string
     {
@@ -309,31 +316,32 @@ final class TemplateBuilder
         $numbers = $this->settings->numbers;
 
         return match (true) {
-            // Metin kolonu AÇIKÇA metin biçimlidir: "0501" cari kodu ya da "12.05" seri
-            // numarası Excel'de sayıya/tarihe dönüşmesin diye. Baştaki sıfırın yenmesi
-            // eski ERP'nin en sık bildirilen içe aktarma hatasıydı.
+            // A text column is EXPLICITLY text-formatted: so that an account code like "0501"
+            // or a serial number like "12.05" is not turned into a number or a date by Excel.
+            // Leading zeros being eaten was the most frequently reported import bug of the
+            // system this replaces.
             FieldType::String === $type => NumberFormat::FORMAT_TEXT,
-            // Para simgesi BİLEREK yok: simge satırın para birimine bağlıdır
-            // (`Field::currency()` bir kapanış olabilir) ve boş şablonda satır yoktur.
-            // Yanlış bir simge basmaktansa çıplak sayı biçimi veriyoruz.
+            // The currency symbol is DELIBERATELY absent: the symbol depends on the row's
+            // currency (`Field::currency()` may be a closure) and an empty template has no
+            // rows. Rather than stamping the wrong symbol we give a bare number format.
             $type->isNumeric() => $numbers->excelFormatCode(max(0, $field->getDecimals() ?? $numbers->digitsFor($type))),
             $type->isTemporal() => $this->settings->dates->excelFormatFor($type),
-            // Enum/seçenek/boole kolonları General kalır: '@' verseydik Excel sayıya
-            // benzeyen seçenek etiketlerinde "metin olarak saklanan sayı" uyarısı basardı.
+            // Enum/options/bool columns stay General: had we given '@', Excel would stamp the
+            // "number stored as text" warning on option labels that look like numbers.
             default => null,
         };
     }
 
     /**
-     * Başlığın altında önceden biçimlendirilmiş boş satırlar oluşturur.
+     * Creates pre-formatted empty rows beneath the header.
      *
-     * ★ Burası kütüphanede BİLEREK boş hücre yaratan tek yerdir (`XlsxWriter::writeRow()`
-     * tam tersini yapar). Stil bir HÜCRE aralığına uygulandığında PhpSpreadsheet aradaki
-     * her koordinatı yaratır; şablonda bu istenen davranıştır — kullanıcı doldurulacak
-     * ızgarayı görür — ve maliyet `sampleRows` × kolon ile sınırlıdır, satır sayısıyla
-     * değil.
+     * ★ This is the only place in the library that DELIBERATELY creates empty cells
+     * (`XlsxWriter::writeRow()` does exactly the opposite). When a style is applied to a CELL
+     * range, PhpSpreadsheet creates every coordinate in between; in a template that is the
+     * desired behaviour — the user sees the grid to be filled in — and the cost is bounded by
+     * `sampleRows` × columns, not by the number of rows.
      *
-     * @return int oluşturulan son satır; hiç oluşturulmadıysa 0
+     * @return int the last row created; 0 if none were created
      */
     private function createSampleRows(Worksheet $sheet, string $lastLetter, int $firstDataRow): int
     {
@@ -355,15 +363,15 @@ final class TemplateBuilder
         return $lastRow;
     }
 
-    // ---------------------------------------------------------------- açılır listeler
+    // ---------------------------------------------------------------- dropdown lists
 
     /**
-     * Boole/enum/seçenek kolonlarına açılır liste (veri doğrulama) ekler.
+     * Adds a dropdown (data validation) to bool/enum/options columns.
      *
-     * Aynı seçenek kümesini paylaşan kolonlar TEK aralığa bakar: küme md5 ile
-     * tekilleştirilir. On enum kolonu aynı listeyi kullanıyorsa yardımcı sayfada tek
-     * sütun oluşur — hem dosya küçülür hem de listeyi elle düzeltmek isteyen kullanıcı
-     * tek yerde düzeltir.
+     * Columns that share the same set of options all look at a SINGLE range: the set is
+     * deduplicated by md5. If ten enum columns use the same list, one single column appears on
+     * the helper sheet — the file gets smaller, and a user who wants to correct the list by
+     * hand corrects it in one place.
      *
      * @param list<Field>  $fields
      * @param list<string> $letters
@@ -386,9 +394,9 @@ final class TemplateBuilder
 
             $options = $this->optionsFor($field, $context);
 
-            // Seçenekleri çalışma anında (satırdan) türeyen bir alan boş dönebilir; o zaman
-            // liste konmaz. Boş bir açılır liste, hiç açılır liste olmamasından beterdir:
-            // Excel hücreyi kilitler ve kullanıcı hiçbir şey yazamaz.
+            // A field whose options are derived at runtime (from the row) can come back empty;
+            // in that case no list is placed. An empty dropdown is worse than no dropdown at
+            // all: Excel locks the cell and the user cannot type anything.
             if ([] !== $options) {
                 $optionsByIndex[$index] = $options;
             }
@@ -414,8 +422,9 @@ final class TemplateBuilder
                 ++$nextColumn;
 
                 foreach ($options as $row => $option) {
-                    // AÇIK tip: "0501" ya da "2024" gibi bir seçenek etiketi sayıya
-                    // çevrilseydi listedeki değer, hücreye yazılan metinle eşleşmezdi.
+                    // EXPLICIT type: had an option label such as "0501" or "2024" been turned
+                    // into a number, the value in the list would not match the text written
+                    // into the cell.
                     $lists->setCellValueExplicit($letter.($row + 1), $option, DataType::TYPE_STRING);
                 }
 
@@ -431,23 +440,25 @@ final class TemplateBuilder
             $validation = new DataValidation();
             $validation->setType(DataValidation::TYPE_LIST);
             $validation->setErrorStyle(DataValidation::STYLE_STOP);
-            // Boş bırakmaya İZİN VAR: zorunluluk denetimi içe aktarmanın işidir
-            // (`RowError`e dönüşür). Excel'e yaptırsaydık kullanıcı, henüz doldurmadığı
-            // bir satırda gezinirken bile uyarı kutusuyla karşılaşırdı.
+            // Leaving it blank IS ALLOWED: the requiredness check is the import's job (it
+            // turns into a `RowError`). Had we made Excel do it, the user would run into a
+            // warning box merely for moving through a row they have not filled in yet.
             $validation->setAllowBlank(true);
-            // ★ `setShowDropDown(true)` = ok GÖRÜNSÜN. OOXML'de `showDropDown` özniteliği
-            // TERSİNE anlamlıdır ("listeyi gizle") ve PhpSpreadsheet bu tersliği yazarken
-            // kendisi uygular; `false` verirsek doğrulama çalışır ama hücrede ok çıkmaz.
+            // ★ `setShowDropDown(true)` = SHOW the arrow. In OOXML the `showDropDown`
+            // attribute means the OPPOSITE ("hide the list") and PhpSpreadsheet applies that
+            // inversion itself while writing; if we pass `false`, the validation works but no
+            // arrow appears in the cell.
             $validation->setShowDropDown(true);
-            // Hata METNİ verilmez: Excel kendi yerelleştirilmiş uyarısını gösterir.
-            // Buraya kendi dizemizi koysaydık, kullanıcının Excel dili ne olursa olsun
-            // uygulamanın diline (ya da çevrilmemiş bir anahtara) sabitlenirdi.
+            // No error TEXT is given: Excel shows its own localised warning. Had we put our
+            // own string here, it would be pinned to the application's language (or to an
+            // untranslated key) whatever the user's Excel language happened to be.
             $validation->setShowErrorMessage(true);
             $validation->setFormula1($rangeByHash[$hash]);
 
-            // Aralık kolonun sonuna kadar uzanır. Veri doğrulama sqref'i hücre YARATMAZ —
-            // sadece bir aralık dizesidir — bu yüzden burada tam kolon kullanmak bedava,
-            // üstelik kullanıcı binlerce satır yapıştırsa da liste geçerli kalır.
+            // The range reaches to the end of the column. A data-validation sqref DOES NOT
+            // CREATE cells — it is merely a range string — so using a whole column here is
+            // free, and on top of that the list stays valid even if the user pastes in
+            // thousands of rows.
             $sheet->setDataValidation(
                 $letters[$index].$firstDataRow.':'.$letters[$index].AddressRange::MAX_ROW,
                 $validation,
@@ -456,12 +467,13 @@ final class TemplateBuilder
     }
 
     /**
-     * Alanın açılır listede görünecek ÇEVRİLMİŞ seçenekleri.
+     * The field's TRANSLATED options as they will appear in the dropdown.
      *
-     * Değerler tek tek, dışa aktarmanın kullandığı biçimlendiriciden geçirilir. Yani
-     * listedeki metin, aynı değeri dışa aktarsak hücrede ne yazacaksa odur; ayrışmaları
-     * mümkün değildir. Aynı metne düşen iki seçenek tekilleştirilir — Excel'de tekrarlı
-     * satır göstermek dışında, ayrıştırma tarafında da ayırt edilemez olurlardı.
+     * The values are passed one by one through the formatter the export uses. So the text in
+     * the list is whatever the cell would say if we exported that same value; for the two to
+     * drift apart is impossible. Two options that land on the same text are deduplicated —
+     * beyond showing a repeated row in Excel, they would also be indistinguishable on the
+     * parsing side.
      *
      * @return list<string>
      */
@@ -471,8 +483,9 @@ final class TemplateBuilder
 
         /** @var list<mixed> $values */
         $values = match ($field->getType()) {
-            // Boole seçenekleri TEK aileden: `TabulaSettings::$boolTrueKey`/`$boolFalseKey`.
-            // (Eski ERP'de üç paralel "evet/hayır" çeviri ailesi vardı.)
+            // The bool options come from a SINGLE family:
+            // `TabulaSettings::$boolTrueKey`/`$boolFalseKey`.
+            // (The system this replaces had three parallel "yes/no" translation families.)
             FieldType::Bool => [true, false],
             FieldType::Enum => self::enumCases($field),
             FieldType::Options => self::optionKeys($field),
@@ -482,9 +495,9 @@ final class TemplateBuilder
         $labels = [];
 
         foreach ($values as $value) {
-            // ★ Şablonda SATIR YOKTUR: biçimlendiriciye `$row = null` gider. Alanın kendi
-            // `format()` kapanışı ya da `options()` kapanışı satıra bakıyorsa null'a
-            // hazırlıklı olmalıdır — dokümantasyonda geçen tek sözleşme budur.
+            // ★ A template HAS NO ROWS: `$row = null` is what reaches the formatter. If the
+            // field's own `format()` closure or `options()` closure looks at the row, it must
+            // be prepared for null — that is the one contract stated in the documentation.
             $text = $formatter->format($value, $field, null, $context)->text;
 
             if ('' === $text || \in_array($text, $labels, true)) {
@@ -498,7 +511,7 @@ final class TemplateBuilder
     }
 
     /**
-     * Enum'un tüm durumları.
+     * All of the enum's cases.
      *
      * @return list<UnitEnum>
      */
@@ -514,7 +527,7 @@ final class TemplateBuilder
     }
 
     /**
-     * Seçenek haritasının anahtarları.
+     * The keys of the options map.
      *
      * @return list<int|string>
      */
@@ -523,22 +536,22 @@ final class TemplateBuilder
         $options = $field->getOptions();
 
         if ($options instanceof Closure) {
-            // Kapanış null satırla çağrılır (bkz. `optionsFor()`); satıra bağlı listeler
-            // burada boş dönerse o kolona açılır liste konmaz.
+            // The closure is called with a null row (see `optionsFor()`); if a row-dependent
+            // list comes back empty here, no dropdown is placed on that column.
             $options = $options(null);
         }
 
         return \is_array($options) ? array_keys($options) : [];
     }
 
-    // ---------------------------------------------------------------- iç
+    // ---------------------------------------------------------------- internals
 
     /**
-     * Şema başlığını Excel'in kabul edeceği bir sayfa adına indirger.
+     * Reduces the schema title to a sheet name Excel will accept.
      *
-     * `XlsxWriter::resolveTitle()` ile aynı kurallar; tekilleştirme yok, çünkü burada
-     * yalnız iki sayfa var. Tek ek kural yardımcı sayfayla ÇAKIŞMAdır: şema başlığı
-     * gerçekten "_lists" olsaydı `createSheet()` yinelenen ad yüzünden patlardı.
+     * The same rules as `XlsxWriter::resolveTitle()`; no deduplication, because here there are
+     * only two sheets. The one extra rule is the CLASH with the helper sheet: if the schema
+     * title really were "_lists", `createSheet()` would blow up over the duplicate name.
      */
     private function sheetTitle(Schema $schema, FormatContext $context): string
     {
@@ -552,12 +565,12 @@ final class TemplateBuilder
 
         $resolved = str_replace(self::INVALID_TITLE_CHARACTERS, '-', $resolved);
 
-        // Kesme işareti başta/sonda olamaz: Excel sayfa adını formüllerde tek tırnakla
-        // sarar ve kenardaki tırnak kendi kaçışıyla çakışır.
+        // An apostrophe cannot sit at the start or the end: Excel wraps a sheet name in single
+        // quotes inside formulas and a quote at the edge collides with its own escaping.
         $resolved = trim($resolved, " '");
 
-        // Bayt değil KARAKTER: `substr()` "Ürün Grubu" gibi bir adı çok baytlı harfin
-        // ortasından keser ve geçersiz UTF-8 üretirdi.
+        // CHARACTERS, not bytes: `substr()` would cut a name such as "Ürün Grubu" in the
+        // middle of a multi-byte letter and produce invalid UTF-8.
         if (mb_strlen($resolved) > self::TITLE_MAX_LENGTH) {
             $resolved = rtrim(mb_substr($resolved, 0, self::TITLE_MAX_LENGTH));
         }
@@ -570,20 +583,21 @@ final class TemplateBuilder
     }
 
     /**
-     * Hedef yolun yazılabilir olduğunu İLK adımda doğrular.
+     * Verifies AS THE VERY FIRST STEP that the target path is writable.
      *
-     * Xlsx'te dosya ancak en sonda yazıldığından, yazılamaz bir yol tüm sayfa kurulduktan
-     * SONRA patlardı — `XlsxWriter::guardTarget()` ile aynı gerekçe, aynı kontroller.
+     * Since in xlsx the file is only written right at the end, an unwritable path would blow
+     * up AFTER the whole sheet had been built — the same reasoning and the same checks as
+     * `XlsxWriter::guardTarget()`.
      */
     private function guardTarget(string $path): void
     {
         if ('' === trim($path)) {
-            throw ExportException::unwritableTarget($path, 'hedef yol boş');
+            throw ExportException::unwritableTarget($path, 'the target path is empty');
         }
 
         if (is_file($path)) {
             if (!is_writable($path)) {
-                throw ExportException::unwritableTarget($path, 'dosya var ve salt okunur');
+                throw ExportException::unwritableTarget($path, 'the file exists and is read-only');
             }
 
             return;
@@ -592,15 +606,15 @@ final class TemplateBuilder
         $directory = \dirname($path);
 
         if (!is_dir($directory)) {
-            throw ExportException::unwritableTarget($path, sprintf('"%s" dizini yok', $directory));
+            throw ExportException::unwritableTarget($path, sprintf('directory "%s" does not exist', $directory));
         }
 
         if (!is_writable($directory)) {
-            throw ExportException::unwritableTarget($path, sprintf('"%s" dizinine yazma izni yok', $directory));
+            throw ExportException::unwritableTarget($path, sprintf('no write permission for directory "%s"', $directory));
         }
     }
 
-    /** `Align`ı Excel'in yatay hizalama koduna çevirir. */
+    /** Converts an `Align` into Excel's horizontal alignment code. */
     private static function horizontalOf(Align $align): string
     {
         return match ($align) {

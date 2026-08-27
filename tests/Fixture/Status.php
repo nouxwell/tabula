@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Balin\Tabula\Tests\Fixture;
 
 /**
- * Mevcut ERP'deki yaygın gelenegi taklit eder: enum kendi ÇEVİRİ ANAHTARINI döndüren
- * bir `label()` metodu taşır. `EnumFormatter` bu geleneği `TranslatableEnum` arayüzü
- * olmadan da tanımak zorundadır — 200'den fazla mevcut enum bu şekilde yazılmış.
+ * Imitates a widespread convention of the system this replaces: the enum carries a `label()`
+ * method that returns its own TRANSLATION KEY. `EnumFormatter` has to recognise that
+ * convention even without the `TranslatableEnum` interface — more than 200 existing enums are
+ * written this way.
  */
 enum Status: string
 {

@@ -30,11 +30,11 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Uçtan uca boru hattı testleri.
+ * End-to-end pipeline tests.
  *
- * Bu dosyanın var olma sebebi: biçimlendiriciler, yazıcılar ve `ExportBuilder` paralel
- * yazıldı ve HİÇ testleri yoktu; bir inceleme turu yedi gerçek kusur çıkardı. Aşağıdaki
- * testlerin çoğu o kusurların birebir regresyon karşılığıdır.
+ * Why this file exists: the formatters, the writers and `ExportBuilder` were written in
+ * parallel and had NO tests at all; a single review pass turned up seven real defects. Most
+ * of the tests below are the one-to-one regression counterparts of those defects.
  */
 final class ExportPipelineTest extends TestCase
 {
@@ -50,7 +50,7 @@ final class ExportPipelineTest extends TestCase
         $this->dir->remove();
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     private function tabula(?TabulaSettings $settings = null): Tabula
     {
@@ -120,12 +120,12 @@ final class ExportPipelineTest extends TestCase
         ];
     }
 
-    // ---------------------------------------------------------------- en küçük halka
+    // ---------------------------------------------------------------- the smallest loop
 
     #[Test]
     public function itWritesAWorkbookFromAnArraySource(): void
     {
-        $path = $this->dir->file('musteriler.xlsx');
+        $path = $this->dir->file('customers.xlsx');
 
         $result = $this->tabula()->export($this->schema())
             ->from(ArraySource::of($this->rows()))
@@ -141,13 +141,13 @@ final class ExportPipelineTest extends TestCase
 
         $sheet = IOFactory::load($path)->getActiveSheet();
 
-        // Başlıklar sunucuda, istenen dilde üretilir.
+        // The headers are produced on the server, in the requested language.
         self::assertSame('Kod', $sheet->getCell('A1')->getValue());
         self::assertSame('Ünvan', $sheet->getCell('B1')->getValue());
         self::assertSame('Bakiye', $sheet->getCell('D1')->getValue());
 
-        // Baştaki sıfır korunmalı: Excel'in "sayıya benzeyeni sayıya çevir" davranışı
-        // cari kodları yiyen klasik hatadır.
+        // The leading zero must survive: Excel's "turn anything that looks like a number into
+        // a number" behaviour is the classic bug that eats account codes.
         self::assertSame('0042', $sheet->getCell('A2')->getValue());
         self::assertSame('Çiğdem Şahin Ltd. Şti.', $sheet->getCell('B2')->getValue());
     }
@@ -155,7 +155,7 @@ final class ExportPipelineTest extends TestCase
     #[Test]
     public function numericCellsStayRealNumbersSoExcelCanSumThem(): void
     {
-        $path = $this->dir->file('sayilar.xlsx');
+        $path = $this->dir->file('numbers.xlsx');
 
         $this->tabula()->export($this->schema())
             ->from(ArraySource::of($this->rows()))
@@ -167,14 +167,14 @@ final class ExportPipelineTest extends TestCase
         self::assertEqualsWithDelta(1234.56, $sheet->getCell('D2')->getValue(), 0.0001);
         self::assertIsFloat($sheet->getCell('D2')->getValue());
 
-        // Simge SAYIYA değil, biçim koduna girer — hücre toplanabilir kalır.
+        // The symbol goes into the format code, not into the NUMBER — the cell stays summable.
         self::assertStringContainsString('₺', (string) $sheet->getStyle('D2')->getNumberFormat()->getFormatCode());
     }
 
     #[Test]
     public function boolsAndEnumsAreWrittenInTheRequestedLanguage(): void
     {
-        $path = $this->dir->file('ceviri.xlsx');
+        $path = $this->dir->file('translation.xlsx');
 
         $this->tabula()->export($this->schema())
             ->from(ArraySource::of($this->rows()))
@@ -185,7 +185,7 @@ final class ExportPipelineTest extends TestCase
         self::assertSame('Evet', $sheet->getCell('E2')->getValue());
         self::assertSame('Hayır', $sheet->getCell('E3')->getValue());
 
-        // Enum çevirisi `label()` gelenegi üzerinden çözülür (TranslatableEnum olmadan).
+        // The enum translation is resolved through the `label()` convention (with no TranslatableEnum).
         self::assertSame('Açık', $sheet->getCell('F2')->getValue());
         self::assertSame('Kapalı', $sheet->getCell('F3')->getValue());
     }
@@ -195,7 +195,7 @@ final class ExportPipelineTest extends TestCase
     #[Test]
     public function csvIsWrittenWithBomAndSemicolonSoTurkishExcelReadsIt(): void
     {
-        $path = $this->dir->file('musteriler.csv');
+        $path = $this->dir->file('customers.csv');
 
         $this->tabula()->export($this->schema())
             ->from(ArraySource::of($this->rows()))
@@ -203,24 +203,25 @@ final class ExportPipelineTest extends TestCase
 
         $contents = (string) file_get_contents($path);
 
-        // BOM olmadan Excel dosyayı cp1254 sanır ve ş/ğ/ı/İ/ö/ç/ü bozulur.
+        // Without a BOM, Excel takes the file for cp1254 and ş/ğ/ı/İ/ö/ç/ü get mangled.
         self::assertStringStartsWith("\xEF\xBB\xBF", $contents);
         self::assertStringContainsString('Çiğdem Şahin', $contents);
 
-        // Ayraç `;`: tr/Avrupa Excel'inde `,` ONDALIK ayraçtır ve sayıyı iki kolona böler.
+        // The `;` delimiter: in Turkish/European Excel `,` is the DECIMAL separator and would
+        // split a number across two columns.
         self::assertStringContainsString('Kod;Ünvan;', $contents);
 
-        // CSV yerelleştirilmiş METNİ yazar, ham değeri değil.
+        // CSV writes the localised TEXT, not the raw value.
         self::assertStringContainsString('Evet', $contents);
         self::assertStringContainsString('1.234,56', $contents);
     }
 
-    // ---------------------------------------------------------------- kolon seçimi
+    // ---------------------------------------------------------------- column selection
 
     #[Test]
     public function onlyWritesTheRequestedColumnsInTheRequestedOrder(): void
     {
-        $path = $this->dir->file('secim.xlsx');
+        $path = $this->dir->file('selection.xlsx');
 
         $result = $this->tabula()->export($this->schema())
             ->from(ArraySource::of($this->rows()))
@@ -235,7 +236,7 @@ final class ExportPipelineTest extends TestCase
         self::assertNull($sheet->getCell('C1')->getValue());
     }
 
-    // ---------------------------------------------------------------- sayfalar
+    // ---------------------------------------------------------------- sheets
 
     #[Test]
     public function chunkedStrategySplitsIntoRealSheetsInXlsxAndFilesInCsv(): void
@@ -246,7 +247,7 @@ final class ExportPipelineTest extends TestCase
         );
         $schema = Schema::make('n')->fields(Field::string('code')->label('col.code'));
 
-        $xlsx = $this->dir->file('parca.xlsx');
+        $xlsx = $this->dir->file('chunked.xlsx');
         $result = $this->tabula()->export($schema)
             ->from(ArraySource::of($rows))
             ->sheets(new ChunkedSheets(2))
@@ -255,13 +256,13 @@ final class ExportPipelineTest extends TestCase
         self::assertSame(3, $result->sheets);
         self::assertCount(3, IOFactory::load($xlsx)->getSheetNames());
 
-        $csv = $this->dir->file('parca.csv');
+        $csv = $this->dir->file('chunked.csv');
         $csvResult = $this->tabula()->export($schema)
             ->from(ArraySource::of($rows))
             ->sheets(new ChunkedSheets(2))
             ->locale('tr')->to(Format::Csv)->write($csv);
 
-        // CSV sayfa taşıyamaz: her parça ayrı DOSYA olur.
+        // CSV cannot carry sheets: every chunk becomes its own FILE.
         self::assertCount(3, $csvResult->paths);
         self::assertTrue($csvResult->isMultiFile());
         foreach ($csvResult->paths as $file) {
@@ -272,15 +273,15 @@ final class ExportPipelineTest extends TestCase
     #[Test]
     public function groupedSheetsResolveFlatProjectionKeysAndKeepFalseSeparateFromNull(): void
     {
-        // Doctrine projeksiyonları düz `c.warehouse` anahtarı döndürür; strateji bunu
-        // ValueResolver ile okumalı (elle yazılmış bir kopya bunu kaçırıyordu).
+        // Doctrine projections return a flat `c.warehouse` key; the strategy has to read it
+        // through ValueResolver (a hand-written copy of that logic was missing this).
         $rows = [
             ['code' => 'a', 'c.warehouse' => 'Merkez'],
             ['code' => 'b', 'c.warehouse' => 'Merkez'],
             ['code' => 'c', 'c.warehouse' => 'Şube'],
         ];
 
-        $path = $this->dir->file('grup.xlsx');
+        $path = $this->dir->file('grouped.xlsx');
         $result = $this->tabula()->export(Schema::make('n')->fields(Field::string('code')->label('col.code')))
             ->from(ArraySource::of($rows))
             ->sheets(new GroupedSheets('c.warehouse'))
@@ -298,23 +299,23 @@ final class ExportPipelineTest extends TestCase
             ['code' => 'b', 'flag' => null],
         ];
 
-        $path = $this->dir->file('bayrak.xlsx');
+        $path = $this->dir->file('flag.xlsx');
         $result = $this->tabula()->export(Schema::make('n')->fields(Field::string('code')->label('col.code')))
             ->from(ArraySource::of($rows))
             ->sheets(new GroupedSheets('flag'))
             ->locale('tr')->to(Format::Xlsx)->write($path);
 
-        // `(string) false === ''` olduğu için ikisi de yedek ada düşerse "hayır" grubu ile
-        // "değeri yok" grubu aynı sayfada birleşir — sessiz veri kaybı.
+        // Because `(string) false === ''`, if both fell through to the fallback name the "no"
+        // group and the "has no value" group would merge onto the same sheet — silent data loss.
         self::assertSame(2, $result->sheets);
     }
 
-    // ---------------------------------------------------------------- kenar durumlar
+    // ---------------------------------------------------------------- edge cases
 
     #[Test]
     public function anEmptyResultStillProducesAHeaderOnlySheet(): void
     {
-        $path = $this->dir->file('bos.xlsx');
+        $path = $this->dir->file('empty.xlsx');
 
         $result = $this->tabula()->export($this->schema())
             ->from(ArraySource::of([]))
@@ -331,11 +332,11 @@ final class ExportPipelineTest extends TestCase
     #[Test]
     public function anEmptyResultDoesNotFeedANullRowToATypedGroupingClosure(): void
     {
-        // README'deki her kapanış `fn (array $row)` biçiminde; boş sonuçta stratejiye
-        // uydurma bir `null` satır geçirmek doğrudan TypeError'a dönüyordu.
+        // Every closure in the README is written as `fn (array $row)`; on an empty result,
+        // handing the strategy a made-up `null` row turned straight into a TypeError.
         $strategy = new GroupedSheets(static fn (array $row): string => (string) $row['g']);
 
-        $path = $this->dir->file('bos-grup.xlsx');
+        $path = $this->dir->file('empty-group.xlsx');
         $result = $this->tabula()->export(Schema::make('n')->fields(Field::string('code')->label('col.code')))
             ->from(ArraySource::of([]))
             ->sheets($strategy)
@@ -350,7 +351,7 @@ final class ExportPipelineTest extends TestCase
     {
         $settings = new TabulaSettings(emptyText: '-');
 
-        $path = $this->dir->file('bosluk.xlsx');
+        $path = $this->dir->file('placeholder.xlsx');
         $this->tabula($settings)->export(
             Schema::make('n')->fields(
                 Field::string('code')->label('col.code'),
@@ -373,23 +374,23 @@ final class ExportPipelineTest extends TestCase
         );
 
         $this->expectException(ExportException::class);
-        $this->expectExceptionMessageMatches('/kolon kalmadı/');
+        $this->expectExceptionMessageMatches('/no columns left/');
 
         $this->tabula()->export($schema)
             ->from(ArraySource::of([['code' => 'x']]))
-            ->locale('tr')->to(Format::Xlsx)->write($this->dir->file('kolonsuz.xlsx'));
+            ->locale('tr')->to(Format::Xlsx)->write($this->dir->file('no-columns.xlsx'));
     }
 
     #[Test]
     public function aSourceThatThrowsMidExportStillReleasesTheWriter(): void
     {
         $writer = new CsvWriter();
-        $path = $this->dir->file('yarim.csv');
+        $path = $this->dir->file('partial.csv');
 
         $exploding = IteratorSource::of(static function (): Generator {
             yield ['code' => 'a'];
 
-            throw new RuntimeException('kaynak patladı');
+            throw new RuntimeException('the source blew up');
         });
 
         try {
@@ -398,32 +399,33 @@ final class ExportPipelineTest extends TestCase
                 ->writer($writer)
                 ->locale('tr')->to(Format::Csv)->write($path);
 
-            self::fail('Kaynağın istisnası yukarı taşınmalıydı.');
+            self::fail('The source exception should have propagated.');
         } catch (RuntimeException $e) {
-            self::assertSame('kaynak patladı', $e->getMessage());
+            self::assertSame('the source blew up', $e->getMessage());
         }
 
-        // Yazıcı serbest bırakılmış olmalı: aynı örnek yeniden açılabiliyorsa tanıtıcı
-        // kapanmış demektir. Kapanmasaydı dosya tanıtıcısı sızar, yazıcı "zaten açık" diye
-        // reddeder ve kullanıcının verdiği yazıcı bir daha kullanılamaz hâle gelirdi.
+        // The writer must have been released: if the same instance can be opened again, the
+        // handle was closed. Had it not been, the file handle would leak, the writer would
+        // refuse with "already open", and the writer the user handed in would be unusable
+        // from then on.
         $reopenFailed = false;
 
         try {
-            $writer->open($this->dir->file('yeniden.csv'));
+            $writer->open($this->dir->file('reopened.csv'));
         } catch (Throwable) {
             $reopenFailed = true;
         } finally {
             $writer->close();
         }
 
-        self::assertFalse($reopenFailed, 'Yazıcı serbest bırakılmamış: ikinci open() reddedildi.');
+        self::assertFalse($reopenFailed, 'The writer was not released: the second open() was refused.');
     }
 
     #[Test]
     public function aDateInAStringFieldDoesNotKillTheExport(): void
     {
-        // Şema hatası boş/nötr hücre olarak görünmeli, çöken bir dışa aktarma olarak değil.
-        $path = $this->dir->file('tarih-metin.csv');
+        // A schema mistake should show up as an empty/neutral cell, not as a crashing export.
+        $path = $this->dir->file('date-text.csv');
 
         $result = $this->tabula()->export(
             Schema::make('n')->fields(Field::string('whenever')->label('col.created')),
@@ -438,16 +440,16 @@ final class ExportPipelineTest extends TestCase
     #[Test]
     public function theCellIsBuiltIndependentlyOfTheChosenWriter(): void
     {
-        // `to()` ile `writer()` çelişebilir (ikisi de açık API). Hücre biçimden bağımsız
-        // üretilmezse tarihler Excel'e METİN olarak düşer ve alfabetik sıralanır.
-        $path = $this->dir->file('capraz.xlsx');
+        // `to()` and `writer()` can contradict each other (both are public API). If the cell is
+        // not built independently of the format, dates land in Excel as TEXT and sort alphabetically.
+        $path = $this->dir->file('crossed.xlsx');
 
         $this->tabula()->export(
             Schema::make('n')->fields(Field::date('createdAt')->label('col.created')),
         )
             ->from(ArraySource::of([['createdAt' => new DateTimeImmutable('2024-01-05')]]))
-            ->to(Format::Csv)          // biçim CSV der…
-            ->writer(new XlsxWriter()) // …ama yazıcı Xlsx
+            ->to(Format::Csv)          // the format says CSV…
+            ->writer(new XlsxWriter()) // …but the writer is Xlsx
             ->locale('tr')
             ->write($path);
 

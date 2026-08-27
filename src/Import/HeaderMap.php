@@ -12,41 +12,43 @@ use Balin\Tabula\Value\Parser\StringParser;
 use Closure;
 
 /**
- * Dosyanın başlıklarını şemanın alanlarına bağlar — ESKİ ERP'NİN KUSURUNUN TAMİR EDİLDİĞİ YER.
+ * Binds the file's headers to the schema's fields — THIS IS WHERE THE FLAW OF THE SYSTEM THIS
+ * REPLACES IS REPAIRED.
  *
- * ★ ŞABLON YERLEŞİMİ (bkz. `TemplateBuilder`):
+ * ★ TEMPLATE LAYOUT (see `TemplateBuilder`):
  *
- *     1. satır → KANONİK ALAN ANAHTARLARI (xlsx'te gizli, csv'de görünür ama zararsız)
- *     2. satır → çevrilmiş etiketler (kullanıcının okuduğu)
- *     3. satır → veri
+ *     row 1 → CANONICAL FIELD KEYS (hidden in xlsx, visible but harmless in csv)
+ *     row 2 → translated labels (what the user reads)
+ *     row 3 → data
  *
- * Karar için dosyada HİÇBİR İŞARET ARANMAZ: 1. satırdaki boş olmayan hücrelerin HEPSİ
- * şemadaki bir anahtara oturuyorsa o satır anahtar satırıdır ve veri 3. satırdan başlar;
- * oturmuyorsa 1. satır etiket başlığıdır ve veri 2. satırdan başlar. Gizli bir sürüm
- * numarası, imza hücresi ya da dosya adı kuralı gerekmez — hiçbiri kullanıcının
- * "farklı kaydet" yapmasına dayanamazdı.
+ * NO MARKER WHATSOEVER IS LOOKED FOR in the file to reach the decision: if EVERY non-blank
+ * cell in row 1 lands on a key in the schema, that row is the key row and the data starts at
+ * row 3; if it does not, row 1 is the label header and the data starts at row 2. No hidden
+ * version number, signature cell or file-name convention is needed — none of them would have
+ * survived a user hitting "save as".
  *
- * Eski ERP'de dosyanın kimliği ÇEVRİLMİŞ BAŞLIK DİZESİYDİ ("Müşteri Kodu"). Sonuçları:
- * çeviri dosyasındaki tek bir kelime değişikliği kullanıcıların elindeki tüm şablonları
- * sessizce okunamaz hâle getiriyordu ve İngilizce başlıklı bir dosya Türkçe oturumda hiç
- * eşleşmiyordu. Burada kimlik ANAHTARDIR; etiket yalnızca eski dosyalar için bir yedek yol.
+ * In the system this replaces the file's identity was the TRANSLATED HEADER STRING ("Customer
+ * Code"). The consequences: a single word changed in a translation file silently made every
+ * template users had on disk unreadable, and a file with English headers never matched at all
+ * in a Turkish session. Here the identity is the KEY; the label is only a fallback route for
+ * legacy files.
  *
- * Sınıf SAF ve bağımsız test edilebilirdir: dosya açmaz, satır okumaz, yalnız iki başlık
- * satırıyla şemayı karşılaştırır.
+ * The class is PURE and independently testable: it opens no file and reads no rows, it only
+ * compares two header rows against the schema.
  */
 final readonly class HeaderMap
 {
-    /** Anahtar satırlı yerleşimde veri 3. satırdan başlar (1: anahtar, 2: etiket). */
+    /** In the key-row layout the data starts at row 3 (1: keys, 2: labels). */
     private const int KEY_ROW_DATA_START = 3;
 
-    /** Anahtar satırı yoksa 1. satır başlıktır, veri 2. satırdan başlar. */
+    /** With no key row, row 1 is the header and the data starts at row 2. */
     private const int LABEL_ROW_DATA_START = 2;
 
     /**
-     * @param array<int, Field> $fields       kolon indeksi => alan, DOSYADAKİ sırayla
-     * @param int               $firstDataRow ilk veri satırının kullanıcı-görünür numarası
-     * @param bool              $usedKeyRow   eşleşme kanonik anahtarlarla mı yapıldı
-     * @param list<string>      $ignored      şemada karşılığı olmayan (ya da tekrarlanan) başlıklar
+     * @param array<int, Field> $fields       column index => field, in FILE order
+     * @param int               $firstDataRow the user-visible number of the first data row
+     * @param bool              $usedKeyRow   whether the match was made with canonical keys
+     * @param list<string>      $ignored      headers with no counterpart in the schema (or repeated ones)
      */
     private function __construct(
         public array $fields,
@@ -57,17 +59,18 @@ final readonly class HeaderMap
     }
 
     /**
-     * Dosyanın ilk iki satırından eşlemeyi çıkarır.
+     * Derives the mapping from the first two rows of the file.
      *
-     * İKİ satır istenir çünkü anahtar satırlı yerleşimde 2. satır, eşleşmeyen kolonların
-     * İNSAN ADIDIR: kullanıcı şablona kendi "Notlar" sütununu eklediğinde o kolonun 1.
-     * satırı boştur ve "yok sayılan başlık: ''" diyen bir rapor kimseye hangi kolondan
-     * bahsettiğini söylemez. Eşleştirme kararına 2. satır KARIŞMAZ, yalnız raporlar.
+     * TWO rows are asked for because in the key-row layout row 2 is the HUMAN NAME of the
+     * columns that did not match: when a user adds their own "Notes" column to the template,
+     * row 1 of that column is empty, and a report saying "ignored header: ''" tells nobody
+     * which column it is talking about. Row 2 TAKES NO PART in the matching decision, it only
+     * feeds the report.
      *
-     * @param list<mixed> $firstRow  dosyanın 1. satırı, hücreler ham hâliyle
-     * @param list<mixed> $secondRow dosyanın 2. satırı; yoksa boş dizi
+     * @param list<mixed> $firstRow  row 1 of the file, cells exactly as they came
+     * @param list<mixed> $secondRow row 2 of the file; an empty array if there is none
      *
-     * @throws ImportException anahtar satırı zorunluyken yoksa ya da hiçbir kolon eşleşmezse
+     * @throws ImportException when the key row is mandatory but missing, or when no column matches at all
      */
     public static function resolve(
         array $firstRow,
@@ -76,13 +79,13 @@ final readonly class HeaderMap
         MatchStrategy $strategy,
         ParseContext $context,
     ): self {
-        // `Label` anahtar satırını HİÇ ARAMAZ: eski, elle hazırlanmış dosyalarla geriye
-        // dönük uyum için vardır ve orada 1. satır her zaman etikettir.
+        // `Label` NEVER LOOKS for a key row: it exists for backward compatibility with old,
+        // hand-made files, and there row 1 is always the label.
         $keys = MatchStrategy::Label === $strategy ? null : self::detectKeyRow($firstRow, $schema);
 
-        // Makineden makineye akışlarda etikete düşmek SESSİZ bir kayıptır: çeviri
-        // değiştiğinde besleme çalışmaya devam ediyormuş gibi görünüp yanlış kolonu okur.
-        // `Key` istendiyse ya anahtar satırı vardır ya da dosya reddedilir.
+        // In machine-to-machine flows, falling back to the label is a SILENT loss: when the
+        // translation changes, the feed looks as if it were still working while it reads the
+        // wrong column. If `Key` was asked for, either there is a key row or the file is rejected.
         if (MatchStrategy::Key === $strategy && null === $keys) {
             throw ImportException::keyRowMissing();
         }
@@ -93,7 +96,7 @@ final readonly class HeaderMap
     }
 
     /**
-     * Dosyada tanınan alan anahtarları, DOSYADAKİ sırayla.
+     * The field keys recognised in the file, in FILE order.
      *
      * @return list<string>
      */
@@ -105,33 +108,33 @@ final readonly class HeaderMap
         ));
     }
 
-    // ---------------------------------------------------------------- anahtar satırı
+    // ---------------------------------------------------------------- key row
 
     /**
-     * 1. satır anahtar satırı mı? Öyleyse kolon indeksi => anahtar eşlemesi.
+     * Is row 1 a key row? If so, the column index => key mapping.
      *
      * @param list<mixed> $row
      *
-     * @return array<int, string>|null null = anahtar satırı değil
+     * @return array<int, string>|null null = not a key row
      */
     private static function detectKeyRow(array $row, Schema $schema): ?array
     {
         $keys = [];
 
         foreach ($row as $index => $cell) {
-            // Boş hücre kararı BOZMAZ: kullanıcının şablona eklediği fazladan sütunun
-            // gizli anahtar satırında karşılığı yoktur ve bu, dosyayı şablon olmaktan
-            // çıkarmamalı. O kolon sonra `ignored`e düşer.
+            // A blank cell DOES NOT BREAK the decision: the extra column a user added to the
+            // template has no counterpart in the hidden key row, and that must not stop the
+            // file from being a template. That column later ends up in `ignored`.
             if (StringParser::isBlank($cell)) {
                 continue;
             }
 
             $text = StringParser::describe($cell);
 
-            // ★ Anahtar eşleşmesi BÜYÜK/küçük harfe DUYARLIDIR. Anahtar kanonik bir
-            // tanımlayıcıdır, insanın okuduğu bir metin değil; şema `code` ve `Code`
-            // alanlarını ayrı ayrı taşıyabilir ve harf katlamak ikisini karıştırırdı.
-            // Etiket tarafındaki hoşgörü (aşağıda) tam tersi gerekçeyle vardır.
+            // ★ Key matching is CASE SENSITIVE. A key is a canonical identifier, not a text a
+            // human reads; a schema may well carry a `code` and a `Code` field separately, and
+            // folding case would conflate the two. The tolerance on the label side (below)
+            // exists for exactly the opposite reason.
             if (!$schema->has($text)) {
                 return null;
             }
@@ -139,16 +142,16 @@ final readonly class HeaderMap
             $keys[$index] = $text;
         }
 
-        // Tamamen boş bir 1. satır "boş olmayan her hücre eşleşti" koşulunu boş yere
-        // sağlar. Onu anahtar satırı saymak, dosyanın ilk iki satırını başlık sanıp
-        // GERÇEK VERİYİ yutmak olurdu.
+        // A completely empty row 1 satisfies "every non-blank cell matched" vacuously. Taking
+        // it for a key row would mean mistaking the first two rows of the file for headers and
+        // swallowing REAL DATA.
         return [] === $keys ? null : $keys;
     }
 
     /**
-     * @param array<int, string> $keys     kolon indeksi => kanonik anahtar
-     * @param list<mixed>        $keyRow   1. satırın tamamı — dosyanın genişliği buradan
-     * @param list<mixed>        $labelRow 2. satır — yok sayılan kolonların insan adı
+     * @param array<int, string> $keys     column index => canonical key
+     * @param list<mixed>        $keyRow   the whole of row 1 — the file's width comes from here
+     * @param list<mixed>        $labelRow row 2 — the human name of the ignored columns
      */
     private static function byKey(array $keys, array $keyRow, array $labelRow, Schema $schema, ParseContext $context): self
     {
@@ -162,8 +165,8 @@ final readonly class HeaderMap
             $key = $keys[$index] ?? null;
 
             if (null === $key) {
-                // Anahtar satırında karşılığı olmayan kolon: kullanıcının elle eklediği
-                // sütun. Kimliği 2. satırdan, yani onun GÖRDÜĞÜ etiketten okunur.
+                // A column with no counterpart in the key row: a column the user added by
+                // hand. Its identity is read from row 2, that is, from the label they SEE.
                 $label = self::textAt($labelRow, $index);
 
                 if ('' !== $label) {
@@ -173,8 +176,9 @@ final readonly class HeaderMap
                 continue;
             }
 
-            // Aynı alanı gösteren ikinci başlık: İLKİ kazanır. İkincisine bağlamak,
-            // kullanıcının ilk kolona yazdığı veriyi sessizce çöpe atmak olurdu.
+            // A second header pointing at the same field: the FIRST one wins. Binding to the
+            // second would mean silently throwing away the data the user typed into the first
+            // column.
             if (isset($taken[$key])) {
                 $ignored[] = $key;
 
@@ -185,33 +189,34 @@ final readonly class HeaderMap
             $fields[$index] = $schema->field($key);
         }
 
-        // `$fields` boş olamaz: `detectKeyRow()` en az bir eşleşen anahtar bulmadan
-        // anahtar satırı demiyor ve ilk anahtar her zaman alınıyor.
+        // `$fields` cannot be empty: `detectKeyRow()` does not declare a key row without
+        // finding at least one matching key, and the first key is always taken.
         return new self($fields, self::dataStartAfterKeyRow($fields, $keyRow, $labelRow, $context), true, $ignored);
     }
 
     /**
-     * Anahtar satırından SONRA veri kaçıncı satırdan başlar?
+     * AFTER a key row, which row does the data start at?
      *
-     * ★ BU KONTROL BİR SESSİZ VERİ KAYBINI KAPATIR. Kural koşulsuz uygulansaydı
-     * ("anahtar satırı varsa veri 3. satırdan başlar") şu dosya ilk kaydını yerdi:
+     * ★ THIS CHECK CLOSES A SILENT DATA LOSS. Had the rule been applied unconditionally
+     * ("if there is a key row, the data starts at row 3"), the following file would have
+     * eaten its first record:
      *
-     *     code;name        ← `export()`in yazdığı TEK başlık satırı
-     *     A-1;Bir          ← VERİ — "etiket satırı" sanılıp atlanırdı
-     *     A-2;İki
+     *     code;name        ← the SINGLE header row written by `export()`
+     *     A-1;One          ← DATA — taken for the "label row" and skipped
+     *     A-2;Two
      *
-     * Çünkü alanın etiketi anahtarının AYNISI olabilir: `->label()` hiç verilmemişse
-     * `Column::fromField()` başlığa anahtarı yazar (çevirmen de yoksa aynen kalır). O
-     * durumda 1. satır hem anahtar satırı hem etiket satırı gibi okunur — ve dışa
-     * aktarılan bir dosyayı geri okumak her seferinde ilk satırı yutardı. Kütüphanenin
-     * var oluş sebebi tam olarak bu sınıf hatayı ortadan kaldırmak.
+     * Because a field's label may be IDENTICAL to its key: if `->label()` was never given,
+     * `Column::fromField()` writes the key into the header (and with no translator it stays
+     * as it is). In that case row 1 reads as both a key row and a label row — and reading an
+     * exported file back would swallow the first row every single time. Eliminating exactly
+     * this class of bug is the reason this library exists.
      *
-     * Karar 2. SATIRA sorulur: etiket anahtarın aynısıysa gerçek şablonun 1. ve 2.
-     * satırı BİREBİR aynıdır (`TemplateBuilder` ikisini de yazar). Aynı değilse 2. satır
-     * veridir.
+     * The decision is put to ROW 2: if the label is identical to the key, then in a genuine
+     * template rows 1 and 2 are CHARACTER FOR CHARACTER the same (`TemplateBuilder` writes
+     * both). If they are not the same, row 2 is data.
      *
-     * Belirsizlik yoksa (etiketler anahtarlardan farklıysa — yani neredeyse her gerçek
-     * şemada) bu metot ilk `if`te çıkar ve hiçbir şey değişmez.
+     * Where there is no ambiguity (the labels differ from the keys — that is, in practically
+     * every real schema) this method returns at the first `if` and nothing changes.
      *
      * @param array<int, Field> $fields
      * @param list<mixed>       $keyRow
@@ -220,8 +225,8 @@ final readonly class HeaderMap
     private static function dataStartAfterKeyRow(array $fields, array $keyRow, array $labelRow, ParseContext $context): int
     {
         foreach ($fields as $index => $field) {
-            // Tek bir kolonun bile etiketi anahtarından farklıysa 1. satır etiket satırı
-            // OLARAK OKUNAMAZ; belirsizlik yok, yerleşim şablonun kendisi.
+            // If even a single column's label differs from its key, row 1 CANNOT BE READ as a
+            // label row; there is no ambiguity, the layout is the template itself.
             if (self::fold(self::labelOf($field, $context)) !== self::foldedAt($keyRow, $index)) {
                 return self::KEY_ROW_DATA_START;
             }
@@ -236,16 +241,16 @@ final readonly class HeaderMap
         return self::KEY_ROW_DATA_START;
     }
 
-    // ---------------------------------------------------------------- etiket satırı
+    // ---------------------------------------------------------------- label row
 
     /**
-     * 1. satırı ÇEVRİLMİŞ ETİKETLERLE eşleştirir — eski dosyalar için yedek yol.
+     * Matches row 1 by TRANSLATED LABELS — the fallback route for legacy files.
      *
-     * Etiketler dosyadan değil ŞEMADAN üretilir ve `Column::fromField()` ile birebir aynı
-     * kuralla çözülür (kapanış → çağır, dize → çevir, hiç yoksa anahtarın kendisi). İki
-     * yerde iki farklı etiket üretmek, şablonun başlığıyla içe aktarmanın beklediği
-     * başlığın ayrışması demekti — eski ERP'de dışa aktarma bir çeviri ailesinden,
-     * içe aktarma başka bir aileden okuyordu.
+     * The labels are produced from the SCHEMA, not from the file, and are resolved by exactly
+     * the same rule as `Column::fromField()` (closure → call it, string → translate it, none
+     * at all → the key itself). Producing two different labels in two places would have meant
+     * the template's header and the header the import expects drifting apart — in the system
+     * this replaces, the export read from one translation family and the import from another.
      *
      * @param list<mixed> $headerRow
      */
@@ -260,9 +265,9 @@ final readonly class HeaderMap
             $label = self::labelOf($field, $context);
             $expected[] = $label;
 
-            // İlk alan kazanır: iki alanın çevirisi aynıysa (ör. ikisi de "Tutar")
-            // ikincisi hiçbir zaman eşleşemez. Sessizce ikinciye bağlamak, kullanıcının
-            // birinci kolona yazdığını başka bir alana yazmak olurdu.
+            // The first field wins: if two fields translate to the same text (e.g. both to
+            // "Amount"), the second can never match. Silently binding to the second would mean
+            // writing what the user typed into the first column into a different field.
             $byLabel[self::fold($label)] ??= $field;
         }
 
@@ -291,9 +296,9 @@ final readonly class HeaderMap
             $fields[$index] = $field;
         }
 
-        // Hiçbir kolon tutmadıysa dosya bu şema için kullanılamaz. Boş bir sonuç
-        // döndürmek ("0 satır aktarıldı") kullanıcıya dosyanın kabul edildiğini
-        // düşündürürdü; mesaj hem bulunanları hem beklenenleri sayar.
+        // If not a single column stuck, the file is unusable for this schema. Returning an
+        // empty result ("0 rows imported") would have made the user think the file had been
+        // accepted; the message lists both what was found and what was expected.
         if ([] === $fields) {
             throw ImportException::noMatchingColumns($found, $expected);
         }
@@ -301,7 +306,7 @@ final readonly class HeaderMap
         return new self($fields, self::LABEL_ROW_DATA_START, false, $ignored);
     }
 
-    /** `Column::fromField()` ile AYNI etiket çözümü — ikisi ayrışamaz. */
+    /** The SAME label resolution as `Column::fromField()` — the two cannot drift apart. */
     private static function labelOf(Field $field, ParseContext $context): string
     {
         $label = $field->getLabel();
@@ -310,17 +315,18 @@ final readonly class HeaderMap
             return (string) $label($context->locale);
         }
 
-        // Etiket verilmemişse anahtarın kendisi başlık olur — kolon asla başlıksız kalmaz.
+        // If no label was given, the key itself becomes the header — a column is never left headerless.
         return $context->trans($label ?? $field->getKey());
     }
 
     /**
-     * Etiket karşılaştırma biçimi: görünmez boşluklardan arındırılmış, kırpılmış, harf katlanmış.
+     * The comparison form of a label: stripped of invisible whitespace, trimmed, case folded.
      *
-     * `mb_strtolower()` YERELDEN BAĞIMSIZDIR ve bu burada bir kusur değil, tam olarak
-     * aranan özelliktir: iki taraf da aynı işlevden geçtiği için "TUTAR" ile "Tutar"
-     * buluşur. Yerele duyarlı bir katlama, sunucunun diline göre "I" harfini bir gün "ı"
-     * bir gün "i" yapar ve aynı dosya iki farklı ortamda farklı eşleşirdi.
+     * `mb_strtolower()` IS LOCALE-INDEPENDENT, and here that is not a defect but exactly the
+     * property we are after: since both sides go through the same function, "AMOUNT" meets
+     * "Amount". A locale-sensitive fold would turn the letter "I" into "ı" one day and "i" the
+     * next depending on the server's language, and the same file would match differently in
+     * two environments.
      */
     private static function fold(string $text): string
     {
@@ -328,7 +334,7 @@ final readonly class HeaderMap
     }
 
     /**
-     * Satırdaki hücrenin temizlenmiş metni; hücre yoksa ya da boşsa boş dize.
+     * The cleaned text of the cell in the row; an empty string if the cell is missing or blank.
      *
      * @param list<mixed> $row
      */
@@ -340,7 +346,7 @@ final readonly class HeaderMap
     }
 
     /**
-     * `textAt()`in karşılaştırmaya hazır hâli.
+     * `textAt()` in its comparison-ready form.
      *
      * @param list<mixed> $row
      */

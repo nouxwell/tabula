@@ -22,17 +22,19 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Şablon üretimi testleri — üretilen dosya PhpSpreadsheet ile GERİ OKUNARAK ölçülür.
+ * Template production tests — the produced file is measured by READING IT BACK with
+ * PhpSpreadsheet.
  *
- * Şablon, gidiş-dönüşün "dönüş" ucunun sözleşmesidir ve tamamı tek bir karara dayanır:
+ * The template is the contract of the "return" end of the round trip, and all of it rests on
+ * one single decision:
  *
- *     1. satır → kanonik alan anahtarları (gizli)
- *     2. satır → çevrilmiş etiketler
- *     3. satır → veri
+ *     row 1 → canonical field keys (hidden)
+ *     row 2 → translated labels
+ *     row 3 → data
  *
- * Eski ERP'de dosyanın kimliği ÇEVRİLMİŞ BAŞLIK DİZESİYDİ; çeviri dosyasındaki tek bir
- * kelime değişikliği kullanıcıların elindeki tüm şablonları sessizce okunamaz hâle
- * getiriyordu. Aşağıdaki testler o kimliğin dosyada gerçekten durduğunu doğrular.
+ * In the system this replaces the file's identity was the TRANSLATED HEADER STRING; a single
+ * word changed in a translation file silently made every template users had on disk
+ * unreadable. The tests below verify that that identity really does sit in the file.
  */
 final class TemplateBuilderTest extends TestCase
 {
@@ -47,14 +49,15 @@ final class TemplateBuilderTest extends TestCase
 
     protected function tearDown(): void
     {
-        // Worksheet ile Spreadsheet birbirini tutar; sayaç tabanlı çöp toplayıcı çözemez.
+        // Worksheet and Spreadsheet hold on to each other; a refcount-based garbage collector
+        // cannot break that cycle.
         $this->loaded?->disconnectWorksheets();
         $this->loaded = null;
 
         $this->dir->remove();
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     private function translator(): Translator
     {
@@ -76,8 +79,9 @@ final class TemplateBuilderTest extends TestCase
     }
 
     /**
-     * İki BOOLE kolonu bilerek yan yanadır: ikisi de aynı ["Evet","Hayır"] kümesini
-     * üretir, yani tekilleştirme çalışıyorsa yardımcı sayfada tek sütun oluşmalıdır.
+     * The two BOOLEAN columns sit side by side on purpose: both produce the same
+     * ["Evet","Hayır"] set, so if de-duplication works a single column must be created on the
+     * helper sheet.
      */
     private function schema(): Schema
     {
@@ -99,7 +103,7 @@ final class TemplateBuilderTest extends TestCase
             $options ?? new TemplateOptions(),
         );
 
-        $path = $this->dir->file('sablon.xlsx');
+        $path = $this->dir->file('template.xlsx');
         $builder->write($this->schema(), $path, 'tr');
 
         return $this->loaded = IOFactory::load($path);
@@ -119,8 +123,8 @@ final class TemplateBuilderTest extends TestCase
     }
 
     /**
-     * Açılır listenin GERÇEK seçenekleri: doğrulama formülünün gösterdiği aralık
-     * yardımcı sayfadan tek tek okunur.
+     * The REAL options of the drop-down list: the range the validation formula points at is
+     * read cell by cell from the helper sheet.
      *
      * @return list<string>
      */
@@ -131,7 +135,7 @@ final class TemplateBuilderTest extends TestCase
         $formula = $validation->getFormula1();
 
         if (1 !== preg_match('/^_lists!\$([A-Z]+)\$(\d+):\$[A-Z]+\$(\d+)$/', $formula, $matches)) {
-            self::fail(sprintf('Beklenmeyen doğrulama formülü: %s', $formula));
+            self::fail(sprintf('Unexpected validation formula: %s', $formula));
         }
 
         $lists = $this->listSheet($spreadsheet);
@@ -149,30 +153,30 @@ final class TemplateBuilderTest extends TestCase
         $lists = $spreadsheet->getSheetByName('_lists');
 
         if (null === $lists) {
-            self::fail('Gizli "_lists" yardımcı sayfası üretilmemiş.');
+            self::fail('The hidden "_lists" helper sheet was not produced.');
         }
 
         return $lists;
     }
 
-    // ---------------------------------------------------------------- yerleşim
+    // ---------------------------------------------------------------- layout
 
     #[Test]
     public function rowOneCarriesTheCanonicalKeysAndRowTwoTheTranslatedLabels(): void
     {
         $sheet = $this->build()->getSheet(0);
 
-        // ★ Dosyanın KİMLİĞİ budur. Çeviri değişse bile 1. satır aynı kalır.
+        // ★ THIS is the file's IDENTITY. Row 1 stays the same even if the translation changes.
         self::assertSame(
             ['code', 'name', 'isActive', 'isLocked', 'status', 'qty'],
             $this->rowValues($sheet, 1),
-            '1. satır kanonik alan anahtarlarını taşımalı.',
+            'Row 1 must carry the canonical field keys.',
         );
 
         self::assertSame(
             ['Kod', 'Ünvan', 'Aktif', 'Kilitli', 'Durum', 'Miktar'],
             $this->rowValues($sheet, 2),
-            '2. satır kullanıcının okuduğu çeviriyi taşımalı.',
+            'Row 2 must carry the translation the user reads.',
         );
 
         self::assertSame('Müşteriler', $sheet->getTitle());
@@ -183,10 +187,10 @@ final class TemplateBuilderTest extends TestCase
     {
         $sheet = $this->build()->getSheet(0);
 
-        // Satır GİZLENİR, silinmez: kullanıcı teknik anahtarları görmez, içe aktarma görür.
-        self::assertFalse($sheet->getRowDimension(1)->getVisible(), 'Anahtar satırı gizli olmalı.');
-        self::assertTrue($sheet->getRowDimension(2)->getVisible(), 'Etiket satırı görünür olmalı.');
-        self::assertSame('code', $sheet->getCell('A1')->getValueString(), 'Gizli satır dosyada durmaya devam etmeli.');
+        // The row is HIDDEN, not deleted: the user does not see the technical keys, the import does.
+        self::assertFalse($sheet->getRowDimension(1)->getVisible(), 'The key row must be hidden.');
+        self::assertTrue($sheet->getRowDimension(2)->getVisible(), 'The label row must be visible.');
+        self::assertSame('code', $sheet->getCell('A1')->getValueString(), 'The hidden row must go on sitting in the file.');
     }
 
     #[Test]
@@ -194,20 +198,21 @@ final class TemplateBuilderTest extends TestCase
     {
         $sheet = $this->build()->getSheet(0);
 
-        // "A3'ü dondur" = anahtar VE etiket satırlarının ikisi de sabit kalsın.
-        // (`XlsxWriter` tek başlık satırı için A2 dondurur; fark gizli anahtar satırından gelir.)
+        // "Freeze A3" = both the key row AND the label row stay put.
+        // (`XlsxWriter` freezes A2 for a single header row; the difference comes from the
+        // hidden key row.)
         self::assertSame('A3', $sheet->getFreezePane());
 
-        // Şablonda hiç DOLU veri satırı yoktur.
-        self::assertSame(['', '', '', '', '', ''], $this->rowValues($sheet, 3), 'Veri satırları boş olmalı.');
+        // A template has no FILLED data row at all.
+        self::assertSame(['', '', '', '', '', ''], $this->rowValues($sheet, 3), 'The data rows must be empty.');
 
-        // Kolon stilleri TAM KOLON aralığıyla ("B1:B1048576") uygulanır. Veri satırından
-        // başlatan bir aralık ("B3:B1048576") içgüdüsel olarak doğru görünür ama artık tam
-        // kolon sayılmaz: PhpSpreadsheet aradaki BİR MİLYON koordinat için gerçekten hücre
-        // yaratır ve dosya tek satırda bellekte patlar.
-        // (Yüklenen dosyada C3/D3/E3 belirir; onları okuyucu doğrulama aralıklarını
-        // uygularken yaratır — yazılan dosyanın kendi boyutu A1:F2'dir.)
-        self::assertLessThan(10, $sheet->getHighestRow(), 'Tam kolon stili bir milyon hücre yaratmamalı.');
+        // Column styles are applied with a FULL COLUMN range ("B1:B1048576"). A range starting
+        // from the data row ("B3:B1048576") looks intuitively right but no longer counts as a
+        // full column: PhpSpreadsheet really does create a cell for the ONE MILLION
+        // coordinates in between and the file blows up memory in a single row.
+        // (In the loaded file C3/D3/E3 appear; the reader creates those while applying the
+        // validation ranges — the written file's own extent is A1:F2.)
+        self::assertLessThan(10, $sheet->getHighestRow(), 'A full-column style must not create a million cells.');
     }
 
     #[Test]
@@ -215,27 +220,27 @@ final class TemplateBuilderTest extends TestCase
     {
         $sheet = $this->build()->getSheet(0);
 
-        // Eski ERP şablonlarındaki işe yarayan tek görsel ipucu buydu; korundu.
+        // This was the one visual cue in the old templates that actually worked; it was kept.
         self::assertSame(
             'FFFCE4E4',
             $sheet->getStyle('A2')->getFill()->getStartColor()->getARGB(),
-            'Zorunlu kolonun başlığı kırmızı dolgulu olmalı.',
+            'A required column header must have the red fill.',
         );
 
         self::assertSame(
             'FFF2F2F2',
             $sheet->getStyle('B2')->getFill()->getStartColor()->getARGB(),
-            'Zorunlu olmayan kolon sıradan başlık dolgusunu almalı.',
+            'A column that is not required must get the ordinary header fill.',
         );
     }
 
-    // ---------------------------------------------------------------- açılır listeler
+    // ---------------------------------------------------------------- drop-down lists
 
     /**
-     * ★ Eski ERP'nin en somut kusuru: hücreye yazdığı değer, kendi doğrulama listesinde
-     * BULUNMUYORDU (metin bir çeviri ailesinden, liste başka bir aileden geliyordu).
-     * Burada liste, dışa aktarmanın kullandığı biçimlendiricinin ta kendisine sorularak
-     * üretilir; ayrışmaları imkânsızdır.
+     * ★ The most concrete flaw of the system this replaces: the value it wrote into the cell
+     * WAS NOT PRESENT in its own validation list (the text came from one translation family,
+     * the list from another). Here the list is produced by asking the very formatter the
+     * export uses; the two cannot drift apart.
      */
     #[Test]
     public function aBoolColumnDropdownContainsTheTranslatedYesNoPair(): void
@@ -243,12 +248,12 @@ final class TemplateBuilderTest extends TestCase
         $spreadsheet = $this->build();
         $sheet = $spreadsheet->getSheet(0);
 
-        self::assertTrue($sheet->dataValidationExists('C3'), 'Boole kolonunda açılır liste olmalı.');
+        self::assertTrue($sheet->dataValidationExists('C3'), 'A boolean column must have a drop-down list.');
 
         self::assertSame(
             ['Evet', 'Hayır'],
             $this->dropdownOptions($spreadsheet, $sheet->getDataValidation('C3')),
-            'Listedeki metin, dışa aktarmanın hücreye yazdığı metnin AYNISI olmalı.',
+            'The text in the list must be THE SAME as the text the export writes into the cell.',
         );
     }
 
@@ -273,12 +278,12 @@ final class TemplateBuilderTest extends TestCase
         $first = $sheet->getDataValidation('C3')->getFormula1();
         $second = $sheet->getDataValidation('D3')->getFormula1();
 
-        self::assertSame($first, $second, 'Aynı seçenek kümesini paylaşan iki kolon TEK aralığa bakmalı.');
+        self::assertSame($first, $second, 'Two columns sharing the same option set must look at a SINGLE range.');
 
         $lists = $this->listSheet($spreadsheet);
 
-        // İki boole kolonu tek sütuna düşer, enum ikinci sütunu alır: toplam iki sütun.
-        self::assertSame('B', $lists->getHighestColumn(), 'Tekilleştirme çalışmazsa üç ayrı sütun oluşurdu.');
+        // The two boolean columns fall into one column, the enum takes the second: two columns in total.
+        self::assertSame('B', $lists->getHighestColumn(), 'Without de-duplication three separate columns would be created.');
         self::assertSame(Worksheet::SHEETSTATE_HIDDEN, $lists->getSheetState());
     }
 
@@ -287,18 +292,19 @@ final class TemplateBuilderTest extends TestCase
     {
         $sheet = $this->build()->getSheet(0);
 
-        // Boş bir açılır liste hiç liste olmamasından beterdir: Excel hücreyi kilitler.
-        self::assertFalse($sheet->dataValidationExists('A3'), 'Metin kolonunda liste olmamalı.');
-        self::assertFalse($sheet->dataValidationExists('F3'), 'Miktar kolonunda liste olmamalı.');
+        // An empty drop-down list is worse than no list at all: Excel locks the cell.
+        self::assertFalse($sheet->dataValidationExists('A3'), 'A text column must have no list.');
+        self::assertFalse($sheet->dataValidationExists('F3'), 'A quantity column must have no list.');
     }
 
-    // ---------------------------------------------------------------- seçenekler
+    // ---------------------------------------------------------------- options
 
     #[Test]
     public function switchingOffTheKeyRowMovesEverythingUpOneRow(): void
     {
-        // Anahtar satırını kapatmak dosyayı ETİKETLE eşleşmeye mahkûm eder — yani eski
-        // ERP'nin ölümcül kusuruna geri döner. Seçenek yine de sözleşmesini korumalı.
+        // Turning the key row off condemns the file to matching BY LABEL — that is, it goes
+        // back to the fatal flaw of the system this replaces. The option must nevertheless
+        // keep its contract.
         $sheet = $this->build(new TemplateOptions(includeKeyRow: false))->getSheet(0);
 
         self::assertSame(['Kod', 'Ünvan', 'Aktif', 'Kilitli', 'Durum', 'Miktar'], $this->rowValues($sheet, 1));

@@ -21,30 +21,31 @@ use PHPUnit\Framework\TestCase;
 use stdClass;
 
 /**
- * `DoctrineSource`'un veritabanına DOKUNMAYAN sözleşmesi.
+ * The part of `DoctrineSource`'s contract that DOES NOT TOUCH the database.
  *
- * Bu ortamda `pdo_*` sürücüsü yok, yani gerçek bir sorgu çalıştırılamaz. Buna ihtiyaç da
- * yok: sınıfın riskli kısmı SQL değil, KURULUM mantığıdır — hangi kipte olduğu, parçalı
- * kipin ORDER BY şartını ne zaman denetlediği ve akıcı metotların birbirinin ayarını
- * ezip ezmediği. Hepsi sorgu çalıştırmadan gözlemlenebilir:
+ * There is no `pdo_*` driver in this environment, so a real query cannot be run. Nor is one
+ * needed: the risky part of the class is not the SQL but the SET-UP logic — which mode it is
+ * in, when chunked mode checks the ORDER BY requirement, and whether the fluent methods
+ * overwrite one another's settings. All of it is observable without running a query:
  *
- *  - `QueryBuilder` sahte bir `EntityManagerInterface` ile kurulur; `select()/from()/
- *    orderBy()` DQL parçalarını yalnızca BELLEKTE biriktirir, bağlantı istemez.
- *  - Sayfalama aritmetiği için `createQuery()` sahte bir `Query` döndürür ve sayfayı
- *    hazır dizi olarak verir; böylece offset ilerlemesi ve limit değeri ölçülebilir.
+ *  - The `QueryBuilder` is built with a fake `EntityManagerInterface`; `select()/from()/
+ *    orderBy()` only accumulate DQL fragments IN MEMORY and never ask for a connection.
+ *  - For the pagination arithmetic, `createQuery()` returns a fake `Query` that hands the page
+ *    back as a ready-made array; that way the offset progression and the limit value can be
+ *    measured.
  */
 #[CoversClass(DoctrineSource::class)]
 #[CoversClass(SourceException::class)]
 final class DoctrineSourceTest extends TestCase
 {
     /**
-     * Sorgu hiç çalıştırılmadığı için `from()`'a verilen sınıfın gerçek bir Doctrine
-     * varlığı olması gerekmez — DQL yalnızca metin olarak birikir, ayrıştırılmaz. Yine de
-     * imza `class-string` istediğinden var olan bir sınıf adı kullanılıyor.
+     * Because the query is never run, the class given to `from()` does not have to be a real
+     * Doctrine entity — the DQL only accumulates as text and is never parsed. All the same,
+     * since the signature asks for a `class-string`, an existing class name is used.
      */
     private const string ENTITY = stdClass::class;
 
-    // ---------------------------------------------------------------- kurulum doğrulaması
+    // ---------------------------------------------------------------- set-up validation
 
     #[Test]
     public function itIsADataSource(): void
@@ -53,9 +54,10 @@ final class DoctrineSourceTest extends TestCase
     }
 
     /**
-     * Parça boyutu 0 olsaydı `paged()` aynı sayfayı sonsuza dek okurdu, negatif olsaydı
-     * Doctrine `setMaxResults()`'ı sessizce yok sayıp tüm tabloyu getirirdi. Hata okuma
-     * başladığında değil KURULUMDA verilir — çağıranın yığını hâlâ görünürken.
+     * Had the chunk size been 0, `paged()` would have read the same page for ever; had it been
+     * negative, Doctrine would have silently ignored `setMaxResults()` and fetched the whole
+     * table. The error is raised at SET-UP time, not when the reading starts — while the
+     * caller's stack is still in view.
      */
     #[Test]
     #[DataProvider('chunkSizesBelowOne')]
@@ -72,16 +74,17 @@ final class DoctrineSourceTest extends TestCase
     /** @return Generator<string, array{int, string}> */
     public static function chunkSizesBelowOne(): Generator
     {
-        // Mesaj hem ASGARİ değeri hem de verilen değeri söylemeli; yalnızca "geçersiz"
-        // demek, yapılandırmadan gelen bir sayıyı ayıklamayı gereksiz yere zorlaştırır.
-        yield 'sıfır' => [0, 'Parça boyutu en az 1 olmalı, 0 verildi.'];
-        yield 'negatif' => [-1, 'Parça boyutu en az 1 olmalı, -1 verildi.'];
+        // The message must state both the MINIMUM value and the value that was given; saying
+        // only "invalid" makes tracking down a number that came from configuration needlessly
+        // hard.
+        yield 'zero' => [0, 'The chunk size must be at least 1, 0 was given.'];
+        yield 'negative' => [-1, 'The chunk size must be at least 1, -1 was given.'];
     }
 
     #[Test]
     public function theChunkSizeErrorIsPartOfTheLibrarysExceptionFamily(): void
     {
-        // Uygulama tarafında tek `catch (TabulaException)` ile yakalanabilmesi önemli.
+        // Being catchable on the application side with a single `catch (TabulaException)` matters.
         $this->expectException(TabulaException::class);
 
         DoctrineSource::of($this->orderedQuery())->chunk(0);
@@ -98,8 +101,9 @@ final class DoctrineSourceTest extends TestCase
     // ---------------------------------------------------------------- isSafeToChunk()
 
     /**
-     * Akış kipinde sayfalama aritmetiği HİÇ devreye girmez: tek sorgu, satır satır
-     * hidrasyon. Sıralama olmadan da satır atlanamaz, o yüzden ORDER BY aranmaz.
+     * In streaming mode the pagination arithmetic NEVER comes into play: a single query, row
+     * by row hydration. Without an ordering no row can be skipped either, so no ORDER BY is
+     * looked for.
      */
     #[Test]
     public function streamingIsSafeEvenWithoutAnOrderBy(): void
@@ -122,9 +126,9 @@ final class DoctrineSourceTest extends TestCase
     }
 
     /**
-     * `addOrderBy()` aynı DQL parçasını doldurur ama `add()`'i EKLEME kipinde çağırır
-     * (orderBy() değiştirir, addOrderBy() ekler). Muhafız parçanın nasıl dolduğuna değil
-     * dolu olup olmadığına bakmalı, o yüzden ikisi de ayrı ayrı sınanır.
+     * `addOrderBy()` fills the same DQL fragment but calls `add()` in APPEND mode (orderBy()
+     * replaces, addOrderBy() appends). The guard must look at whether the fragment is filled,
+     * not at how it got filled, which is why both are exercised separately.
      */
     #[Test]
     public function chunkingIsSafeWhenTheQueryWasBuiltWithAddOrderBy(): void
@@ -135,9 +139,10 @@ final class DoctrineSourceTest extends TestCase
     }
 
     /**
-     * `QueryBuilder` referansla tutulur, kopyalanmaz. Bu bilinçli: çağıran sorguyu
-     * kurmayı bitirmeden kaynağı oluşturabilir. Dolayısıyla `isSafeToChunk()` builder'ın
-     * O ANKİ hâlini yanıtlar, kaynağın kurulduğu andaki hâlini değil.
+     * The `QueryBuilder` is held BY REFERENCE, not copied. That is deliberate: the caller may
+     * create the source before finishing the set-up of the query. Consequently
+     * `isSafeToChunk()` answers for the builder's state AT THAT MOMENT, not for its state at
+     * the time the source was constructed.
      */
     #[Test]
     public function safetyReflectsTheBuildersCurrentStateNotItsStateAtConstructionTime(): void
@@ -152,12 +157,12 @@ final class DoctrineSourceTest extends TestCase
         self::assertTrue($source->isSafeToChunk());
     }
 
-    // ---------------------------------------------------------------- rows() muhafızı
+    // ---------------------------------------------------------------- the rows() guard
 
     /**
-     * BU TESTİN VARLIK SEBEBİ: `rows()` bir generator'dır, çağrıldığında gövdesi
-     * ÇALIŞMAZ. Yani muhafızın burada sessiz kalması hata değil, beklenen davranıştır —
-     * ve tam da bu yüzden bir sonraki test gerçek gezintiyi zorunlu kılar.
+     * THE REASON THIS TEST EXISTS: `rows()` is a generator, so its body DOES NOT RUN when it is
+     * called. That the guard stays silent here is therefore not a bug but the expected
+     * behaviour — and that is exactly why the next test insists on a real walk.
      */
     #[Test]
     public function callingRowsWithoutIteratingRunsNothingAtAll(): void
@@ -166,13 +171,14 @@ final class DoctrineSourceTest extends TestCase
 
         $rows = $source->rows();
 
-        self::assertInstanceOf(Generator::class, $rows, 'rows() tembel kalmalı: gövde gezinti başlayınca çalışır.');
+        self::assertInstanceOf(Generator::class, $rows, 'rows() must stay lazy: the body runs once the walk starts.');
     }
 
     /**
-     * Asıl sözleşme: sıralamasız parçalı okuma İLK satır istendiğinde patlar ve TEK BİR
-     * satır bile üretmez. Testin `foreach` ile gezinmesi şart — yalnızca `expectException`
-     * yazıp generator'ı hiç tüketmemek, muhafız tamamen silinse bile yeşil kalırdı.
+     * The real contract: unordered chunked reading blows up when the FIRST row is asked for and
+     * does not produce so much as a SINGLE row. The test walking with a `foreach` is
+     * essential — merely writing `expectException` and never consuming the generator would
+     * stay green even if the guard were deleted altogether.
      */
     #[Test]
     public function chunkingWithoutAnOrderByThrowsAsSoonAsIterationStarts(): void
@@ -183,10 +189,10 @@ final class DoctrineSourceTest extends TestCase
 
         try {
             foreach ($rows as $ignored) {
-                self::fail('Sıralamasız parçalı okumada tek bir satır bile üretilmemeli.');
+                self::fail('Unordered chunked reading must not produce so much as a single row.');
             }
 
-            self::fail('Gezinti başladığında SourceException fırlatılmalıydı.');
+            self::fail('A SourceException should have been thrown once the walk started.');
         } catch (SourceException $exception) {
             self::assertStringContainsString('ORDER BY', $exception->getMessage());
             self::assertStringContainsString('addOrderBy', $exception->getMessage());
@@ -196,14 +202,14 @@ final class DoctrineSourceTest extends TestCase
     #[Test]
     public function streamingNeverRunsTheOrderByGuard(): void
     {
-        // Sıralama YOK ve chunk() da yok: akış kipi muhafıza hiç uğramadan satır üretir.
+        // No ordering AND no chunk(): streaming mode produces rows without ever passing the guard.
         $log = new QueryCallLog();
         $entityManager = $this->streamingEntityManager([['id' => 1], ['id' => 2]], $log);
 
         self::assertSame([1, 2], self::ids(DoctrineSource::of($this->unorderedQuery($entityManager))));
     }
 
-    // ---------------------------------------------------------------- akıcı metotların değişmezliği
+    // ---------------------------------------------------------------- immutability of the fluent methods
 
     #[Test]
     public function chunkReturnsANewInstanceAndLeavesTheOriginalStreaming(): void
@@ -213,8 +219,8 @@ final class DoctrineSourceTest extends TestCase
         $chunked = $original->chunk(10);
 
         self::assertNotSame($original, $chunked);
-        self::assertTrue($original->isSafeToChunk(), 'Özgün kaynak akış kipinde kalmalı.');
-        self::assertFalse($chunked->isSafeToChunk(), 'Türetilen kaynak parçalı kipe geçmeli.');
+        self::assertTrue($original->isSafeToChunk(), 'The original source must stay in streaming mode.');
+        self::assertFalse($chunked->isSafeToChunk(), 'The derived source must move into chunked mode.');
     }
 
     #[Test]
@@ -238,16 +244,16 @@ final class DoctrineSourceTest extends TestCase
     }
 
     /**
-     * Akıcı zincirde her metot yalnızca KENDİ ayarını değiştirmeli. Sıra bağımlı bir hata
-     * (ör. `withCount()`'un parça boyutunu sıfırlaması) ancak zincirin diğer ucundan
-     * bakılınca görülür.
+     * In a fluent chain each method must change ONLY ITS OWN setting. An order-dependent bug
+     * (say, `withCount()` resetting the chunk size) only becomes visible when you look from the
+     * other end of the chain.
      */
     #[Test]
     public function withCountPreservesTheChunkedMode(): void
     {
         $source = DoctrineSource::of($this->unorderedQuery())->chunk(10)->withCount(5);
 
-        self::assertFalse($source->isSafeToChunk(), 'Parçalı kip withCount() sonrası korunmalı.');
+        self::assertFalse($source->isSafeToChunk(), 'Chunked mode must be preserved after withCount().');
         self::assertSame(5, $source->count());
     }
 
@@ -268,7 +274,7 @@ final class DoctrineSourceTest extends TestCase
             ->withCount(7)
             ->hydrateAs(AbstractQuery::HYDRATE_OBJECT);
 
-        self::assertFalse($source->isSafeToChunk(), 'Parçalı kip hydrateAs() sonrası korunmalı.');
+        self::assertFalse($source->isSafeToChunk(), 'Chunked mode must be preserved after hydrateAs().');
         self::assertSame(7, $source->count());
     }
 
@@ -285,17 +291,17 @@ final class DoctrineSourceTest extends TestCase
     #[Test]
     public function theTotalIsUnknownUnlessGiven(): void
     {
-        // Kaynak toplamı KENDİ hesaplamaz: ikinci bir COUNT sorgusu, dışa aktarmanın
-        // ödemek zorunda olmadığı bir maliyettir. Bilen çağıran bildirir.
+        // The source does NOT work the total out for itself: a second COUNT query is a cost the
+        // export does not have to pay. The caller who knows it declares it.
         self::assertNull(DoctrineSource::of($this->unorderedQuery())->count());
     }
 
-    // ---------------------------------------------------------------- parça aritmetiği
+    // ---------------------------------------------------------------- chunk arithmetic
 
     /**
-     * `isSafeToChunk()` yalnızca "parçalı kipteyiz" der; parça BOYUTUNUN zincirin sonuna
-     * kadar 10 kaldığını söylemez. Sahte `Query` sayesinde sorguya giden limit değeri
-     * doğrudan okunabiliyor, dolayısıyla iddia dolaylı olmaktan çıkıyor.
+     * `isSafeToChunk()` only says "we are in chunked mode"; it does not say that the chunk SIZE
+     * is still 10 by the end of the chain. Thanks to the fake `Query` the limit value that
+     * reaches the query can be read directly, so the assertion stops being an indirect one.
      */
     #[Test]
     public function theChunkSizeSurvivesTheRestOfTheChainAndReachesTheQuery(): void
@@ -309,7 +315,7 @@ final class DoctrineSourceTest extends TestCase
             ->hydrateAs(AbstractQuery::HYDRATE_ARRAY);
 
         self::assertSame([1, 2, 3], self::ids($source));
-        self::assertSame([[0, 2], [2, 2], [4, 2]], $log->windows, 'Limit 2 kalmalı, offset parça boyutu kadar ilerlemeli.');
+        self::assertSame([[0, 2], [2, 2], [4, 2]], $log->windows, 'The limit must stay 2 and the offset must advance by the chunk size.');
         self::assertSame(5, $source->count());
     }
 
@@ -324,32 +330,33 @@ final class DoctrineSourceTest extends TestCase
 
         self::assertSame([1, 2, 3, 4], self::ids(DoctrineSource::of($this->orderedQuery($entityManager))->chunk(2)));
 
-        // Tam dolu bir sayfadan sonra devam edilip edilmeyeceği ancak boş sayfayla anlaşılır.
+        // Whether there is anything after an exactly full page can only be found out with an empty page.
         self::assertSame([[0, 2], [2, 2], [4, 2]], $log->windows);
     }
 
     /**
-     * KRİTİK: kısa bir sayfa, verinin bittiğinin KANITI DEĞİLDİR.
+     * CRITICAL: a short page is NOT PROOF that the data has run out.
      *
-     * `getResult()` HİDRATE EDİLMİŞ sonucu döndürür; birleştirmeli sorgularda tekrar eden kök
-     * satırlar tek nesneye indirgendiği için 2000 SQL satırı 900 köke inebilir. "Dönen satır
-     * sayısı < parça boyutu ⇒ bitti" kuralı böyle bir sayfada dışa aktarımı SESSİZCE ilk
-     * sayfada bitirir — hata da vermez. Tek geçerli bitiş ölçütü GERÇEKTEN BOŞ sayfadır.
+     * `getResult()` returns the HYDRATED result; in queries with a join, repeated root rows are
+     * collapsed into a single object, so 2,000 SQL rows can come down to 900 roots. On such a
+     * page the rule "rows returned < chunk size ⇒ we are done" ends the export SILENTLY on the
+     * first page — without raising an error either. The only valid end-of-data criterion is a
+     * GENUINELY EMPTY page.
      */
     #[Test]
     public function aShortPageDoesNotEndTheExportBecauseHydrationCanCollapseRows(): void
     {
         $log = new QueryCallLog();
-        // 1. sayfa 2 satır istedi ama hidrasyon 1'e indirdi; veri HÂLÂ devam ediyor.
+        // Page 1 asked for 2 rows but hydration brought it down to 1; the data is STILL going.
         $entityManager = $this->pagingEntityManager([[['id' => 1]], [['id' => 2], ['id' => 3]], []], $log);
 
         self::assertSame(
             [1, 2, 3],
             self::ids(DoctrineSource::of($this->orderedQuery($entityManager))->chunk(2)),
-            'Kısa sayfada durulsaydı 2. ve 3. satır sessizce kaybolurdu.',
+            'Had we stopped on the short page, rows 2 and 3 would have vanished silently.',
         );
 
-        self::assertSame([[0, 2], [2, 2], [4, 2]], $log->windows, 'Öfset hidrasyon sonucuna göre değil, SQL satırına göre ilerlemeli.');
+        self::assertSame([[0, 2], [2, 2], [4, 2]], $log->windows, 'The offset must advance by SQL rows, not by the result of hydration.');
     }
 
     #[Test]
@@ -359,12 +366,13 @@ final class DoctrineSourceTest extends TestCase
         $entityManager = $this->pagingEntityManager([[['id' => 1]], []], $log);
 
         self::assertSame([1], self::ids(DoctrineSource::of($this->orderedQuery($entityManager))->chunk(2)));
-        self::assertCount(2, $log->windows, 'Boş sayfa görülene kadar bir tur daha atılır — bu, doğruluğun bedeli.');
+        self::assertCount(2, $log->windows, 'One more round is made until an empty page is seen — that is the price of correctness.');
     }
 
     /**
-     * Sayfalama çağıranın `QueryBuilder`'ına `setFirstResult`/`setMaxResults` YAZMAMALI:
-     * aynı builder'ı sonradan (ör. bir COUNT sorgusu için) kullanan kod sessizce bozulurdu.
+     * Pagination MUST NOT WRITE `setFirstResult`/`setMaxResults` onto the caller's
+     * `QueryBuilder`: code that uses the same builder afterwards (for a COUNT query, say) would
+     * break silently.
      */
     #[Test]
     public function pagingLeavesTheCallersQueryBuilderUntouched(): void
@@ -379,18 +387,18 @@ final class DoctrineSourceTest extends TestCase
         self::assertNull($queryBuilder->getMaxResults());
     }
 
-    // ---------------------------------------------------------------- hidrasyon kipi
+    // ---------------------------------------------------------------- hydration mode
 
     #[Test]
     public function pagingHydratesAsAnArrayByDefault(): void
     {
-        // Dışa aktarma projeksiyon okur, varlık grafiği değil: varsayılan HYDRATE_ARRAY.
+        // An export reads a projection, not an entity graph: the default is HYDRATE_ARRAY.
         $log = new QueryCallLog();
         $entityManager = $this->pagingEntityManager([[['id' => 1]]], $log);
 
         self::ids(DoctrineSource::of($this->orderedQuery($entityManager))->chunk(2));
 
-        // İki tur: kısa sayfa bitiş sayılmadığı için boş sayfa da sorulur.
+        // Two rounds: because a short page does not count as the end, the empty page is asked for too.
         self::assertSame([AbstractQuery::HYDRATE_ARRAY, AbstractQuery::HYDRATE_ARRAY], $log->hydrations);
     }
 
@@ -432,13 +440,14 @@ final class DoctrineSourceTest extends TestCase
         self::assertSame([AbstractQuery::HYDRATE_SCALAR], $log->hydrations);
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
-    /** ORDER BY'sız sorgu — parçalı kipin reddettiği kurulum. */
+    /** A query with no ORDER BY — the set-up chunked mode refuses. */
     private function unorderedQuery(?EntityManagerInterface $entityManager = null): QueryBuilder
     {
-        // Sorgu kurulumunu sınayan testler EntityManager'a HİÇ dokunmaz; beklentisi olmayan
-        // bir mock yerine stub kullanmak PHPUnit'in "gereksiz mock" uyarısını da önler.
+        // The tests that exercise the query set-up NEVER touch the EntityManager; using a stub
+        // instead of a mock that has no expectations also avoids PHPUnit's "useless mock"
+        // warning.
         $queryBuilder = new QueryBuilder($entityManager ?? $this->createStub(EntityManagerInterface::class));
 
         return $queryBuilder->select('c.code', 'c.name')->from(self::ENTITY, 'c');
@@ -450,14 +459,14 @@ final class DoctrineSourceTest extends TestCase
     }
 
     /**
-     * Parça aritmetiğini gözlemlenebilir kılan sahte `EntityManager`.
+     * The fake `EntityManager` that makes the chunk arithmetic observable.
      *
-     * `QueryBuilder::getQuery()` sırayla `setParameters()`, `setFirstResult()` ve
-     * `setMaxResults()` çağırır; sahte `Query` bu değerleri tutar ve `getResult()`
-     * çağrıldığında o anki pencereyi deftere yazıp sıradaki sayfayı verir. Böylece sorgu
-     * hiç çalıştırılmadan sayfalama davranışı ölçülür.
+     * `QueryBuilder::getQuery()` calls `setParameters()`, `setFirstResult()` and
+     * `setMaxResults()` in turn; the fake `Query` holds on to those values and, when
+     * `getResult()` is called, writes the current window into the log and hands back the next
+     * page. That way the pagination behaviour is measured without ever running a query.
      *
-     * @param list<list<array<string, mixed>>> $pages sırayla döndürülecek sayfalar
+     * @param list<list<array<string, mixed>>> $pages the pages to be returned in order
      */
     private function pagingEntityManager(array $pages, QueryCallLog $log): EntityManagerInterface
     {
@@ -498,8 +507,9 @@ final class DoctrineSourceTest extends TestCase
     }
 
     /**
-     * Akış kipi için sahte `EntityManager`. `createQuery()` en fazla BİR kez çağrılabilir —
-     * akış kipinin tanımı zaten tek sorgudur, ikinci bir çağrı kipin bozulduğu anlamına gelir.
+     * The fake `EntityManager` for streaming mode. `createQuery()` may be called at most ONCE —
+     * streaming mode is by definition a single query, and a second call would mean the mode has
+     * been broken.
      *
      * @param list<array<string, mixed>> $rows
      */

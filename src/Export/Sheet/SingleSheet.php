@@ -8,12 +8,13 @@ use Balin\Tabula\Value\FormatContext;
 use InvalidArgumentException;
 
 /**
- * Her şey tek sayfada — varsayılan davranış.
+ * Everything on a single sheet — the default behaviour.
  *
- * Tek istisna taşma korumasıdır: `$maxRows` verildiğinde (ki `ExportBuilder` bunu
- * `TabulaSettings::$maxRowsPerSheet` değerinden geçirir) sayfa dolunca `Ad (2)`, `Ad (3)`
- * diye devam eder. Excel bir sayfaya en fazla 1.048.576 satır alır ve bu sınır aşıldığında
- * yazıcı hata vermeden BOZUK bir dosya üretebilir — sessiz taşma yerine yeni sayfa.
+ * The only exception is overflow protection: when `$maxRows` is given (and `ExportBuilder` passes
+ * it through from `TabulaSettings::$maxRowsPerSheet`), once the sheet is full it carries on as
+ * `Name (2)`, `Name (3)`. Excel takes at most 1,048,576 rows on one sheet, and once that limit is
+ * exceeded the writer can produce a CORRUPT file without raising an error — a new sheet instead of
+ * a silent overflow.
  */
 final readonly class SingleSheet implements SheetStrategy
 {
@@ -22,7 +23,7 @@ final readonly class SingleSheet implements SheetStrategy
         private ?int $maxRows = null,
     ) {
         if (null !== $maxRows && $maxRows < 1) {
-            throw new InvalidArgumentException('Sayfa başına satır sayısı en az 1 olmalı.');
+            throw new InvalidArgumentException('Rows per sheet must be at least 1.');
         }
     }
 

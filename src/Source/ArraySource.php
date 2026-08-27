@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Balin\Tabula\Source;
 
 /**
- * Elde hazır duran satır dizisi.
+ * An array of rows already at hand.
  *
- * "İster veriyi array şeklinde kendin yolla" durumunun karşılığı.
+ * The counterpart of the "or just send the data over yourself as an array" case.
  */
 final readonly class ArraySource implements DataSource
 {
@@ -32,7 +32,7 @@ final readonly class ArraySource implements DataSource
         yield from $this->rows;
     }
 
-    /** Dizi kaynağında satır sayısı her zaman bilinir (arayüzün `?int` dönüşü daraltılır). */
+    /** With an array source the row count is always known (the interface's `?int` return is narrowed). */
     public function count(): int
     {
         return count($this->rows);

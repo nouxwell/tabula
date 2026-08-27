@@ -23,17 +23,18 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * `->page()` ve `->columns()` ayarlarının GERÇEKTEN kâğıda indiğini doğrular.
+ * Verifies that the `->page()` and `->columns()` settings REALLY reach the paper.
  *
- * Bu dosyanın tamamı tek bir hataya karşıdır: **sessizce uygulanmayan sayfa ayarı.** Mevcut
- * ERP'de sayfa boyutu hem PHP'de (`Dompdf::setPaper()`) hem şablonun `@page` kuralında
- * tanımlıydı; Dompdf render sırasında CSS'i uyguladığı için `setPaper()` fiilen dekoratifti
- * ve journal çıktısı A4 sanılırken A5 basılıyordu. Kimse fark etmedi, çünkü hiçbir yerde
- * gürültü çıkmıyordu.
+ * The whole of this file guards against a single bug: **a page setting that is silently not
+ * applied.** In the system this replaces, the page size was defined both in PHP
+ * (`Dompdf::setPaper()`) and in the template's `@page` rule; because Dompdf applies the CSS at
+ * render time, `setPaper()` was effectively decorative and the journal output was printed on A5
+ * while everyone believed it was A4. Nobody noticed, because nothing anywhere made any noise.
  *
- * Bu yüzden iddialar "nesne kuruldu" düzeyinde DEĞİL, üretilen PDF'in baytları üzerinden
- * kurulur; okuma işini `PdfDocument` yapar. Beklenen ölçü de elle yazılmaz, `Page`in
- * kendisinden türetilir — yoksa test koda değil, kendi kopyaladığı kâğıt tablosuna bakardı.
+ * That is why the assertions are NOT made at the "the object was constructed" level but on the
+ * bytes of the produced PDF; `PdfDocument` does the reading. The expected measurement is not
+ * written out by hand either, it is derived from `Page` itself — otherwise the test would be
+ * looking at its own copy of the paper table instead of at the code.
  */
 final class PageSettingsTest extends TestCase
 {
@@ -49,18 +50,18 @@ final class PageSettingsTest extends TestCase
         $this->dir->remove();
     }
 
-    // ---------------------------------------------------------------- sayfa gerçekten iniyor mu
+    // ---------------------------------------------------------------- does the page really reach the paper
 
     /**
-     * Ayar hiç verilmediğinde `PdfOptions`ın varsayılanı geçerli olmalı: A4 YATAY.
+     * With no setting given at all, the `PdfOptions` default must hold: A4 LANDSCAPE.
      *
-     * Aşağıdaki A5 testi, `->page()` hiçbir işe yaramasa bile kâğıdın "A5 olmadığını"
-     * gösterirdi; bu test varsayılanın ne olduğunu ayrıca sabitler.
+     * The A5 test below would show that the paper "is not A5" even if `->page()` did nothing
+     * whatsoever; this test additionally nails down what the default actually is.
      */
     #[Test]
     public function withoutAnyPageSettingThePdfIsA4Landscape(): void
     {
-        $path = $this->dir->file('varsayilan.pdf');
+        $path = $this->dir->file('default.pdf');
 
         $this->export()->to(Format::Pdf)->write($path);
 
@@ -78,22 +79,23 @@ final class PageSettingsTest extends TestCase
     }
 
     /**
-     * Kolon bütçesi de inmeli — ve indiği KÂĞIT SAYISINDAN okunur.
+     * The column budget has to reach the paper too — and that it did is read off the PAGE COUNT.
      *
-     * A5 dikeyde kullanılabilir en 148 − 2×10 = 128 mm.
+     * On A5 portrait the usable width is 148 − 2×10 = 128 mm.
      *
-     *  - 40 mm asgari kolonla bütçe 3 kolon; çapa (`code`) her grupta tekrarlandığı için
-     *    gruba 2 veri kolonu düşer, 6 kolonun kalan 5'i 2+2+1 olarak ÜÇ gruba bölünür.
-     *  - 20 mm asgari kolonla bütçe 6 kolon; altısı da sığar, TEK grup kalır.
+     *  - With a 40 mm minimum column the budget is 3 columns; because the anchor (`code`) is
+     *    repeated in every group, 2 data columns are left per group, so the remaining 5 of the
+     *    6 columns are split into THREE groups as 2+2+1.
+     *  - With a 20 mm minimum column the budget is 6 columns; all six fit, so a SINGLE group is left.
      *
-     * İki çıktı arasında kâğıt, şema ve satır aynı; değişen tek şey bütçe. Fark bu yüzden
-     * tek başına bütçenin eseridir.
+     * Between the two outputs the paper, the schema and the row are identical; the only thing
+     * that changes is the budget. The difference is therefore the work of the budget alone.
      */
     #[Test]
     public function theColumnBudgetSplitsTheDocumentIntoPageSets(): void
     {
-        $narrow = $this->dir->file('bolunmus.pdf');
-        $wide = $this->dir->file('tek-parca.pdf');
+        $narrow = $this->dir->file('split.pdf');
+        $wide = $this->dir->file('single-group.pdf');
 
         $this->export()->to(Format::Pdf)
             ->page(Page::a5())
@@ -109,14 +111,14 @@ final class PageSettingsTest extends TestCase
         PdfDocument::at($wide)->assertPageCount(1);
     }
 
-    // ---------------------------------------------------------------- ★ sessiz yok sayma yasak
+    // ---------------------------------------------------------------- ★ silently ignoring is forbidden
 
     /**
-     * ★ Bu fazın özü.
+     * ★ The heart of this phase.
      *
-     * Kâğıt kavramı olmayan bir yazıcıya sayfa ayarı verilirse dışa aktarma BAŞLAMAZ.
-     * Sessizce yok saymak, ortadan kaldırmaya çalıştığımız hatanın kendisi olurdu:
-     * kullanıcı A3 istediğini sanıp Excel'i açar ve hiçbir şey anlamaz.
+     * If a page setting is handed to a writer that has no concept of paper, the export DOES NOT
+     * START. Silently ignoring it would be the very bug we are trying to eliminate: the user
+     * believes they asked for A3, opens the Excel file, and understands nothing.
      */
     #[Test]
     #[DataProvider('formatsWithoutPaper')]
@@ -128,7 +130,7 @@ final class PageSettingsTest extends TestCase
         $this->export()->to($format)->page(Page::a3())->write($this->dir->file($file));
     }
 
-    /** Yalnız bütçe verilse de aynı kural işler; ikisi tek bir ayarın iki yarısıdır. */
+    /** The same rule applies when only the budget is given; the two are halves of one setting. */
     #[Test]
     #[DataProvider('formatsWithoutPaper')]
     public function aColumnBudgetOnAFormatWithoutPaperAlsoStopsTheExport(Format $format, string $file): void
@@ -146,27 +148,28 @@ final class PageSettingsTest extends TestCase
     }
 
     /**
-     * Hata, dosyaya TEK BAYT yazılmadan çıkmalı.
+     * The error must come out before a SINGLE BYTE is written to the file.
      *
-     * Yazma başladıktan sonra patlarsa diskte yarım bir dosya kalır ve çağıran onu
-     * kullanıcıya sunabilir. Ayar hatası kurulum hatasıdır, akış hatası değil.
+     * If it blew up after the writing had started, a half-written file would be left on disk and
+     * the caller could serve it to the user. A configuration mistake is a setup error, not a
+     * streaming error.
      */
     #[Test]
     public function theRefusalHappensBeforeAnythingIsWritten(): void
     {
-        $path = $this->dir->file('dokunulmamis.csv');
+        $path = $this->dir->file('untouched.csv');
 
         try {
             $this->export()->to(Format::Csv)->page(Page::a3())->write($path);
-            self::fail('Sayfa ayarı reddedilmeliydi.');
+            self::fail('The page setting should have been refused.');
         } catch (ExportException) {
-            // beklenen
+            // expected
         }
 
         self::assertFileDoesNotExist($path);
     }
 
-    /** Ayar hiç verilmediğinde kâğıtsız biçimler elbette çalışmaya devam eder. */
+    /** With no setting given at all, the paperless formats of course keep working. */
     #[Test]
     public function aFormatWithoutPaperStillWorksWhenNoPageSettingIsGiven(): void
     {
@@ -176,32 +179,31 @@ final class PageSettingsTest extends TestCase
         self::assertFileExists($path);
     }
 
-    // ---------------------------------------------------------------- elle verilen yazıcı
+    // ---------------------------------------------------------------- an explicitly given writer
 
     /**
-     * `->writer()` ile elle verilen yazıcı da sayfa ayarını almalı.
+     * A writer handed in explicitly through `->writer()` must receive the page setting too.
      *
-     * "Yalnız fabrikadan geleni ayarla" demek, elle verilen bir `PdfWriter`ın ayarı sessizce
-     * yutması demekti — yani kaçtığımız hatanın arka kapısı.
+     * Saying "only configure what comes out of the factory" would mean that an explicitly given
+     * `PdfWriter` swallows the setting silently — the back door to the very bug we are avoiding.
      */
     #[Test]
     public function anExplicitlyGivenWriterAlsoReceivesThePageSetting(): void
     {
         $writer = new PdfWriter(new PdfOptions(page: Page::a4()->landscape()));
 
-        $path = $this->dir->file('elle.pdf');
+        $path = $this->dir->file('manual.pdf');
         $this->export()->to(Format::Pdf)->writer($writer)->page(Page::a5())->write($path);
 
         PdfDocument::at($path)->assertPaper(Page::a5());
     }
 
     /**
-     * ...ama o örneğin KENDİSİ değişmemeli.
+     * ...but the instance ITSELF must not change.
      *
-     * `->writer()` ile verilen yazıcı bir servis olabilir ve birden çok dışa aktarmada
-     * paylaşılabilir; birinin A5'i diğerinin çıktısına sızarsa hata, ilgisiz bir raporun
-     * yanlış kâğıda basılması olarak ortaya çıkar (bkz. `PageAware::withPage()` neden
-     * kopya döndürüyor).
+     * The writer given through `->writer()` may be a service and may be shared across several
+     * exports; if one export's A5 leaks into another's output, the bug surfaces as an unrelated
+     * report being printed on the wrong paper (see why `PageAware::withPage()` returns a copy).
      */
     #[Test]
     public function thePageSettingDoesNotStickToTheSharedWriterInstance(): void
@@ -209,17 +211,17 @@ final class PageSettingsTest extends TestCase
         $writer = new PdfWriter(new PdfOptions(page: Page::a4()->landscape()));
 
         $this->export()->to(Format::Pdf)->writer($writer)->page(Page::a5())
-            ->write($this->dir->file('once-a5.pdf'));
+            ->write($this->dir->file('before-a5.pdf'));
 
-        $later = $this->dir->file('sonra.pdf');
+        $later = $this->dir->file('after.pdf');
         $this->export()->to(Format::Pdf)->writer($writer)->write($later);
 
         PdfDocument::at($later)->assertPaper(Page::a4()->landscape());
     }
 
-    // ---------------------------------------------------------------- değiştirilemezlik
+    // ---------------------------------------------------------------- immutability
 
-    /** Diğer tüm kurulum metotları gibi `->page()` de KOPYA döndürür. */
+    /** Like every other setup method, `->page()` returns a COPY. */
     #[Test]
     public function settingThePageLeavesTheOriginalBuilderUntouched(): void
     {
@@ -228,8 +230,8 @@ final class PageSettingsTest extends TestCase
 
         self::assertNotSame($base, $a5);
 
-        $basePath = $this->dir->file('taban.pdf');
-        $a5Path = $this->dir->file('turev.pdf');
+        $basePath = $this->dir->file('base.pdf');
+        $a5Path = $this->dir->file('derived.pdf');
 
         $base->write($basePath);
         $a5->write($a5Path);
@@ -238,7 +240,7 @@ final class PageSettingsTest extends TestCase
         PdfDocument::at($a5Path)->assertPaper(Page::a5());
     }
 
-    // ---------------------------------------------------------------- yardımcılar
+    // ---------------------------------------------------------------- helpers
 
     private function export(): ExportBuilder
     {

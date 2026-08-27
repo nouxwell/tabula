@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Balin\Tabula\Schema;
 
 /**
- * PDF kolon bütçesinde alanın önem sırası.
+ * How important a field is within the PDF column budget.
  *
- * Sayfa fiziksel olarak dar kaldığında hangi kolonların kalacağını belirler:
- * `Always` asla düşmez (ve kolon grupları arasında çapa olarak tekrarlanabilir),
- * `Optional` ilk elenendir.
+ * It decides which columns survive once the page is physically too narrow:
+ * `Always` is never dropped (and can be repeated as an anchor across column groups),
+ * `Optional` is the first to be dropped.
  */
 enum Priority: string
 {
@@ -17,7 +17,7 @@ enum Priority: string
     case Normal = 'normal';
     case Optional = 'optional';
 
-    /** Eleme sırası — büyük değer önce elenir. */
+    /** Drop order — the larger the value, the earlier it is dropped. */
     public function weight(): int
     {
         return match ($this) {

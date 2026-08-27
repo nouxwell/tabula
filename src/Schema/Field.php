@@ -8,12 +8,12 @@ use Balin\Tabula\Format;
 use Closure;
 
 /**
- * Bir kolonun TEK tanımı.
+ * The SINGLE definition of a column.
  *
- * Aynı nesne dört işi birden yapar: Excel başlığını çevirir, hücre biçimini belirler,
- * PDF'te kolon önceliğini söyler ve (Faz 4'te) içe aktarmada değeri doğrular.
+ * One and the same object does four jobs: it translates the Excel header, decides the cell
+ * format, states the column priority in PDF, and (from Phase 4 on) validates the value on import.
  *
- * Nesne dışarıdan değiştirilemez: akıcı metotlar kopya döndürür.
+ * The object cannot be mutated from the outside: the fluent methods return a copy.
  *
  *     Field::money('balance')
  *         ->label('export.customer.balance')
@@ -36,7 +36,7 @@ final class Field
     /** @var array<int|string, string>|Closure|null */
     private array|Closure|null $options = null;
 
-    /** null = otomatik genişlik */
+    /** null = automatic width */
     private ?int $width = null;
 
     private Align $align = Align::Auto;
@@ -45,7 +45,7 @@ final class Field
 
     private Priority $priority = Priority::Normal;
 
-    /** @var list<Format>|null null = tüm biçimlerde görünür */
+    /** @var list<Format>|null null = visible in every format */
     private ?array $only = null;
 
     private ?string $pattern = null;
@@ -58,7 +58,7 @@ final class Field
     ) {
     }
 
-    // ---------------------------------------------------------------- kurucular
+    // ---------------------------------------------------------------- constructors
 
     public static function string(string $key): self
     {
@@ -101,7 +101,7 @@ final class Field
     }
 
     /**
-     * @param class-string $enumClass PHP enum sınıfı; değer otomatik olarak çeviri anahtarına dönüşür
+     * @param class-string $enumClass a PHP enum class; its value is turned into a translation key automatically
      */
     public static function enum(string $key, string $enumClass): self
     {
@@ -112,7 +112,7 @@ final class Field
     }
 
     /**
-     * @param array<int|string, string>|Closure $options sabit küme ya da çalışma anında çözülen
+     * @param array<int|string, string>|Closure $options a fixed set, or one resolved at runtime
      */
     public static function options(string $key, array|Closure $options): self
     {
@@ -122,9 +122,9 @@ final class Field
         return $field;
     }
 
-    // ---------------------------------------------------------------- akıcı ayarlar
+    // ---------------------------------------------------------------- fluent settings
 
-    /** Çeviri anahtarı, düz metin ya da fn(string $locale): string */
+    /** A translation key, plain text, or fn(string $locale): string */
     public function label(string|Closure $label): self
     {
         return $this->with(static function (self $f) use ($label): void {
@@ -132,7 +132,7 @@ final class Field
         });
     }
 
-    /** Dizi anahtarı, nokta yolu (`address.city`), DQL takma adı ya da fn(mixed $row): mixed */
+    /** An array key, a dotted path (`address.city`), a DQL alias, or fn(mixed $row): mixed */
     public function from(string|Closure $from): self
     {
         return $this->with(static function (self $f) use ($from): void {
@@ -147,7 +147,7 @@ final class Field
         });
     }
 
-    /** Sabit para birimi kodu ya da fn(mixed $row): string */
+    /** A fixed currency code, or fn(mixed $row): string */
     public function currency(string|Closure $currency): self
     {
         return $this->with(static function (self $f) use ($currency): void {
@@ -183,7 +183,7 @@ final class Field
         });
     }
 
-    /** Alanı yalnızca verilen biçimlerde göster. */
+    /** Show the field only in the given formats. */
     public function only(Format ...$formats): self
     {
         return $this->with(static function (self $f) use ($formats): void {
@@ -191,7 +191,7 @@ final class Field
         });
     }
 
-    /** Tarih deseni (ör. `d.m.Y`). */
+    /** Date pattern (e.g. `d.m.Y`). */
     public function pattern(string $pattern): self
     {
         return $this->with(static function (self $f) use ($pattern): void {
@@ -199,7 +199,7 @@ final class Field
         });
     }
 
-    /** Biçimlendirmeyi tümüyle devral: fn(mixed $raw, mixed $row): string */
+    /** Take formatting over entirely: fn(mixed $raw, mixed $row): string */
     public function format(Closure $formatter): self
     {
         return $this->with(static function (self $f) use ($formatter): void {
@@ -207,7 +207,7 @@ final class Field
         });
     }
 
-    // ---------------------------------------------------------------- okuyucular
+    // ---------------------------------------------------------------- getters
 
     public function getKey(): string
     {
@@ -229,7 +229,7 @@ final class Field
         return $this->from;
     }
 
-    /** Değerin okunacağı yer — açıkça verilmemişse alanın kendi anahtarı. */
+    /** Where the value is read from — the key of the field itself when nothing was given explicitly. */
     public function getSource(): string|Closure
     {
         return $this->from ?? $this->key;
@@ -262,7 +262,7 @@ final class Field
         return $this->width;
     }
 
-    /** Tipten türetilmiş nihai hizalama. */
+    /** The final alignment, derived from the type. */
     public function getAlign(): Align
     {
         return $this->align->resolve($this->type);
@@ -299,7 +299,7 @@ final class Field
         return null === $this->only || in_array($format, $this->only, true);
     }
 
-    // ---------------------------------------------------------------- iç
+    // ---------------------------------------------------------------- internals
 
     private function with(Closure $mutator): self
     {

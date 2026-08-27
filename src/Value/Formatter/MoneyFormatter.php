@@ -16,16 +16,17 @@ use Closure;
 use Stringable;
 
 /**
- * Para alanlarının biçimlendiricisi.
+ * Formatter for money fields.
  *
- * Kritik kural: SİMGE yalnızca GÖRÜNEN metne girer. Excel'e yazılan değer çıplak sayı
- * kalır, simge hücrenin BİÇİM KODUNA taşınır ('#,##0.00 "₺"'). Böylece kolon hem
- * simgeli görünür hem de toplanabilir. Mevcut ERP hücreye "1.234,56 ₺" dizesini
- * yazıyordu; muhasebe kolonu Excel'de metin olduğu için toplam alınamıyor, kullanıcı
- * da her seferinde elle "sayıya çevir" yapıyordu.
+ * The critical rule: the SYMBOL only ever goes into the visible text. The value written to
+ * Excel stays a bare number, and the symbol moves into the cell's FORMAT CODE
+ * ('#,##0.00 "₺"'). That way the column both shows the symbol and stays summable. The system
+ * this replaces wrote the string "1.234,56 ₺" into the cell; because the accounting
+ * column was text in Excel, no total could be taken and the user had to "convert to number"
+ * by hand every single time.
  *
- * Para birimi satır başına değişebilir (`Field::currency(fn ($row) => $row['currencyCode'])`),
- * çünkü tek bir listede TRY ve USD satırları yan yana durabilir.
+ * The currency can change per row (`Field::currency(fn ($row) => $row['currencyCode'])`),
+ * because a single listing can hold TRY and USD rows side by side.
  */
 final class MoneyFormatter implements ValueFormatter
 {
@@ -40,14 +41,15 @@ final class MoneyFormatter implements ValueFormatter
 
         $formatter = $field->getFormatter();
         if (null !== $formatter) {
-            // Alan biçimlendirmeyi devraldıysa simge/basamak mantığı da onun sorumluluğudur.
+            // If the field has taken formatting over, the symbol/digit logic is its
+            // responsibility too.
             return Cell::text((string) $formatter($raw, $row), $align);
         }
 
         $numbers = $context->settings->numbers;
 
-        // Ayrıştırma NumberFormatter ile ORTAK: "1.234,56" gibi yerelleştirilmiş dizeler
-        // ve Doctrine'in DECIMAL kolonlarda döndürdüğü dizeler aynı kurallarla çözülür.
+        // Parsing is SHARED with NumberFormatter: localised strings such as "1.234,56" and
+        // the strings Doctrine returns for DECIMAL columns are resolved by the same rules.
         $amount = NumberFormatter::parse($raw, $numbers);
 
         if (null === $amount) {
@@ -68,11 +70,11 @@ final class MoneyFormatter implements ValueFormatter
     }
 
     /**
-     * Alanın para birimi kodu: sabit dize ya da SATIRI alan kapanış.
+     * The field's currency code: a fixed string, or a closure that receives the ROW.
      *
-     * Kapanıştan enum ya da metinleşebilir nesne dönmesi de olağandır (Currency::TRY,
-     * bir değer nesnesi); tanınmayan her şey `null` sayılır — para birimi bilinmiyorsa
-     * hücre simgesiz ama doğru sayıyla çıkar.
+     * The closure returning an enum or a stringable object is just as common (Currency::TRY,
+     * a value object); anything not recognised counts as `null` — if the currency is
+     * unknown, the cell comes out without a symbol but with the correct number.
      */
     private static function currencyCode(Field $field, mixed $row): ?string
     {
@@ -98,12 +100,12 @@ final class MoneyFormatter implements ValueFormatter
     }
 
     /**
-     * Simgeyi Excel biçim koduna gömer.
+     * Embeds the symbol into the Excel format code.
      *
-     * Excel'de düz metin çift tırnak içinde taşınır; simgenin içindeki tırnak kodu
-     * bozacağı için atılır (₺, $, € gibi simgelerde zaten yoktur).
-     * Boşluk yerleşimi `NumberSettings::applySymbol()` ile aynıdır ki Excel'de görünen
-     * hücre, CSV/PDF'teki metinle birebir örtüşsün.
+     * In Excel, literal text is carried inside double quotes; a quote inside the symbol
+     * would break the code, so it is dropped (symbols such as ₺, $ or € do not contain one
+     * anyway). The spacing matches `NumberSettings::applySymbol()` exactly, so that the cell
+     * shown in Excel lines up character for character with the text in CSV/PDF.
      */
     private static function excelFormat(NumberSettings $numbers, int $digits, ?string $symbol): string
     {
@@ -118,7 +120,7 @@ final class MoneyFormatter implements ValueFormatter
         return match ($numbers->symbolPosition) {
             SymbolPosition::Before => $literal.' '.$code,
             SymbolPosition::After => $code.' '.$literal,
-            // symbolFor() bu konumda zaten null döner; yine de kod çıplak kalsın.
+            // symbolFor() already returns null in this position; keep the code bare anyway.
             SymbolPosition::None => $code,
         };
     }

@@ -9,16 +9,17 @@ use Balin\Tabula\Format;
 use Closure;
 
 /**
- * Bir tablonun alan tanımlarının tamamı — TEK doğruluk kaynağı.
+ * All of the field definitions of a table — the SINGLE source of truth.
  *
- * Aynı şema üç yönü birden besler: dışa aktarma (xlsx/csv/pdf), içe aktarma ve şablon üretimi.
- * Bu yüzden dışa aktarılan bir dosya hiçbir dönüşüm olmadan geri içe aktarılabilir.
+ * The same schema feeds three directions at once: export (xlsx/csv/pdf), import and template
+ * generation. That is why a file that has been exported can be imported back with no conversion
+ * whatsoever.
  */
 final class Schema
 {
     private string|Closure|null $title = null;
 
-    /** @var array<string, Field> anahtara göre, tanım sırası korunur */
+    /** @var array<string, Field> keyed by field key; declaration order is preserved */
     private array $fields = [];
 
     private function __construct(
@@ -35,7 +36,7 @@ final class Schema
         return new self($name);
     }
 
-    /** Çeviri anahtarı, düz metin ya da fn(string $locale): string */
+    /** A translation key, plain text, or fn(string $locale): string */
     public function title(string|Closure $title): self
     {
         $clone = clone $this;
@@ -45,7 +46,7 @@ final class Schema
     }
 
     /**
-     * Alanları ekler. Aynı anahtar iki kez verilirse hata fırlatır — sessiz üzerine yazma yok.
+     * Adds fields. Throws if the same key is given twice — there is no silent overwriting.
      */
     public function fields(Field ...$fields): self
     {
@@ -102,10 +103,10 @@ final class Schema
     }
 
     /**
-     * Yalnızca verilen anahtarları, VERİLEN SIRAYLA içeren alt şema.
+     * A sub-schema holding only the given keys, IN THE ORDER THEY WERE GIVEN.
      *
-     * Kullanıcının seçtiği kolonlar buradan geçer — istemci artık etiket değil, yalnız anahtar gönderir.
-     * Bilinmeyen bir anahtar sessizce yutulmaz, hata olur.
+     * The columns the user picked pass through here — the client now sends keys only, not labels.
+     * An unknown key is not swallowed silently; it becomes an error.
      *
      * @param list<string> $keys
      */
@@ -129,7 +130,7 @@ final class Schema
         return $clone;
     }
 
-    /** Verilen biçimde görünmeyen alanları (bkz. Field::only()) eler. */
+    /** Drops the fields that are not visible in the given format (see Field::only()). */
     public function forFormat(Format $format): self
     {
         $clone = clone $this;

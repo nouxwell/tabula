@@ -7,21 +7,22 @@ namespace Balin\Tabula\Tests\Fixture;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
- * Kapsayıcı testlerinde `symfony/translation` yerine geçen en küçük uygulama.
+ * The smallest possible stand-in for `symfony/translation` in the container tests.
  *
- * Gerçek paket kurulu değil (yalnızca `translation-contracts` var), ama köprü
- * `service(TranslatorInterface::class)` referansı kuruyor; derleme sırasında bu kimlikte
- * bir servis bulunamazsa kapsayıcı hiç ayağa kalkmaz. Referansın çözülebilmesi için SOMUT
- * bir sınıf şarttır — anonim sınıf kapsayıcıya tanım (Definition) olarak verilemez.
+ * The real package is not installed (only `translation-contracts` is), yet the bridge sets up a
+ * `service(TranslatorInterface::class)` reference; if no service with that id can be found
+ * during compilation, the container never comes up at all. A CONCRETE class is mandatory for
+ * the reference to be resolvable — an anonymous class cannot be handed to the container as a
+ * Definition.
  *
- * Eksik anahtarda Symfony'nin davranışını taklit eder: ANAHTARIN KENDİSİNİ döndürür.
- * `SymfonyTranslator`'ın alan zinciri tam olarak bu sinyale bakıp sıradaki alana geçtiği
- * için, "isabet yok" davranışını doğru taklit etmek zincir testinin ön şartıdır.
+ * On a missing key it imitates Symfony's behaviour: IT RETURNS THE KEY ITSELF. Because
+ * `SymfonyTranslator`'s domain chain looks at exactly that signal before moving on to the next
+ * domain, imitating the "no hit" behaviour correctly is a precondition of the chain test.
  */
 final readonly class StubSymfonyTranslator implements TranslatorInterface
 {
     /**
-     * @param array<string, array<string, string>> $catalogue alan => (anahtar => metin)
+     * @param array<string, array<string, string>> $catalogue domain => (key => text)
      */
     public function __construct(
         private array $catalogue = [],

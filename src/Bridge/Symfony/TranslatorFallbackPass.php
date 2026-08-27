@@ -12,19 +12,19 @@ use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
- * Symfony çevirmeni yoksa portu `PassthroughTranslator`a bağlar.
+ * Binds the port to `PassthroughTranslator` when there is no Symfony translator.
  *
- * NEDEN GEREKLİ: `TranslatorInterface` bir servis DEĞİL, yalnızca FrameworkBundle'ın
- * `translation.php` dosyasında kurulan bir TAKMA ADDIR ve o dosya yalnızca
- * `framework.translator.enabled: true` iken yüklenir. Yani `symfony/translation` kurulu
- * değilse ya da çeviri kapatılmışsa, `SymfonyTranslator`ın bu takma ada olan bağımlılığı
- * uygulamanın TAMAMINI derleme anında düşürür:
+ * WHY THIS IS NEEDED: `TranslatorInterface` is NOT a service, it is merely an ALIAS set up in
+ * FrameworkBundle's `translation.php` file, and that file is only loaded while
+ * `framework.translator.enabled: true`. So if `symfony/translation` is not installed, or
+ * translation has been switched off, `SymfonyTranslator`'s dependency on that alias brings the
+ * ENTIRE application down at compile time:
  *
  *     ServiceNotFoundException: ... has a dependency on a non-existent service
  *     "Symfony\Contracts\Translation\TranslatorInterface".
  *
- * Oysa çekirdek tam bu durum için `PassthroughTranslator` taşıyor. Bu geçiş, kütüphaneyi
- * kuran bir uygulamanın çeviri kullanmak ZORUNDA kalmamasını sağlar.
+ * Yet the core carries `PassthroughTranslator` for exactly this situation. This pass is what
+ * makes sure an application installing the library is not FORCED to use translation.
  */
 final class TranslatorFallbackPass implements CompilerPassInterface
 {

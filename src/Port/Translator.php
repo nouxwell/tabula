@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Balin\Tabula\Port;
 
 /**
- * Çeviri portu.
+ * The translation port.
  *
- * Çekirdek Symfony'yi tanımaz; köprü paketi bu arayüzü Symfony Translator'a bağlar.
- * Locale HER ÇAĞRIDA açıkça geçirilir — kuyruk işçisinde "istekten gelen locale" diye
- * bir şey olmadığı için örtük çözümleme güvenli değildir.
+ * The core knows nothing about Symfony; the bridge package wires this interface to the Symfony
+ * Translator. The locale is passed explicitly ON EVERY CALL — implicit resolution is not safe,
+ * because inside a queue worker there is no such thing as "the locale from the request".
  */
 interface Translator
 {

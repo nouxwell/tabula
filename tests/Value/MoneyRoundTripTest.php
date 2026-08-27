@@ -21,16 +21,17 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Biçimlendirici ile ayrıştırıcı GERÇEKTEN birbirinin tersi mi?
+ * Are the formatter and the parser REALLY the inverse of each other?
  *
- * Bu dosya bir hatadan doğdu: `Field::money()` Türkçe ayarlarla 1234 değerini "1.234 ₺" diye
- * yazıyor, ayrıştırıcı ise simgeyi soyduktan sonra "1.234" metnini KANONİK okuyup 1.234
- * döndürüyordu. Yani kendi dışa aktarmamız kendi içe aktarmamızı bozuyordu — 1000 katlık
- * sapma, üstelik geçerli bir float üretildiği için hiçbir `RowError` çıkmıyor, hiçbir yerde
- * uyarı görünmüyordu. Sadece rakam yanlıştı.
+ * This file was born out of a bug: with Turkish settings `Field::money()` writes the value
+ * 1234 as "1.234 ₺", while the parser, after stripping the symbol, read the text "1.234" as
+ * CANONICAL and returned 1.234. In other words, our own export broke our own import — a
+ * factor-of-1000 deviation, and because a perfectly valid float was produced, no `RowError`
+ * was raised and no warning appeared anywhere. Only the number was wrong.
  *
- * Sinsi olan yanı, yalnızca ONDALIK KISMI GÖRÜNMEYEN ve ayıraçtan sonra tam üç hane olan
- * tutarları vurmasıydı: "1.234,56 ₺" doğru okunuyordu, çünkü ",56" belirsizliği çözüyordu.
+ * The insidious part was that it hit only those amounts whose DECIMAL PART IS NOT VISIBLE and
+ * that have exactly three digits after the separator: "1.234,56 ₺" was read correctly,
+ * because the ",56" resolved the ambiguity.
  */
 final class MoneyRoundTripTest extends TestCase
 {
@@ -59,15 +60,15 @@ final class MoneyRoundTripTest extends TestCase
     /** @return iterable<string, array{float, int}> */
     public static function amounts(): iterable
     {
-        // Kritik olanlar 0 ondalıklı ve ayıraçtan sonra TAM ÜÇ hane olanlar.
-        yield 'binlik, ondalıksız' => [1234.0, 0];
-        yield 'on binlik, ondalıksız' => [12345.0, 0];
-        yield 'yüz binlik, ondalıksız' => [123456.0, 0];
-        yield 'yuvarlanan kesir' => [1234.56, 0];
-        yield 'iki ondalıklı' => [1234.56, 2];
-        yield 'negatif' => [-1234.0, 0];
-        yield 'binliksiz küçük' => [12.5, 2];
-        yield 'sıfır' => [0.0, 2];
+        // The critical ones are those with 0 decimals and EXACTLY THREE digits after the separator.
+        yield 'thousands, no decimals' => [1234.0, 0];
+        yield 'ten thousands, no decimals' => [12345.0, 0];
+        yield 'hundred thousands, no decimals' => [123456.0, 0];
+        yield 'fraction that gets rounded away' => [1234.56, 0];
+        yield 'two decimals' => [1234.56, 2];
+        yield 'negative' => [-1234.0, 0];
+        yield 'small, without a thousands group' => [12.5, 2];
+        yield 'zero' => [0.0, 2];
     }
 
     #[Test]
@@ -79,22 +80,22 @@ final class MoneyRoundTripTest extends TestCase
         $text = (new MoneyFormatter())->format($amount, $field, [], $this->formatContext())->text;
         $back = (new MoneyParser())->parse($text, $field, $this->parseContext());
 
-        // Yazılan metin neyse, geri okunan da o olmalı — biçimlendiricinin yuvarladığı
-        // kadarıyla (0 ondalıkta 1234,56 "1.235" yazılır ve 1235 geri gelir).
+        // Whatever text was written is what must be read back — as far as the formatter
+        // rounded it (with 0 decimals, 1234.56 is written "1.235" and 1235 comes back).
         $expected = round($amount, $decimals);
 
         self::assertEqualsWithDelta(
             $expected,
             $back,
             0.0001,
-            sprintf('"%s" metni %s olarak geri okunmalıydı.', $text, var_export($expected, true)),
+            sprintf('The text "%s" should have been read back as %s.', $text, var_export($expected, true)),
         );
     }
 
     #[Test]
     public function aQuantitySurvivesTheRoundTripToo(): void
     {
-        // Aynı belirsizlik para dışı sayılarda da var: 1234 miktarı "1.234" olarak yazılır.
+        // The same ambiguity exists for non-money numbers: a quantity of 1234 is written as "1.234".
         $field = Field::quantity('stock')->decimals(0);
 
         $text = (new NumberFormatter())
@@ -107,8 +108,8 @@ final class MoneyRoundTripTest extends TestCase
     #[Test]
     public function theExportSideStillReadsCanonicalDatabaseStringsAsDecimals(): void
     {
-        // Düzeltme yalnızca İÇE AKTARMA yönünü değiştirmeli. Dışa aktarmada değer çoğunlukla
-        // veritabanı skalerinden gelir ve orada tek başına nokta ondalıktır.
+        // The fix must change only the IMPORT direction. On export the value mostly comes from
+        // a database scalar, and there a lone dot is a decimal point.
         $numbers = $this->settings()->numbers;
 
         self::assertEqualsWithDelta(1.234, NumberFormatter::parse('1.234', $numbers), 0.0001);
@@ -118,8 +119,9 @@ final class MoneyRoundTripTest extends TestCase
     #[Test]
     public function canonicalDatabaseStringsStillParseCorrectlyOnImport(): void
     {
-        // Yerel okuma açıkken bile kanonik dizeler doğru okunmalı: "1234.5600" ayıraçtan
-        // sonra DÖRT hane taşıdığı için binlik gruplaması sayılmaz.
+        // Even with localised reading switched on, canonical strings must still be read
+        // correctly: "1234.5600" carries FOUR digits after the separator, so it does not
+        // count as thousands grouping.
         $numbers = $this->settings()->numbers;
 
         self::assertEqualsWithDelta(1234.56, NumberFormatter::parse('1234.5600', $numbers, preferLocalized: true), 0.0001);

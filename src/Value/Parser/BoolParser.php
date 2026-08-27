@@ -12,23 +12,24 @@ use Balin\Tabula\Value\ValueParser;
 use Stringable;
 
 /**
- * Boole alanlarının ayrıştırıcısı.
+ * The parser for boolean fields.
  *
- * ÖNCE çevrilmiş "Evet"/"Hayır" denenir, çünkü şablonun açılır listesine yazılan metin
- * tam olarak odur (`BoolFormatter`, `TabulaSettings::$boolTrueKey/$boolFalseKey` ikilisini
- * kullanır — ayrıştırıcı da aynı ikiliyi okur). Mevcut ERP'de hücre metnini bir çeviri
- * ailesi, doğrulama listesini başka bir aile üretiyordu; kendi şablonunun yazdığı değer
- * kendi listesinde bulunmuyordu. Burada tek kaynak vardır ve gidiş-dönüş kapanır.
+ * The translated "Yes"/"No" is tried FIRST, because that is exactly the text written into
+ * the template's drop-down list (`BoolFormatter` uses the
+ * `TabulaSettings::$boolTrueKey/$boolFalseKey` pair — and the parser reads the same pair).
+ * In the system this replaces, one translation family produced the cell text and
+ * another produced the validation list; the value its own template wrote was not in its own
+ * list. Here there is a single source, and the round trip closes.
  *
- * Ardından her yerden gelebilecek olağan gösterimler tanınır (`1/0`, `true/false`,
- * `yes/no`, `evet/hayır`, gerçek boole ve tinyint). Girdi tarafı bilerek geniştir;
- * kullanıcı dosyayı kendi alışkanlığıyla doldurur.
+ * After that, the usual notations that can arrive from anywhere are recognised (`1/0`,
+ * `true/false`, `yes/no`, `evet/hayır`, real booleans and tinyints). The input side is
+ * deliberately wide; the user fills in the file the way they are used to.
  *
- * Biçimlendiriciden AYRILDIĞI nokta: `BoolFormatter` tanımadığı değeri boş hücreye
- * çevirip geçer. Ayrıştırıcı bunu yapamaz — "belirsiz"i uydurma bir `false`a çevirmek
- * (ya da alanı boş geçmek) veritabanına yanlış veri yazmaktır. Tanınmayan değer istisna
- * fırlatır ve mesaj KABUL EDİLEN biçimleri sayar; kullanıcı hatayı ancak neyi
- * yazabileceğini görürse düzeltebilir.
+ * Where it DIFFERS from the formatter: `BoolFormatter` turns a value it does not recognise
+ * into an empty cell and moves on. The parser cannot do that — turning "unknown" into a
+ * made-up `false` (or leaving the field blank) means writing wrong data into the database.
+ * An unrecognised value throws an exception, and the message lists the ACCEPTED forms; the
+ * user can only fix the error once they can see what they are allowed to write.
  */
 final class BoolParser implements ValueParser
 {
@@ -47,8 +48,8 @@ final class BoolParser implements ValueParser
             return $raw;
         }
 
-        // Doctrine tinyint(1), SQL COUNT'ları ve JSON API'leri 0/1 üretir; Excel'in sayısal
-        // hücresi de float döner.
+        // Doctrine tinyint(1), SQL COUNTs and JSON APIs produce 0/1; a numeric Excel cell
+        // comes back as a float.
         if (is_int($raw)) {
             return 0 !== $raw;
         }
@@ -68,7 +69,7 @@ final class BoolParser implements ValueParser
         $needle = $this->fold($raw);
         $settings = $context->settings;
 
-        // Şablonun kendi yazdığı metin her şeyden önce gelir.
+        // The text the template itself wrote comes before everything else.
         if ($needle === $this->fold($context->trans($settings->boolTrueKey))) {
             return true;
         }
@@ -85,12 +86,12 @@ final class BoolParser implements ValueParser
     }
 
     /**
-     * Hata mesajında sayılacak kabul listesi.
+     * The accept-list enumerated in the error message.
      *
-     * Başta ÇEVRİLMİŞ ikili durur: kullanıcının şablonda gördüğü ve yazması beklenen
-     * metin odur. Ardından dosyayı elle dolduranların sık kullandığı gösterimler gelir.
-     * Liste, çeviri zaten "Evet/Hayır" olduğunda kendini tekrarlamasın diye
-     * büyük/küçük harf duyarsız olarak tekilleştirilir.
+     * The TRANSLATED pair comes first: that is the text the user sees in the template and is
+     * expected to type. After it come the notations most often used by people filling in the
+     * file by hand. The list is de-duplicated case-insensitively so that it does not repeat
+     * itself when the translation already is "Evet/Hayır".
      *
      * @return list<string>
      */
@@ -120,7 +121,7 @@ final class BoolParser implements ValueParser
         return array_values($unique);
     }
 
-    /** Karşılaştırmalar kırpılmış ve küçük harfe indirgenmiş metin üzerinden yapılır. */
+    /** Comparisons are made on trimmed, lower-cased text. */
     private function fold(string $value): string
     {
         return mb_strtolower(StringParser::clean($value), 'UTF-8');

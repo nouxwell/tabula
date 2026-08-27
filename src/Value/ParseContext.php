@@ -8,15 +8,16 @@ use Balin\Tabula\Port\Translator;
 use Balin\Tabula\Settings\TabulaSettings;
 
 /**
- * Ayrıştırıcıların ihtiyaç duyduğu bağlam — `FormatContext`in ters yöndeki karşılığı.
+ * The context the parsers need — the mirror image of `FormatContext`.
  *
- * Çevirmen burada da gereklidir çünkü ayrıştırma çoğu zaman ÇEVİRİYİ TERSİNE ÇEVİRMEKTİR:
- * kullanıcının hücreye yazdığı "Evet" değerinin `true`ya, "Açık" değerinin
- * `Status::Open` enum'una dönmesi gerekir. Bu yüzden dil, biçimlendirmede olduğu gibi
- * açıkça taşınır.
+ * The translator is required here as well, because parsing is most often TRANSLATION IN
+ * REVERSE: the "Yes" the user typed into the cell has to come back as `true`, and "Open" has
+ * to come back as the `Status::Open` enum case. That is why the language is carried
+ * explicitly here, exactly as it is when formatting.
  *
- * `FormatContext`ten ayrı bir sınıf olmasının sebebi `format` alanıdır: hangi biçime
- * YAZDIĞIMIZ ayrıştırma sırasında anlamsızdır ve orada durması yanlış soruları davet ederdi.
+ * The reason this is a class of its own, separate from `FormatContext`, is the `format`
+ * field: WHICH format we are writing to is meaningless while parsing, and keeping it here
+ * would invite the wrong questions.
  */
 final readonly class ParseContext
 {

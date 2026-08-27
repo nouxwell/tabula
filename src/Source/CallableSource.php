@@ -8,11 +8,11 @@ use Closure;
 use InvalidArgumentException;
 
 /**
- * Sunucu-taraflı sayfalama ile çalışan kaynak.
+ * A source that works with server-side pagination.
  *
- * Kapanış `fn(int $page, int $limit): iterable` imzasındadır ve boş sayfa dönene
- * kadar sayfa sayfa çağrılır. Doctrine, harici API ya da saklı yordam — hepsi
- * buradan bağlanabilir; `DoctrineSource` (Faz 1) bunun ince bir özel hâlidir.
+ * The closure has the signature `fn(int $page, int $limit): iterable` and is called page by
+ * page until an empty page comes back. Doctrine, an external API or a stored procedure — all
+ * of them can be plugged in here; `DoctrineSource` (Phase 1) is a thin special case of this.
  */
 final readonly class CallableSource implements DataSource
 {
@@ -28,12 +28,12 @@ final readonly class CallableSource implements DataSource
     }
 
     /**
-     * @param Closure(int, int): iterable<array<string, mixed>|object> $fetcher fn(sayfa, limit)
+     * @param Closure(int, int): iterable<array<string, mixed>|object> $fetcher fn(page, limit)
      */
     public static function of(Closure $fetcher, int $pageSize = 1000, ?int $count = null, int $firstPage = 1): self
     {
         if ($pageSize < 1) {
-            throw new InvalidArgumentException('Sayfa boyutu en az 1 olmalı.');
+            throw new InvalidArgumentException('The page size must be at least 1.');
         }
 
         return new self($fetcher, $pageSize, $count, $firstPage);
@@ -54,12 +54,12 @@ final readonly class CallableSource implements DataSource
                 yield $row;
             }
 
-            // Boş sayfa ya da eksik dolu sayfa = son sayfa.
+            // An empty page, or a page that came back only partly filled = the last page.
             if (0 === $rowsInBatch || $rowsInBatch < $this->pageSize) {
                 return;
             }
 
-            // Toplam biliniyorsa gereksiz bir tur daha atma.
+            // If the total is known, do not make one more round for nothing.
             if (null !== $this->count && $seen >= $this->count) {
                 return;
             }

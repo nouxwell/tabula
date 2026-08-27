@@ -11,14 +11,15 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Çerçevesiz varsayılan çeviri uygulaması.
+ * The framework-free default translator implementation.
  *
- * İki sözleşme maddesi önemlidir:
- *  - Katalog hem DÜZ noktalı anahtarla (`export.customer.code`) hem de YAML'dan gelen
- *    İÇ İÇE yapıyla verilebilir; ikisi de aynı anahtarla okunur.
- *  - Anahtar bulunamazsa anahtarın KENDİSİ döner. Eski ERP'de eksik çeviri boş kolon
- *    başlığı üretiyordu ve kullanıcı hangi kolona baktığını anlayamıyordu; burada en
- *    kötü ihtimalle teknik anahtar görünür.
+ * Two clauses of the contract matter:
+ *  - The catalogue can be given either with a FLAT dotted key (`export.customer.code`) or as
+ *    the NESTED structure that comes out of YAML; both are read with the same key.
+ *  - If the key cannot be found, the KEY ITSELF is returned. In the system this package
+ *    replaces, a missing translation produced an empty column header and the user could not
+ *    tell which column they were looking at; here the worst case is that the technical key
+ *    shows up.
  */
 #[CoversClass(ArrayTranslator::class)]
 final class ArrayTranslatorTest extends TestCase
@@ -29,7 +30,7 @@ final class ArrayTranslatorTest extends TestCase
         self::assertInstanceOf(Translator::class, new ArrayTranslator());
     }
 
-    // ---------------------------------------------------------------- katalog biçimleri
+    // ---------------------------------------------------------------- catalogue shapes
 
     #[Test]
     public function readsAFlatDottedKey(): void
@@ -65,7 +66,7 @@ final class ArrayTranslatorTest extends TestCase
     #[Test]
     public function anIncompletePathReturnsTheKey(): void
     {
-        // 'a' bir dizi düğümü; metin değil, o yüzden çeviri sayılmaz.
+        // 'a' is an array node; it is not text, so it does not count as a translation.
         $translator = new ArrayTranslator(['tr' => ['a' => ['b' => 'AB']]]);
 
         self::assertSame('a', $translator->trans('a', [], 'tr'));
@@ -79,7 +80,7 @@ final class ArrayTranslatorTest extends TestCase
         self::assertSame('count', $translator->trans('count', [], 'tr'));
     }
 
-    // ---------------------------------------------------------------- yedek dil
+    // ---------------------------------------------------------------- fallback locale
 
     #[Test]
     public function fallsBackToTheFallbackLocaleWhenTheKeyIsMissing(): void
@@ -112,7 +113,7 @@ final class ArrayTranslatorTest extends TestCase
         self::assertSame('Merhaba', $translator->trans('greeting'));
     }
 
-    // ---------------------------------------------------------------- eksik anahtar
+    // ---------------------------------------------------------------- missing key
 
     #[Test]
     public function aMissingKeyReturnsTheKeyItself(): void
@@ -128,7 +129,7 @@ final class ArrayTranslatorTest extends TestCase
         self::assertSame('a.b.c', (new ArrayTranslator())->trans('a.b.c'));
     }
 
-    // ---------------------------------------------------------------- parametreler
+    // ---------------------------------------------------------------- parameters
 
     #[Test]
     public function replacesParametersWrittenWithoutPercentSigns(): void
@@ -144,7 +145,7 @@ final class ArrayTranslatorTest extends TestCase
     #[Test]
     public function replacesParametersWrittenWithPercentSigns(): void
     {
-        // Symfony alışkanlığıyla '%name%' yazılabilsin diye ad her iki biçimde de kabul edilir.
+        // So that '%name%' can be written out of Symfony habit, the name is accepted in both shapes.
         $translator = new ArrayTranslator(['tr' => ['greeting' => 'Merhaba %name%, %count% kayıt']], 'tr');
 
         self::assertSame(
@@ -164,7 +165,7 @@ final class ArrayTranslatorTest extends TestCase
     #[Test]
     public function parametersAreAlsoAppliedToTheFallbackKeyText(): void
     {
-        // Çeviri bulunamasa bile anahtarın içindeki yer tutucular doldurulur.
+        // Even when no translation is found, the placeholders inside the key are filled in.
         $translator = new ArrayTranslator([], 'tr');
 
         self::assertSame('Ali bulunamadı', $translator->trans('%name% bulunamadı', ['name' => 'Ali'], 'tr'));

@@ -19,12 +19,12 @@ use Balin\Tabula\Settings\TabulaSettings;
 use InvalidArgumentException;
 
 /**
- * Yapılandırma dizisinden ayar nesnelerini kurar.
+ * Builds the settings objects from a configuration array.
  *
- * Neden ayrı bir fabrika: çekirdek ayar sınıfları `SymbolPosition` gibi enum'lar taşır ve
- * kapsayıcıya (DI) enum örneği geçirmek sürüm sürüm değişen bir alan. Fabrika sayesinde
- * kapsayıcı yalnızca DÜZ DİZİ görür, dönüşüm PHP tarafında bir kez yapılır — ve çekirdek
- * ayar sınıfları Symfony'den habersiz kalır.
+ * Why a separate factory: the core settings classes carry enums such as `SymbolPosition`, and
+ * passing an enum instance to the container (DI) is an area that changes from version to
+ * version. Thanks to the factory the container only ever sees PLAIN ARRAYS, the conversion is
+ * done once on the PHP side — and the core settings classes stay unaware of Symfony.
  *
  * @phpstan-type NumberConfig array{decimal_separator: string, thousand_separator: string, decimal_digits: int, quantity_digits: int, money_digits: int, symbol_position: string, currency_symbols: array<string, string>}
  * @phpstan-type DateConfig array{date_pattern: string, datetime_pattern: string, excel_date_format: string, excel_datetime_format: string}
@@ -70,16 +70,18 @@ final class SettingsFactory
             enclosure: $config['enclosure'],
             escape: $config['escape'],
             writeBom: $config['write_bom'],
-            // YAML'da "\r\n" yazmak kaçış kurallarına takıldığı ve sessizce iki harfe
-            // dönüştüğü için config `crlf`/`lf` adlarını alır, ham diziyi değil.
+            // Because writing "\r\n" in YAML runs into the escaping rules and silently turns
+            // into two literal characters, the config takes the names `crlf`/`lf` rather than
+            // the raw sequence.
             //
-            // `match` + `default: throw`, üçlü operatörün yerine BİLEREK kullanıldı: bu metot
-            // public statik bir API ve config ağacına yarın yeni bir ad eklenirse üçlü operatör
-            // onu sessizce CRLF'e düşürürdü. Bilinmeyen ad gürültü çıkarmalı.
+            // `match` + `default: throw` was used DELIBERATELY in place of a ternary: this
+            // method is a public static API, and if a new name is added to the config tree
+            // tomorrow, a ternary would silently drop it to CRLF. An unknown name has to make
+            // some noise.
             lineEnding: match ($config['line_ending']) {
                 'lf' => "\n",
                 'crlf' => "\r\n",
-                default => throw new InvalidArgumentException(sprintf('Bilinmeyen satır sonu adı: "%s". Beklenen: "crlf" ya da "lf".', $config['line_ending'])),
+                default => throw new InvalidArgumentException(sprintf('Unknown line ending name: "%s". Expected: "crlf" or "lf".', $config['line_ending'])),
             },
         );
     }
@@ -112,10 +114,10 @@ final class SettingsFactory
             Orientation::Portrait => $page->portrait(),
         };
 
-        // (float) kastı SÜS DEĞİL: Symfony'nin `FloatNode`u tam sayıyı kabul eder ama
-        // ÇEVİRMEZ — `margin_mm: 10` yazan bir yaml dosyası buraya `int(10)` olarak düşer.
-        // Kasti burada atmazsak `Page`in float alanlarına int sızar ve `10 === $margin`
-        // gibi bir karşılaştırma yapan her kod (ya da testi) tipe göre şaşar.
+        // The (float) cast is NOT decoration: Symfony's `FloatNode` accepts an integer but
+        // DOES NOT CONVERT it — a yaml file saying `margin_mm: 10` lands here as `int(10)`.
+        // If we do not cast here, an int leaks into `Page`'s float fields and any code (or
+        // test) making a comparison such as `10 === $margin` is thrown off by the type.
         $page = $page->margins((float) $config['margin_mm']);
 
         $budget = ColumnBudget::fit()
@@ -123,9 +125,10 @@ final class SettingsFactory
             ->max($config['max_columns'])
             ->overflow(Overflow::from($config['overflow']));
 
-        // `title` ve `anchor()` bilerek yapılandırmada YOK: ikisi de dışa aktarma başına
-        // değişir (belge başlığı, satırı tanıtan çapa kolonlar) ve global bir varsayılanı
-        // olamaz. Çağrı yerinde `->page()` / `->columns()` ile verilirler.
+        // `title` and `anchor()` are deliberately ABSENT from the configuration: both change
+        // from one export to the next (the document title, the anchor columns that identify a
+        // row) and cannot have a global default. They are given at the call site with
+        // `->page()` / `->columns()`.
         return new PdfOptions(
             page: $page,
             budget: $budget,

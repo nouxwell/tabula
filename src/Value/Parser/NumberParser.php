@@ -12,18 +12,18 @@ use Balin\Tabula\Value\ParseContext;
 use Balin\Tabula\Value\ValueParser;
 
 /**
- * Tam sayı, ondalık ve miktar alanlarının ayrıştırıcısı.
+ * The parser for integer, decimal and quantity fields.
  *
- * Yerelleştirilmiş dize çözümlemesi burada TEKRAR YAZILMAZ: `NumberFormatter::parse()`
- * zaten "1.234,56"yı, veritabanının kanonik "1234.5600" dizesini, muhasebe parantezini
- * `(1.234,56)` ve sondaki eksiyi `1.234,56-` çözüyor. İkinci bir ayrıştırıcı yazmak, bu
- * paketin ortadan kaldırmak için var olduğu hatanın (aynı mantığın sekiz sınıfa
- * kopyalanması) aynısı olurdu.
+ * Localised string resolution is NOT REWRITTEN here: `NumberFormatter::parse()` already
+ * resolves "1.234,56", the database's canonical "1234.5600", the accounting parentheses
+ * `(1.234,56)` and the trailing minus `1.234,56-`. Writing a second parser would be the very
+ * mistake this package exists to eliminate (the same logic copied into eight classes).
  *
- * Biçimlendiriciden AYRILDIĞI nokta hoşgörüdür: `NumberFormatter` okunamayan hücreyi boş
- * basıp geçer, çünkü 40 bin satırlık bir rapor tek bozuk hücre yüzünden ölmemeli. Burada
- * aynı davranış veritabanına YANLIŞ VERİ yazmak demektir; okunamayan değer istisna
- * fırlatır ve içe aktarma döngüsü onu satır/alan bilgisiyle bir `RowError`e çevirir.
+ * Where it DIFFERS from the formatter is leniency: `NumberFormatter` prints an unreadable
+ * cell empty and moves on, because a 40,000-row report must not die because of a single
+ * broken cell. Here the same behaviour would mean writing WRONG DATA into the database; an
+ * unreadable value throws an exception, and the import loop turns it into a `RowError`
+ * carrying the row/field information.
  */
 final class NumberParser implements ValueParser
 {
@@ -41,30 +41,32 @@ final class NumberParser implements ValueParser
             return null;
         }
 
-        // `preferLocalized: true` — metin yerelleştirilmiş bir hücreden geliyor. Kanonik
-        // okuma "1.234"ü 1.234 sayardı; oysa Türkçe ayarlarla bu 1234'tür ve aradaki fark
-        // sessizce 1000 katlık bir sapma olurdu.
+        // `preferLocalized: true` — the text comes from a localised cell. The canonical
+        // reading would take "1.234" for 1.234; with Turkish settings it is 1234, and the
+        // difference would be a silent 1000-fold deviation.
         $number = NumberFormatter::parse($raw, $context->settings->numbers, preferLocalized: true);
 
-        // Dolu bir hücreden `null` dönmesi "sayı değil" demektir; boş hücre yukarıda elendi.
+        // `null` coming back from a non-empty cell means "not a number"; empty cells were
+        // filtered out above.
         if (null === $number) {
             throw ParseException::notANumber($field, StringParser::describe($raw));
         }
 
-        // Tip sözleşmesi net tutulur: Integer daima `int`, Decimal/Quantity daima `float`.
-        // Biçimlendirici tarafı `int|float` karışığı döndürebilir (orada tek tüketici
-        // `number_format`tir); burada değeri bir entity setter'ı alacak, dolayısıyla
-        // tipin satırdan satıra değişmemesi gerekir.
+        // The type contract is kept crisp: Integer is always `int`, Decimal/Quantity always
+        // `float`. The formatter side may return a mix of `int|float` (its only consumer
+        // there is `number_format`); here the value is going into an entity setter, so the
+        // type must not change from row to row.
         return FieldType::Integer === $field->getType()
             ? $this->toInteger($number, $field, $raw)
             : (float) $number;
     }
 
     /**
-     * Tam sayı alanında ondalık değer HATADIR.
+     * A decimal value in an integer field is an ERROR.
      *
-     * Stok sayımı kolonuna yazılmış `12,5` bir yazım hatasıdır; sessizce 12'ye yuvarlamak
-     * yarım kutuyu kayıttan silmek olur. Kullanıcı hatayı görmeli, biz tahmin etmemeliyiz.
+     * A `12,5` written into a stock-count column is a typo; silently rounding it to 12 would
+     * erase half a box from the records. The user has to see the mistake — it is not for us
+     * to guess.
      */
     private function toInteger(int|float $number, Field $field, mixed $raw): int
     {
@@ -72,9 +74,9 @@ final class NumberParser implements ValueParser
             return $number;
         }
 
-        // `PHP_INT_MAX` üstündeki değer de tam sayı değildir: `(int)` dönüşümü işareti bile
-        // ters çevirebilir. Karşılaştırma KATI olmalı, çünkü `(float) PHP_INT_MAX` yukarı
-        // yuvarlanarak 2^63 olur — yani sınırın kendisi `int`e sığmaz.
+        // A value above `PHP_INT_MAX` is not an integer either: the `(int)` cast can even
+        // flip the sign. The comparison has to be STRICT, because `(float) PHP_INT_MAX`
+        // rounds up to 2^63 — so the limit itself does not fit into an `int`.
         if (floor($number) !== $number || abs($number) >= (float) PHP_INT_MAX) {
             throw ParseException::notAnInteger($field, StringParser::describe($raw));
         }

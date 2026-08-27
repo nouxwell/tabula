@@ -7,26 +7,28 @@ namespace Balin\Tabula\Export\Writer;
 use Balin\Tabula\Exception\WriterException;
 
 /**
- * CSV yazıcısının ayarları.
+ * The options of the CSV writer.
  *
- * Tek bir CSV varsayılanı yoktur; iki ayrı hedef kitle vardır ve istedikleri şey birbirine zıttır:
+ * There is no single CSV default; there are two distinct audiences and what they want is the exact
+ * opposite of each other:
  *
- *  - İNSAN, dosyayı Türkçe Excel'de açar → `;` ayraç + UTF-8 BOM şart.
- *  - MAKİNE, dosyayı bir betikle okur → RFC 4180 (`,` ayraç, BOM yok, kaçış kapalı).
+ *  - A HUMAN opens the file in a Turkish Excel → a `;` delimiter + a UTF-8 BOM are mandatory.
+ *  - A MACHINE reads the file from a script → RFC 4180 (`,` delimiter, no BOM, escaping off).
  *
- * Bu yüzden ayarlar adlandırılmış kuruculardan seçilir; çağıranın beş skaleri elle
- * doğru sırada dizmesi gerekmez.
+ * That is why the options are picked from named constructors; the caller does not have to line up
+ * five scalars in the right order by hand.
  */
 final readonly class CsvOptions
 {
     /**
-     * @param string $delimiter  Varsayılan ';' — Türkçe/Avrupa yerelinde Excel ondalık ayıracı
-     *                           olarak ',' kullanır; virgüllü dosyada "1.234,56" iki sütuna bölünür.
-     * @param string $escape     PHP'nin standart dışı kaçışı. '' verilirse kapanır ve çıktı
-     *                           RFC 4180'e birebir uyar (PHP 9'da varsayılan da bu olacak).
-     * @param bool   $writeBom   BOM olmadan Excel dosyayı cp1254 sanır ve ş/ğ/ı/İ/ö/ç/ü bozulur
-     * @param string $lineEnding varsayılan CRLF: hem RFC 4180'in şart koştuğu hem de Windows
-     *                           Excel'in sorunsuz açtığı satır sonu
+     * @param string $delimiter  Defaults to ';' — in the Turkish/European locale Excel uses ',' as
+     *                           the decimal separator, so in a comma-delimited file "1.234,56" is
+     *                           split across two columns.
+     * @param string $escape     PHP's non-standard escaping. Passing '' turns it off and the output
+     *                           conforms to RFC 4180 exactly (this will be the default in PHP 9 too).
+     * @param bool   $writeBom   Without the BOM, Excel takes the file for cp1254 and ş/ğ/ı/İ/ö/ç/ü get mangled
+     * @param string $lineEnding CRLF by default: both what RFC 4180 mandates and what Windows Excel
+     *                           opens without trouble
      */
     public function __construct(
         public string $delimiter = ';',
@@ -35,10 +37,12 @@ final readonly class CsvOptions
         public bool $writeBom = true,
         public string $lineEnding = "\r\n",
     ) {
-        // KURULUM anında doğrula, yazma anında değil. `fputcsv()` çok baytlı bir ayraçta ham
-        // `ValueError` fırlatır; o istisna `TabulaException` değildir ve dosya oluşturulduktan
-        // SONRA patladığı için diskte yalnız BOM içeren bir kalıntı bırakır.
-        // Ölçü `strlen` (BAYT), `mb_strlen` değil: `fputcsv()` tek bayt ister, yani 'ş' geçersizdir.
+        // Validate at CONSTRUCTION time, not at write time. `fputcsv()` throws a raw `ValueError`
+        // on a multi-byte delimiter; that exception is not a `TabulaException`, and because it
+        // blows up AFTER the file has been created it leaves behind a leftover on disk containing
+        // nothing but the BOM.
+        // The measure is `strlen` (BYTES), not `mb_strlen`: `fputcsv()` wants a single byte, which
+        // means 'ş' is invalid.
         if (1 !== \strlen($delimiter)) {
             throw WriterException::csvCharacterMustBeSingleByte('delimiter', $delimiter);
         }
@@ -47,19 +51,19 @@ final readonly class CsvOptions
             throw WriterException::csvCharacterMustBeSingleByte('enclosure', $enclosure);
         }
 
-        // Kaçış BİLEREK boş olabilir: '' verilince PHP'nin standart dışı kaçışı kapanır.
+        // The escape may DELIBERATELY be empty: passing '' turns off PHP's non-standard escaping.
         if ('' !== $escape && 1 !== \strlen($escape)) {
             throw WriterException::csvCharacterMustBeSingleByte('escape', $escape, emptyAllowed: true);
         }
     }
 
-    /** Türkçe/Avrupa Excel'inde çift tıklayıp açmak için — varsayılan. */
+    /** For double-clicking the file open in a Turkish/European Excel — the default. */
     public static function excel(): self
     {
         return new self();
     }
 
-    /** Makineye giden besleme: RFC 4180, BOM yok, kaçış kapalı. */
+    /** A feed going to a machine: RFC 4180, no BOM, escaping off. */
     public static function rfc4180(): self
     {
         return new self(

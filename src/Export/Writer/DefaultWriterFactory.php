@@ -10,10 +10,10 @@ use Closure;
 use Dompdf\Dompdf;
 
 /**
- * Yerleşik yazıcıları verilen ayarlarla üretir.
+ * Produces the built-in writers with the given options.
  *
- * `with()` ile bir biçim için kendi üreticini geçirebilirsin — ör. şirket antetli kendi PDF
- * yazıcın, `ExportBuilder`e dokunmadan.
+ * With `with()` you can pass your own factory for a format — e.g. your own PDF writer with the
+ * company letterhead, without touching `ExportBuilder`.
  */
 final class DefaultWriterFactory implements WriterFactory
 {
@@ -28,7 +28,7 @@ final class DefaultWriterFactory implements WriterFactory
     }
 
     /**
-     * @param Closure(): Writer $factory her çağrıda TAZE yazıcı döndürmeli
+     * @param Closure(): Writer $factory must return a FRESH writer on every call
      */
     public function with(Format $format, Closure $factory): self
     {
@@ -49,9 +49,9 @@ final class DefaultWriterFactory implements WriterFactory
         return match ($format) {
             Format::Xlsx => new XlsxWriter($this->xlsx),
             Format::Csv => new CsvWriter($this->csv),
-            // Motor kontrolü BURADA, `PdfWriter`ın içinde değil: yazıcı Dompdf'i ancak
-            // `close()`ta çağırır, yani eksik paket tüm satırlar işlendikten sonra ham bir
-            // `Error` olarak patlardı (bkz. `ExportException::missingPdfEngine`).
+            // The engine check is HERE, not inside `PdfWriter`: the writer only calls Dompdf in
+            // `close()`, so a missing package would blow up as a raw `Error` after every row had
+            // already been processed (see `ExportException::missingPdfEngine`).
             Format::Pdf => class_exists(Dompdf::class)
                 ? new PdfWriter($this->pdf)
                 : throw ExportException::missingPdfEngine(),

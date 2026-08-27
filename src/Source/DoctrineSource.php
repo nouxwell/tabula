@@ -9,22 +9,24 @@ use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\QueryBuilder;
 
 /**
- * Doctrine `QueryBuilder` üzerinden satır kaynağı.
+ * A row source over a Doctrine `QueryBuilder`.
  *
- * İKİ okuma kipi vardır ve varsayılan olan daha güvenli olanıdır:
+ * There are TWO read modes, and the default one is the safer of the two:
  *
- *  1. AKIŞ (varsayılan) — tek sorgu, `Query::toIterable()`. Doctrine satırları teker teker
- *     hidrasyona sokar; sayfalama aritmetiği hiç devreye girmediği için satır atlama/tekrar
- *     riski YOKTUR. Ayrıca `toIterable()` getirme-birleştirmeli (fetch-join) koleksiyonlarda
- *     Doctrine'in kendi korumasıyla hata verir. Dışa aktarmaların neredeyse tamamı için
- *     doğru seçim budur ve çağıranın koyduğu `setFirstResult`/`setMaxResults` penceresi korunur.
+ *  1. STREAMING (the default) — a single query, `Query::toIterable()`. Doctrine hydrates the
+ *     rows one by one; since pagination arithmetic never comes into play at all, there is NO
+ *     risk of skipping or repeating rows. On top of that, `toIterable()` errors out on
+ *     fetch-joined collections through Doctrine's own guard. This is the right choice for
+ *     very nearly every export, and the `setFirstResult`/`setMaxResults` window put in place
+ *     by the caller is preserved.
  *
- *  2. PARÇALI — `chunk(2000)`; her sayfa ayrı bir sorgu. Sürücü tüm sonucu tamponluyorsa ya da
- *     tek uzun sorgudan kaçınmak gerekiyorsa kullanılır. ORDER BY ŞART KOŞAR.
+ *  2. CHUNKED — `chunk(2000)`; every page is a separate query. Used when the driver buffers
+ *     the whole result set, or when a single long-running query has to be avoided. It
+ *     REQUIRES an ORDER BY.
  *
- * Hidrasyon varsayılanı `HYDRATE_ARRAY`'dir: dışa aktarma projeksiyon okur, varlık grafiği
- * değil. `select('c.code', 'c.name')` gibi bir sorgu doğrudan dizi satırlar üretir ve
- * `Field::from()` bunları alan adlarıyla okur.
+ * The hydration default is `HYDRATE_ARRAY`: an export reads a projection, not an entity graph.
+ * A query such as `select('c.code', 'c.name')` produces array rows directly and `Field::from()`
+ * reads them by field name.
  */
 final class DoctrineSource implements DataSource
 {
@@ -44,7 +46,7 @@ final class DoctrineSource implements DataSource
         return new self($queryBuilder, null, AbstractQuery::HYDRATE_ARRAY, null);
     }
 
-    /** Parçalı kipe geçer. Sorguda ORDER BY yoksa `rows()` fırlatır. */
+    /** Switches to chunked mode. If the query has no ORDER BY, `rows()` throws. */
     public function chunk(int $size): self
     {
         if ($size < 1) {
@@ -55,23 +57,23 @@ final class DoctrineSource implements DataSource
     }
 
     /**
-     * Hidrasyon kipini değiştirir.
+     * Changes the hydration mode.
      *
-     * ⚠ `AbstractQuery::HYDRATE_OBJECT` ile dikkat: hidrasyon sonrası temizlik yalnızca
-     * hidratörün kendi haritalarını boşaltır, VARLIKLAR UnitOfWork'te YÖNETİLMEYE DEVAM EDER.
-     * Yüz binlerce satırlık bir varlık dışa aktarımı belleği tüketir. Bu sınıf kendiliğinden
-     * `detach()`/`clear()` ÇAĞIRMAZ — çağıranın nesnelerini altından çekmek daha kötü sürprizler
-     * doğurur. Varlığa gerçekten ihtiyacın yoksa `HYDRATE_ARRAY`de kal; ihtiyacın varsa
-     * belleği kendin yönet.
+     * ⚠ Take care with `AbstractQuery::HYDRATE_OBJECT`: the clean-up after hydration only
+     * empties the hydrator's own maps, THE ENTITIES GO ON BEING MANAGED in the UnitOfWork.
+     * An entity export of hundreds of thousands of rows will exhaust memory. This class does
+     * NOT call `detach()`/`clear()` of its own accord — pulling the caller's objects out from
+     * under them breeds worse surprises. If you do not genuinely need the entity, stay on
+     * `HYDRATE_ARRAY`; if you do need it, manage the memory yourself.
      *
-     * @param AbstractQuery::HYDRATE_*|string $hydrationMode adlandırılmış özel hidratörler için dize
+     * @param AbstractQuery::HYDRATE_*|string $hydrationMode a string for named custom hydrators
      */
     public function hydrateAs(int|string $hydrationMode): self
     {
         return new self($this->queryBuilder, $this->chunkSize, $hydrationMode, $this->count);
     }
 
-    /** Toplam satır sayısı biliniyorsa bildirir (ilerleme göstergesi içindir, okumayı etkilemez). */
+    /** Declares the total row count if it is known (it is for the progress indicator, it does not affect reading). */
     public function withCount(?int $count): self
     {
         return new self($this->queryBuilder, $this->chunkSize, $this->hydrationMode, $count);
@@ -93,13 +95,13 @@ final class DoctrineSource implements DataSource
         return $this->count;
     }
 
-    /** Parçalı kipin ORDER BY şartını sağlayıp sağlamadığı — `rows()` çağırmadan sorulabilir. */
+    /** Whether chunked mode's ORDER BY requirement is met — can be asked without calling `rows()`. */
     public function isSafeToChunk(): bool
     {
         return null === $this->chunkSize || $this->hasOrderBy();
     }
 
-    // ---------------------------------------------------------------- iç
+    // ---------------------------------------------------------------- internals
 
     /** @return iterable<int, mixed> */
     private function stream(): iterable
@@ -114,19 +116,20 @@ final class DoctrineSource implements DataSource
             throw SourceException::chunkingWithoutOrder();
         }
 
-        // Çağıran kendi penceresini koymuşsa (ör. "önizleme en fazla 50 satır") parçalı kip onu
-        // EZERDİ ve tüm tablo dışarı akardı. Sessizce ezmektense reddediyoruz.
+        // If the caller has put a window of their own in place (e.g. "a preview of at most 50
+        // rows"), chunked mode WOULD OVERRIDE it and the whole table would flow out. Rather
+        // than overriding it silently, we refuse.
         $callerLimit = $this->queryBuilder->getMaxResults();
         if (null !== $callerLimit) {
             throw SourceException::chunkingWithCallerLimit($callerLimit);
         }
 
-        // Çağıranın başlangıç ofseti korunur.
+        // The caller's starting offset is preserved.
         $offset = $this->queryBuilder->getFirstResult();
 
         while (true) {
-            // QueryBuilder HER sayfada klonlanır: çağıranın nesnesine `setFirstResult`
-            // yazmak, aynı builder'ı başka bir yerde kullanan kodu sessizce bozardı.
+            // The QueryBuilder is cloned for EVERY page: writing `setFirstResult` onto the
+            // caller's object would silently break code using that same builder somewhere else.
             $page = (clone $this->queryBuilder)
                 ->setFirstResult($offset)
                 ->setMaxResults($chunkSize)
@@ -139,13 +142,14 @@ final class DoctrineSource implements DataSource
 
             yield from $page;
 
-            // ÖFSET SQL SATIRINA GÖRE İLERLER, hidrasyon sonucuna göre DEĞİL.
+            // THE OFFSET ADVANCES BY SQL ROW, NOT by the hydration result.
             //
-            // `getResult()` hidrate edilmiş sonucu döndürür ve varlık/nesne hidrasyonunda
-            // birleştirmeli sorgularda tekrar eden kök satırlar TEK nesneye indirgenir.
-            // "dönen satır sayısı < sayfa boyutu ise bitti" demek, 2000 SQL satırının 900
-            // köke indiği bir sayfada dışa aktarımı SESSİZCE ilk sayfada bitirirdi.
-            // Bu yüzden tek bitiş ölçütü GERÇEKTEN BOŞ sayfadır.
+            // `getResult()` returns the hydrated result, and under entity/object hydration the
+            // repeated root rows of a joined query are collapsed into a SINGLE object. Saying
+            // "if the number of returned rows < the page size then we are done" would SILENTLY
+            // end the export on the first page whenever 2,000 SQL rows collapsed into 900
+            // roots. That is why the one and only termination criterion is a page that is
+            // REALLY EMPTY.
             $offset += $chunkSize;
         }
     }

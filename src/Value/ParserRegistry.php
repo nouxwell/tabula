@@ -14,14 +14,14 @@ use Balin\Tabula\Value\Parser\NumberParser;
 use Balin\Tabula\Value\Parser\StringParser;
 
 /**
- * Tipten ayrıştırıcıya eşleme — `FormatterRegistry`nin ters yöndeki ikizi.
+ * Maps a type to a parser — the reverse-direction twin of `FormatterRegistry`.
  *
- * Aramalar tip başına önbelleklenir; bir içe aktarma dosyasında on binlerce hücre vardır
- * ve her hücrede doğrusal tarama yapmak ölçülebilir bir maliyettir.
+ * Lookups are cached per type; an import file holds tens of thousands of cells, and a linear
+ * scan on every single cell is a measurable cost.
  *
- * Öndeki ayrıştırıcı kazanır: `with()` ile eklenen özel bir ayrıştırıcı, yerleşik olanı
- * ezer. Böylece bir projenin kendi tarih lehçesini tanıtması, kütüphaneyi çatallamak
- * değil, tek bir sınıf yazmaktır.
+ * The parser in front wins: a custom parser added through `with()` overrides the built-in
+ * one. That way, teaching the library a project's own date dialect means writing a single
+ * class rather than forking the library.
  */
 final class ParserRegistry
 {
@@ -36,7 +36,7 @@ final class ParserRegistry
         $this->parsers = array_values($parsers);
     }
 
-    /** Yerleşik ayrıştırıcılarla kurulu kayıt defteri. */
+    /** A registry wired up with the built-in parsers. */
     public static function default(): self
     {
         return new self(
@@ -49,20 +49,20 @@ final class ParserRegistry
         );
     }
 
-    /** Özel ayrıştırıcıları BAŞA ekleyerek yerleşikleri ezer. */
+    /** Prepends the custom parsers TO THE FRONT, so they override the built-in ones. */
     public function with(ValueParser ...$parsers): self
     {
         return new self(...array_values($parsers), ...$this->parsers);
     }
 
     /**
-     * Alanın tipine karşılık gelen ayrıştırıcı.
+     * The parser matching the field's type.
      *
-     * Biçimlendirici ikizi `FieldType` alır; bu taraf ALANIN kendisini alır, çünkü
-     * ayrıştırıcı bulunamadığında fırlatılan `ParseException::noParser()` alanı ister
-     * (hata mesajının hangi kolondan bahsettiği kullanıcı için tek anlamlı bilgidir).
-     * Önbellek yine TİP başınadır; alan başına önbelleklemek aynı tipteki yüzlerce alan
-     * için bellekte gereksiz kopya tutardı.
+     * The formatter twin takes a `FieldType`; this side takes the FIELD itself, because the
+     * `ParseException::noParser()` thrown when no parser is found wants the field (which
+     * column the error message is talking about is the only meaningful piece of information
+     * for the user). The cache is still keyed per TYPE; caching per field would keep
+     * needless copies in memory for the hundreds of fields that share a type.
      */
     public function for(Field $field): ValueParser
     {

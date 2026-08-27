@@ -17,24 +17,25 @@ use Stringable;
 use UnitEnum;
 
 /**
- * Enum ve sabit seçenek kümesi alanlarının ayrıştırıcısı.
+ * The parser for enum fields and fixed option sets.
  *
- * Kullanıcı hücrede ÇEVRİLMİŞ ETİKETİ görür ("Açık"), veritabanı ise enum'un kendisini
- * bekler (`Status::Open`). Bu sınıf çeviriyi geriye çevirir; eşleştirme sırası
- * `EnumFormatter`ın yazdığı değerden başlar:
- *  1. Her case'in çevrilmiş etiketi — şablonun açılır listesine yazdığımız metin budur,
- *     dolayısıyla gidiş-dönüşün kapandığı yer burasıdır. Anahtar çözümü de aynı zinciri
- *     izler: `TranslatableEnum::translationKey()` → `label()` → `value`/`name`.
- *  2. Enum'un `value` değeri — dosyayı bir geliştirici ya da başka bir sistem doldurmuşsa.
- *  3. Case adı — son çare.
- * Üç adım da AYRI TURDUR: bir case'in etiketi başka bir case'in `value` değeriyle
- * çakışırsa etiket kazanır, çünkü kullanıcının gördüğü metin odur.
+ * The user sees the TRANSLATED LABEL in the cell ("Open"), while the database expects the
+ * enum itself (`Status::Open`). This class turns the translation back around; the matching
+ * order starts from what `EnumFormatter` wrote:
+ *  1. Each case's translated label — that is the text we write into the template's drop-down
+ *     list, so this is where the round trip closes. Key resolution follows the same chain:
+ *     `TranslatableEnum::translationKey()` → `label()` → `value`/`name`.
+ *  2. The enum's `value` — for when the file was filled in by a developer or by another
+ *     system.
+ *  3. The case name — the last resort.
+ * All three steps are SEPARATE PASSES: if one case's label collides with another case's
+ * `value`, the label wins, because that is the text the user sees.
  *
- * Karşılaştırma kırpılmış ve büyük/küçük harf duyarsızdır ("AÇIK", "açık " de tutar);
- * bunun dışında hoşgörü yoktur. `EnumFormatter` tanımadığı değeri ham hâliyle basıp
- * geçer — bir dışa aktarmada bu yalnızca çirkin bir hücredir. Burada aynı davranış,
- * listede olmayan bir durumun veritabanına sızması demektir; eşleşmeyen değer istisna
- * fırlatır ve mesaj GEÇERLİ SEÇENEKLERİ sayar.
+ * Comparison is trimmed and case-insensitive ("AÇIK" and "açık " match too); beyond that
+ * there is no leniency. `EnumFormatter` prints a value it does not recognise as it is and
+ * moves on — in an export that is merely an ugly cell. Here the same behaviour would mean a
+ * status that is not on the list leaking into the database; a value that does not match
+ * throws an exception, and the message lists the VALID OPTIONS.
  */
 final class EnumParser implements ValueParser
 {
@@ -47,8 +48,9 @@ final class EnumParser implements ValueParser
     {
         $enumClass = $field->getEnumClass();
 
-        // Yapılandırma hatası veriden önce patlasın: yanlış sınıf adıyla kurulmuş bir alan
-        // satır hatası değil, kurulum hatasıdır — 5000 satırda 5000 kez tekrarlanmamalı.
+        // A configuration mistake should blow up before the data does: a field set up with
+        // the wrong class name is a setup error, not a row error — it must not be repeated
+        // 5000 times across 5000 rows.
         if (null !== $enumClass && !is_a($enumClass, UnitEnum::class, true)) {
             throw ValueException::notAnEnum($field, $enumClass);
         }
@@ -65,7 +67,7 @@ final class EnumParser implements ValueParser
     /** @param class-string|null $enumClass */
     private function parseEnum(mixed $raw, Field $field, ?string $enumClass, ParseContext $context): UnitEnum
     {
-        // Dizi kaynaklı yeniden içe aktarmalarda değer zaten örnek olabilir.
+        // In re-imports from an array source the value may already be an instance.
         if ($raw instanceof UnitEnum) {
             return $raw;
         }
@@ -97,14 +99,15 @@ final class EnumParser implements ValueParser
     }
 
     /**
-     * Seçenek kümesinde ETİKETTEN ANAHTARA döner; veritabanına yazılan değer anahtardır.
+     * In an option set it maps FROM THE LABEL TO THE KEY; the value written to the database
+     * is the key.
      *
-     * Sınır: seçenekler kapanışla verilmişse (`Field::options($key, fn ($row) => …)`)
-     * kapanış SATIRI bekler, ama içe aktarma sırasında henüz satır YOKTUR — kapanış
-     * `null` ile çağrılır. Satırdan türeyen seçenek listeleri bu yüzden içe aktarma
-     * tarafında kullanılamaz; kapanış `null` satırla çalışamıyorsa `TypeError` fırlatır
-     * ve bu KASITLI olarak yakalanmaz: yapılandırma hatası, her satırda tekrarlanan
-     * anlamsız bir "listede yok" mesajı olarak değil, kurulum hatası olarak görünmelidir.
+     * A limit: if the options were given as a closure (`Field::options($key, fn ($row) => …)`)
+     * the closure expects a ROW, but during import there is no row YET — the closure is
+     * called with `null`. Option lists derived from the row can therefore not be used on the
+     * import side; if the closure cannot work with a `null` row it throws a `TypeError`, and
+     * that is DELIBERATELY not caught: a configuration mistake has to surface as a setup
+     * error, not as a meaningless "not on the list" message repeated on every row.
      */
     private function parseOption(mixed $raw, Field $field, ParseContext $context): int|string
     {
@@ -118,23 +121,24 @@ final class EnumParser implements ValueParser
         $needle = $this->needle($raw);
 
         if (null !== $needle) {
-            // 1. Çevrilmiş etiket: şablonun açılır listesine yazılan metin.
+            // 1. The translated label: the text written into the template's drop-down list.
             foreach ($options as $key => $label) {
                 if ($needle === $this->fold($context->trans($label))) {
                     return $key;
                 }
             }
 
-            // 2. Ham etiket: çeviri anahtarının kendisi ya da düz metin (katalogda karşılığı
-            //    olmayan bir anahtar `trans()`tan aynen geçer, yine de açıkça denenir).
+            // 2. The raw label: the translation key itself, or plain text (a key with no
+            //    entry in the catalogue passes through `trans()` unchanged, but it is still
+            //    tried explicitly).
             foreach ($options as $key => $label) {
                 if ($needle === $this->fold($label)) {
                     return $key;
                 }
             }
 
-            // 3. Anahtarın kendisi: dosyayı elle dolduranlar çoğu zaman kodu yazar.
-            //    Enum tarafındaki `value` adımının seçenek kümesindeki karşılığıdır.
+            // 3. The key itself: people filling in the file by hand mostly write the code.
+            //    This is the option-set counterpart of the `value` step on the enum side.
             foreach ($options as $key => $label) {
                 if ($needle === $this->fold((string) $key)) {
                     return $key;
@@ -159,14 +163,15 @@ final class EnumParser implements ValueParser
         return array_values($enumClass::cases());
     }
 
-    /** `EnumFormatter` ile AYNI zincir; iki taraf ayrışırsa gidiş-dönüş kapanmaz. */
+    /** The SAME chain as in `EnumFormatter`; if the two sides drift apart the round trip does not close. */
     private function translationKey(UnitEnum $case): string
     {
         if ($case instanceof TranslatableEnum) {
             return $case->translationKey();
         }
 
-        // Mevcut ERP geleneği: her enum kendi `label()` metoduyla anahtarını verir.
+        // The convention of the system this replaces: every enum hands over its key
+        // through its own `label()` method.
         if (method_exists($case, 'label')) {
             return (string) $case->label();
         }
@@ -201,10 +206,10 @@ final class EnumParser implements ValueParser
     }
 
     /**
-     * Aranacak metin; karşılaştırılabilir bir gösterimi olmayan tipler için `null`.
+     * The text to search for; `null` for types that have no comparable representation.
      *
-     * Tam sayı destekli enum'larda hücre SAYI olarak gelir (Excel `3`ü metin yapmaz),
-     * bu yüzden sayısal değerler de metne indirgenip aranır.
+     * In integer-backed enums the cell arrives as a NUMBER (Excel does not turn a `3` into
+     * text), which is why numeric values are reduced to text and looked up as well.
      */
     private function needle(mixed $raw): ?string
     {

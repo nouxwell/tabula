@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Balin\Tabula\Schema;
 
 /**
- * Alan tipleri — TEK sözlük.
+ * Field types — a SINGLE vocabulary.
  *
- * Mevcut ERP'de iki uyuşmayan tip sözlüğü vardı (exporter `integer|float|numeric|string|date|list`,
- * şema tarafı `string|int|float|bool|date`) ve ortak olmayan değerler sessizce metne düşüyordu.
- * Burada tek bir enum hem dışa aktarma, hem içe aktarma, hem şablon üretimi için geçerlidir.
+ * The system this replaces carried two vocabularies that did not agree (the exporter's
+ * `integer|float|numeric|string|date|list` against the schema side's `string|int|float|bool|date`),
+ * and every value the two did not share silently fell back to text. Here one single enum holds
+ * for export, for import and for template generation alike.
  */
 enum FieldType: string
 {
@@ -23,10 +24,10 @@ enum FieldType: string
     case DateTime = 'datetime';
     case Enum = 'enum';
 
-    /** Sabit seçenek kümesi (şablonda açılır liste olur). */
+    /** A fixed set of options (becomes a drop-down list in the template). */
     case Options = 'options';
 
-    /** Sayısal tipler — varsayılan hizalama sağa, Excel'de gerçek sayı olarak yazılır. */
+    /** Numeric types — they align right by default and are written to Excel as real numbers. */
     public function isNumeric(): bool
     {
         return match ($this) {
@@ -35,19 +36,19 @@ enum FieldType: string
         };
     }
 
-    /** Tarih taşıyan tipler. */
+    /** Types that carry a date. */
     public function isTemporal(): bool
     {
         return self::Date === $this || self::DateTime === $this;
     }
 
-    /** Kullanıcıya kapalı bir seçenek kümesinden gelen tipler (şablonda doğrulama listesi alır). */
+    /** Types that come from a set of options closed to the user (they get a validation list in the template). */
     public function isEnumerable(): bool
     {
         return self::Enum === $this || self::Options === $this || self::Bool === $this;
     }
 
-    /** Bu tip için varsayılan hizalama. */
+    /** The default alignment for this type. */
     public function defaultAlign(): Align
     {
         return match (true) {

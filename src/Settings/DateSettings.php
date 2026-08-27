@@ -6,7 +6,7 @@ namespace Balin\Tabula\Settings;
 
 use Balin\Tabula\Schema\FieldType;
 
-/** Tarih biçimlendirme ayarları. Alan kendi `pattern()` değerini verirse o kazanır. */
+/** Date formatting settings. If the field supplies its own `pattern()` value, that one wins. */
 final readonly class DateSettings
 {
     public function __construct(

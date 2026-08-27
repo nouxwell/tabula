@@ -6,7 +6,7 @@ namespace Balin\Tabula\Tests\Fixture;
 
 use RuntimeException;
 
-/** Test başına yalıtılmış, kendini toplayan geçici klasör. */
+/** A per-test isolated, self-cleaning temporary directory. */
 final class TempDirectory
 {
     private function __construct(
@@ -19,7 +19,7 @@ final class TempDirectory
         $path = sys_get_temp_dir().'/tabula-test-'.bin2hex(random_bytes(6));
 
         if (!mkdir($path, 0o777, true) && !is_dir($path)) {
-            throw new RuntimeException(sprintf('Geçici klasör oluşturulamadı: %s', $path));
+            throw new RuntimeException(sprintf('The temporary directory could not be created: %s', $path));
         }
 
         return new self($path);

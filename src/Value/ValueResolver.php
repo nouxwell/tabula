@@ -9,16 +9,17 @@ use Balin\Tabula\Schema\Field;
 use Closure;
 
 /**
- * Bir satırdan alanın ham değerini okur.
+ * Reads a field's raw value out of a row.
  *
- * Desteklenen kaynak biçimleri (`Field::from()`):
- *  - Kapanış:      fn(mixed $row): mixed
- *  - Düz anahtar:  `code`            → dizi anahtarı, nesne özelliği ya da getCode()
- *  - Nokta yolu:   `address.city`    → iç içe dizi/nesne
- *  - DQL takma adı: `c.code`         → önce düz anahtar olarak denenir (projeksiyonlarda
- *                                      Doctrine `c.code` yerine `code` döndürür), bulunamazsa yol olarak
+ * Supported source shapes (`Field::from()`):
+ *  - Closure:      fn(mixed $row): mixed
+ *  - Plain key:    `code`            → array key, object property or getCode()
+ *  - Dotted path:  `address.city`    → nested array/object
+ *  - DQL alias:    `c.code`          → tried as a plain key first (in projections Doctrine
+ *                                      returns `code` instead of `c.code`), then as a path
  *
- * Yol boyunca `null` görülürse `null` döner — eksik ilişki hata değildir, boş hücredir.
+ * If a `null` turns up along the path, `null` is returned — a missing relation is not an
+ * error, it is an empty cell.
  */
 final class ValueResolver
 {
@@ -30,7 +31,7 @@ final class ValueResolver
             return $source($row);
         }
 
-        // Doğrudan eşleşme: en sık durum, yol yürümeden bitir.
+        // Direct hit: the most common case, done without walking a path.
         $direct = $this->readSegment($row, $source);
         if (null !== $direct) {
             return $direct;
@@ -40,7 +41,7 @@ final class ValueResolver
             return null;
         }
 
-        // Nokta yolu ya da DQL takma adı.
+        // A dotted path or a DQL alias.
         $node = $row;
         foreach (explode('.', $source) as $segment) {
             if (null === $node) {

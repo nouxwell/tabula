@@ -5,19 +5,20 @@ declare(strict_types=1);
 namespace Balin\Tabula\Import;
 
 /**
- * Tek bir hücrenin ya da satırın neden kabul edilmediği.
+ * Why a single cell, or a whole row, was not accepted.
  *
- * SATIR NUMARASI BİRİNCİ SINIF ALANDIR. Mevcut ERP'de satır numarası ancak çeviri
- * metnine `%row%` yer tutucusu gömülmüşse hayatta kalıyordu; alan bazlı hatalarda
- * çoğunlukla kayboluyor ve kullanıcı "bir yerlerde hata var" mesajıyla baş başa kalıyordu.
+ * THE ROW NUMBER IS A FIRST-CLASS FIELD. In the system this replaces the row number only
+ * survived if a `%row%` placeholder had been embedded in the translation text; on field-level
+ * errors it was usually lost and the user was left alone with a "something is wrong somewhere"
+ * message.
  */
 final readonly class RowError
 {
     /**
-     * @param int         $row     Kullanıcının Excel'de GÖRDÜĞÜ satır numarası (1 tabanlı)
-     * @param string|null $field   Alan anahtarı; null ise hata satırın tamamına ait
-     * @param string      $message Kullanıcıya gösterilecek, yerelleştirilmiş mesaj
-     * @param string|null $value   Reddedilen ham değer — "neden" sorusunu cevaplar
+     * @param int         $row     the row number the user SEES in Excel (1-based)
+     * @param string|null $field   field key; null means the error belongs to the whole row
+     * @param string      $message the localised message to show the user
+     * @param string|null $value   the rejected raw value — it answers the "why" question
      */
     public function __construct(
         public int $row,

@@ -5,16 +5,17 @@ declare(strict_types=1);
 namespace Balin\Tabula\Port;
 
 /**
- * Çerçevesiz varsayılan çeviri uygulaması — kütüphanenin tek başına çalışabilmesi için.
+ * The default, framework-free translator implementation — so the library can stand on its own.
  *
- * Katalog: `['tr' => ['export.customer.code' => 'Kod']]`. Noktalı anahtarlar hem düz hem
- * iç içe dizi olarak aranır, böylece YAML'dan gelen iç içe yapı da doğrudan verilebilir.
- * Anahtar bulunamazsa anahtarın kendisi döner — çıktı hiçbir zaman boş kalmaz.
+ * Catalogue: `['tr' => ['export.customer.code' => 'Kod']]`. Dotted keys are looked up both as
+ * flat keys and as nested arrays, so a nested structure coming straight out of YAML can be
+ * handed over as it is. When a key is not found, the key itself is returned — the output is
+ * never left blank.
  */
 final class ArrayTranslator implements Translator
 {
     /**
-     * @param array<string, array<string, mixed>> $catalogues locale => anahtar/metin haritası
+     * @param array<string, array<string, mixed>> $catalogues locale => key/text map
      */
     public function __construct(
         private readonly array $catalogues = [],
@@ -48,12 +49,12 @@ final class ArrayTranslator implements Translator
             return null;
         }
 
-        // Düz anahtar: ['export.customer.code' => 'Kod']
+        // Flat key: ['export.customer.code' => 'Kod']
         if (isset($catalogue[$key]) && is_string($catalogue[$key])) {
             return $catalogue[$key];
         }
 
-        // İç içe anahtar: ['export' => ['customer' => ['code' => 'Kod']]]
+        // Nested key: ['export' => ['customer' => ['code' => 'Kod']]]
         $node = $catalogue;
         foreach (explode('.', $key) as $segment) {
             if (!is_array($node) || !array_key_exists($segment, $node)) {

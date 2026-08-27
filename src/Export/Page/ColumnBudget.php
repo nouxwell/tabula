@@ -9,19 +9,19 @@ use Balin\Tabula\Export\Column;
 use Balin\Tabula\Schema\Priority;
 
 /**
- * Kaç kolonun sayfaya sığdığını HESAPLAR ve sığmayanları ne yapacağına karar verir.
+ * CALCULATES how many columns fit on the page and decides what to do with the ones that do not.
  *
- * Bir PDF'in fiziksel genişliği vardır, dolayısıyla kolon sayısı bir tercih değil,
- * hesaplanabilir bir bütçedir:
+ * A PDF has a physical width, so the number of columns is not a matter of preference but a
+ * computable budget:
  *
- *     bütçe = floor( (sayfa eni − sol/sağ boşluk) ÷ asgari kolon genişliği )
+ *     budget = floor( (page width − left/right margins) ÷ minimum column width )
  *
- * A4 yatayda 297 − 2×10 = 277 mm; 22 mm asgari genişlikle 12 kolon. Aynı şemayı A3 yataya
- * taşımak bütçeyi 18'e çıkarır — sayfa boyutunu değiştirmek kolon sayısını KENDİLİĞİNDEN
- * büyütür, elle ayar gerekmez.
+ * A4 landscape is 297 − 2×10 = 277 mm; with a 22 mm minimum width that makes 12 columns. Moving
+ * the same schema onto A3 landscape raises the budget to 18 — changing the page size grows the
+ * column count BY ITSELF, with no manual tuning.
  *
- * Bölme işi bilinçli olarak RENDER'DAN AYRILDI: `split()` saf bir fonksiyondur, Dompdf'e
- * ihtiyaç duymaz ve tek başına test edilebilir. Yazıcı yalnızca dönen grupları basar.
+ * Splitting was deliberately SEPARATED FROM RENDERING: `split()` is a pure function, it does not
+ * need Dompdf and can be tested on its own. The writer merely prints the groups it returns.
  */
 final readonly class ColumnBudget
 {
@@ -34,19 +34,19 @@ final readonly class ColumnBudget
     ) {
     }
 
-    /** Varsayılan: 22 mm asgari kolon, sert tavan yok, taşmada sayfa takımına böl. */
+    /** Default: 22 mm minimum column, no hard ceiling, split into page sets on overflow. */
     public static function fit(): self
     {
         return new self(22.0, null, [], Overflow::NextPageSet);
     }
 
-    /** Hiç bölme, hepsini sığdırmaya çalış. */
+    /** Never split, try to fit them all. */
     public static function unlimited(): self
     {
         return new self(22.0, null, [], Overflow::Shrink);
     }
 
-    /** Okunabilirlik tabanı: bir kolon bundan dar basılmaz. */
+    /** The readability floor: no column is printed narrower than this. */
     public function minWidth(float $mm): self
     {
         if ($mm <= 0) {
@@ -56,7 +56,7 @@ final readonly class ColumnBudget
         return new self($mm, $this->maxColumns, $this->anchorKeys, $this->overflow);
     }
 
-    /** Genişlik elverse bile bu sayıdan fazla kolon basma. */
+    /** Never print more columns than this, even if the width would allow it. */
     public function max(?int $columns): self
     {
         if (null !== $columns && $columns < 1) {
@@ -67,11 +67,11 @@ final readonly class ColumnBudget
     }
 
     /**
-     * Her grupta tekrarlanacak kolonlar (ör. kod ve ünvan).
+     * The columns repeated in every group (e.g. code and title).
      *
-     * İkinci gruba bakan okuyucu hangi satırda olduğunu ancak bunlarla bilir.
-     * Dışa aktarımda YER ALMAYAN bir anahtar sessizce yok sayılır: kullanıcı o kolonu
-     * seçmemişse çapa yapılacak bir şey yoktur, bu bir hata değil.
+     * They are the only way a reader looking at the second group can tell which row they are on.
+     * A key that is NOT PART OF the export is silently ignored: if the user did not select that
+     * column there is nothing to anchor, and that is not an error.
      */
     public function anchor(string ...$keys): self
     {
@@ -83,9 +83,9 @@ final readonly class ColumnBudget
         return new self($this->minWidthMm, $this->maxColumns, $this->anchorKeys, $overflow);
     }
 
-    // ---------------------------------------------------------------- hesap
+    // ---------------------------------------------------------------- arithmetic
 
-    /** Sayfaya sığan kolon sayısı. */
+    /** How many columns fit on the page. */
     public function capacity(Page $page): int
     {
         $usable = $page->usableWidthMm();
@@ -99,14 +99,14 @@ final readonly class ColumnBudget
     }
 
     /**
-     * Kolonları sayfaya sığacak gruplara böler.
+     * Splits the columns into groups that fit on the page.
      *
-     * Dönen her grup bir "sayfa takımı"dır: tüm satırlar önce 1. grubun kolonlarıyla basılır,
-     * sonra 2. grubun kolonlarıyla baştan basılır.
+     * Every returned group is one "page set": all rows are printed first with the columns of
+     * group 1, then printed again from the start with the columns of group 2.
      *
      * @param list<Column> $columns
      *
-     * @return list<list<Column>> en az bir grup
+     * @return list<list<Column>> at least one group
      */
     public function split(array $columns, Page $page): array
     {
@@ -114,7 +114,7 @@ final readonly class ColumnBudget
             return [];
         }
 
-        // Shrink hiç hesap yapmaz: sığdırma işi tamamen render'a bırakılır.
+        // Shrink does no arithmetic at all: fitting is left entirely to the renderer.
         if (Overflow::Shrink === $this->overflow) {
             return [$columns];
         }
@@ -131,7 +131,7 @@ final readonly class ColumnBudget
     }
 
     /**
-     * Önceliğe göre ele; kalanların ÖZGÜN SIRASI korunur.
+     * Drops columns by priority; the ORIGINAL ORDER of the survivors is preserved.
      *
      * @param list<Column> $columns
      *
@@ -139,11 +139,11 @@ final readonly class ColumnBudget
      */
     private function dropByPriority(array $columns, int $capacity): array
     {
-        // `Always` ASLA düşmez — bu hem `Overflow::Drop`un hem `Priority`nin yazılı sözü.
-        // Zorunlu kolonlar tek başına bütçeyi aşıyorsa sözü tutmanın yolu YOK: kesip
-        // sessizce eksik bir belge basmaktansa duruyoruz. Çıktıda olması ŞART denen bir
-        // kolonun kimseye haber verilmeden kaybolması, bu kütüphanenin ortadan kaldırmak
-        // için var olduğu hata sınıfının ta kendisi.
+        // `Always` NEVER drops — that is the written promise of both `Overflow::Drop` and
+        // `Priority`. If the mandatory columns alone exceed the budget there is NO WAY to keep
+        // that promise: rather than cutting them off and silently printing an incomplete
+        // document, we stop. A column declared MANDATORY in the output disappearing without
+        // anyone being told is the very class of bug this library exists to eliminate.
         $mandatory = 0;
         foreach ($columns as $column) {
             if (Priority::Always === $column->priority) {
@@ -160,8 +160,8 @@ final readonly class ColumnBudget
             $indexed[] = ['index' => $index, 'column' => $column];
         }
 
-        // Önce Always, sonra Normal, en son Optional. Eşit öncelikte özgün sıra korunur
-        // (usort kararlı olmasa da `index` karşılaştırması bunu garantiler).
+        // Always first, then Normal, Optional last. At equal priority the original order is
+        // preserved (usort may not be stable, but comparing `index` guarantees it).
         usort($indexed, static function (array $a, array $b): int {
             $byPriority = $a['column']->priority->weight() <=> $b['column']->priority->weight();
 
@@ -170,14 +170,14 @@ final readonly class ColumnBudget
 
         $kept = array_slice($indexed, 0, $capacity);
 
-        // Elemeden sonra kolonları tekrar okunabilir sıraya sok.
+        // After the elimination, put the columns back into readable order.
         usort($kept, static fn (array $a, array $b): int => $a['index'] <=> $b['index']);
 
         return array_map(static fn (array $entry): Column => $entry['column'], $kept);
     }
 
     /**
-     * Çapa kolonlar her grupta tekrarlanacak şekilde gruplara böler.
+     * Splits into groups such that the anchor columns are repeated in every group.
      *
      * @param list<Column> $columns
      *
@@ -203,10 +203,10 @@ final readonly class ColumnBudget
             throw ExportException::anchorsFillTheBudget(count($anchors), $capacity);
         }
 
-        // `$rest` burada asla boş olamaz: buraya yalnız `count($columns) > $capacity` iken
-        // gelinir, dolayısıyla tüm kolonlar çapa olsaydı `$slots` negatif çıkar ve yukarıdaki
-        // guard çoktan fırlatmış olurdu. Bu yüzden boş-grup yedeği YOK — olmayan bir durumu
-        // anlatan ölü kod, okuyanı yanıltmaktan başka işe yaramaz.
+        // `$rest` can never be empty here: we only get here while `count($columns) > $capacity`,
+        // so if every column were an anchor `$slots` would come out negative and the guard above
+        // would already have thrown. That is why there is NO empty-group fallback — dead code
+        // describing a situation that cannot happen is good for nothing but misleading the reader.
         $groups = [];
 
         foreach (array_chunk($rest, $slots) as $chunk) {

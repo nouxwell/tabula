@@ -15,13 +15,14 @@ use Stringable;
 use UnitEnum;
 
 /**
- * Metin alanları.
+ * Text fields.
  *
- * "Sadece dizeye çevir" gibi görünür ama mevcut ERP'de kırılan yer tam burasıydı:
- * Doctrine'in `enumType` tanımlı kolonları skaler DQL projeksiyonlarında bile ENUM
- * ÖRNEĞİ döndürür; `(string)` cast'ı "Object of class ... could not be converted to
- * string" ile patlıyor, try/catch'li sürümlerde ise hücre sessizce boş kalıyordu.
- * Bu yüzden enum örnekleri burada AÇIKÇA ele alınır (metin alanı olsa bile).
+ * It looks like "just cast it to a string", but this is exactly where the system this
+ * replaces used to break: Doctrine columns declared with `enumType` return an ENUM
+ * INSTANCE even in scalar DQL projections; the `(string)` cast blew up with "Object of class
+ * ... could not be converted to string", and in the try/catch-wrapped variants the cell was
+ * silently left empty. That is why enum instances are handled EXPLICITLY here (even for a
+ * text field).
  */
 final class StringFormatter implements ValueFormatter
 {
@@ -34,7 +35,7 @@ final class StringFormatter implements ValueFormatter
     {
         $align = $field->getAlign();
 
-        // Alan kendi biçimlendiricisini verdiyse tartışma yok: o kazanır.
+        // If the field brought its own formatter there is nothing to argue about: it wins.
         $formatter = $field->getFormatter();
         if (null !== $formatter) {
             return Cell::text((string) $formatter($raw, $row), $align);
@@ -53,7 +54,7 @@ final class StringFormatter implements ValueFormatter
             return $raw;
         }
 
-        // Doctrine enumType kolonları: skaler select'ten dize değil, enum örneği gelir.
+        // Doctrine enumType columns: a scalar select yields an enum instance, not a string.
         if ($raw instanceof BackedEnum) {
             return (string) $raw->value;
         }
@@ -63,8 +64,9 @@ final class StringFormatter implements ValueFormatter
         }
 
         if (is_bool($raw)) {
-            // `(string) false` boş dize üretir; metin kolonunda bu, veriyi sessizce
-            // yutmak demektir (eski dışa aktarmanın klasik "boş hücre" şikâyeti).
+            // `(string) false` produces an empty string; in a text column that means
+            // silently swallowing data (the classic "empty cell" complaint about the
+            // legacy export).
             $settings = $context->settings;
 
             return $context->trans($raw ? $settings->boolTrueKey : $settings->boolFalseKey);
@@ -75,7 +77,7 @@ final class StringFormatter implements ValueFormatter
         }
 
         if (is_array($raw)) {
-            // Türkçe karakterler ve yollar okunur kalsın: ç / \/ kaçışları yok.
+            // Keep Turkish characters and paths readable: no `ç` or `\/` escaping.
             $json = json_encode($raw, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
 
             return false === $json ? '' : $json;
@@ -85,16 +87,18 @@ final class StringFormatter implements ValueFormatter
             return (string) $raw;
         }
 
-        // Metin alanına düşen bir tarih şema hatasıdır ama değer kurtarılabilir; nötr bir
-        // ISO benzeri gösterimle yazılır (desen tahmin etmek bu sınıfın işi değil).
+        // A date landing in a text field is a schema mistake, but the value can still be
+        // salvaged; it is written in a neutral ISO-like form (guessing a pattern is not this
+        // class's job).
         if ($raw instanceof DateTimeInterface) {
             return $raw->format('Y-m-d H:i:s');
         }
 
-        // Buraya düşen değer için sessiz bir varsayım üretmiyoruz — ama İSTİSNA DA ATMIYORUZ:
-        // 40.000 satırlık bir rapor tek bir bozuk hücre yüzünden ölmemeli. Diğer tüm
-        // biçimlendiriciler (Number/Date/Enum) aynı kuralı izliyor; bu sınıf tek istisnaydı.
-        // Şema hatası boş hücre olarak görünür, çöken bir dışa aktarma olarak değil.
+        // For a value that lands here we produce no silent assumption — but we DO NOT THROW
+        // EITHER: a 40,000-row report must not die because of a single broken cell. Every
+        // other formatter (Number/Date/Enum) follows the same rule; this class used to be
+        // the one exception. A schema mistake shows up as an empty cell, not as a crashed
+        // export.
         return '';
     }
 }

@@ -23,10 +23,10 @@ use Balin\Tabula\Value\ValueResolver;
 use Closure;
 
 /**
- * Tek bir dışa aktarmanın akıcı kurulumu ve çalıştırılması.
+ * Fluent set-up and execution of a single export.
  *
- * Kurulum değiştirilemezdir: her ayar yeni bir kopya döndürür, böylece aynı temel
- * yapılandırmadan birden çok çıktı türetilebilir:
+ * The set-up is immutable: every setting returns a new copy, so several outputs can be
+ * derived from the same base configuration:
  *
  *     $base = $tabula->export($schema)->from($source)->locale('tr');
  *     $base->to(Format::Xlsx)->write('a.xlsx');
@@ -36,7 +36,7 @@ final class ExportBuilder
 {
     private ?\Balin\Tabula\Source\DataSource $source = null;
 
-    /** @var list<string>|null null = şemadaki tüm alanlar */
+    /** @var list<string>|null null = every field in the schema */
     private ?array $keys = null;
 
     private ?string $locale = null;
@@ -61,7 +61,7 @@ final class ExportBuilder
     ) {
     }
 
-    // ---------------------------------------------------------------- kurulum
+    // ---------------------------------------------------------------- set-up
 
     public function from(\Balin\Tabula\Source\DataSource $source): self
     {
@@ -71,11 +71,11 @@ final class ExportBuilder
     }
 
     /**
-     * Yalnızca bu alanları, VERİLEN SIRAYLA yaz.
+     * Write these fields only, IN THE GIVEN ORDER.
      *
-     * İstemci artık etiket göndermez — yalnız anahtar gönderir; bilinmeyen anahtar sessizce
-     * yutulmaz, hata olur. (Eskiden kolon listesi tarayıcıdan `{value,label}` olarak geliyor
-     * ve hiç doğrulanmıyordu.)
+     * The client no longer sends labels — it sends keys only; an unknown key is not swallowed
+     * silently, it is an error. (Previously the column list arrived from the browser as
+     * `{value,label}` and was never validated at all.)
      *
      * @param list<string> $keys
      */
@@ -108,13 +108,13 @@ final class ExportBuilder
     }
 
     /**
-     * Kâğıt geometrisi: boyut, yön, kenar boşlukları.
+     * Paper geometry: size, orientation, margins.
      *
      *     ->page(Page::a3()->landscape()->margins(8))
      *
-     * Yalnız kâğıda basan biçimler için anlamlıdır. Xlsx/CSV'de verilirse dışa aktarma
-     * BAŞLAMAZ: sessizce yok saymak, bu fazın ortadan kaldırmak için var olduğu hatanın
-     * aynısı olurdu (bkz. `write()` içindeki `applyPage()`).
+     * Only meaningful for formats that print onto paper. If it is given for Xlsx/CSV the export
+     * DOES NOT START: ignoring it silently would be exactly the same bug this phase exists to
+     * eliminate (see `applyPage()` inside `write()`).
      */
     public function page(Page $page): self
     {
@@ -124,12 +124,12 @@ final class ExportBuilder
     }
 
     /**
-     * Kolonların sayfaya nasıl sığdırılacağı; taşma stratejisi de burada.
+     * How the columns are fitted onto the page; the overflow strategy lives here too.
      *
      *     ->columns(ColumnBudget::fit()->minWidth(25)->anchor('code', 'name'))
      *
-     * Metodun adı `budget()` değil `columns()`: çağrı yerinde okunan cümle "bu dışa
-     * aktarmanın KOLONLARI şöyle davransın" olmalı, kullanılan sınıfın adı değil.
+     * The method is named `columns()`, not `budget()`: the sentence read at the call site should
+     * be "let the COLUMNS of this export behave like this", not the name of the class being used.
      */
     public function columns(ColumnBudget $budget): self
     {
@@ -138,7 +138,7 @@ final class ExportBuilder
         });
     }
 
-    /** Yerleşik yazıcı yerine kendi yazıcını kullan. */
+    /** Use your own writer instead of the built-in one. */
     public function writer(Writer $writer): self
     {
         return $this->with(static function (self $b) use ($writer): void {
@@ -146,7 +146,7 @@ final class ExportBuilder
         });
     }
 
-    // ---------------------------------------------------------------- çalıştırma
+    // ---------------------------------------------------------------- execution
 
     public function write(string $path): ExportResult
     {
@@ -166,19 +166,20 @@ final class ExportBuilder
             $fields,
         );
 
-        // Biçim elemesi tüm alanları düşürmüş olabilir; kolonsuz bir dosya yazmak sessiz veri
-        // kaybıdır (başlıksız/boş bir çıktı "sonuç yok" gibi okunur). Erken ve yüksek sesle dur.
+        // The format filter may have dropped every field; writing a file with no columns is
+        // silent data loss (a header-less/empty output reads as "no results"). Stop early and
+        // loudly.
         if ([] === $columns) {
             throw ExportException::noColumns($schema->getName(), $this->format);
         }
 
         $defaultSheetName = $this->defaultSheetName($context);
-        // Varsayılan strateji taşma korumalıdır: Excel'in satır tavanı aşıldığında sessizce
-        // bozuk dosya üretmek yerine yeni sayfaya geçilir.
+        // The default strategy is overflow-safe: when Excel's row ceiling is exceeded it moves on
+        // to a new sheet instead of silently producing a corrupt file.
         $strategy = $this->sheets ?? new SingleSheet($defaultSheetName, $this->settings->maxRowsPerSheet);
-        // Yazıcı fabrikadan gelir, burada `new`lenmez: ayraç/BOM gibi ayarlar uygulamanın
-        // yapılandırmasından beslenebilsin diye (aksi hâlde makineye giden her besleme
-        // çağrı yerinde elle `->writer(new CsvWriter(...))` yazmak zorunda kalıyordu).
+        // The writer comes from the factory, it is not `new`ed here: so that settings such as the
+        // delimiter or the BOM can be fed from the application's configuration (otherwise every
+        // machine-bound feed had to write `->writer(new CsvWriter(...))` by hand at the call site).
         $writer = $this->applyPage($this->writer ?? $this->writers->for($this->format));
 
         $this->ensureTargetIsWritable($path);
@@ -190,8 +191,8 @@ final class ExportBuilder
 
         $writer->open($path);
 
-        // `finally`: satırın ortasında patlayan bir kaynak dosya tanıtıcısını açık bırakmamalı.
-        // Her iki yazıcının `close()` metodu da tekrar çağrılabilir olacak şekilde yazılmıştır.
+        // `finally`: a source that blows up in the middle of a row must not leave the file handle
+        // open. The `close()` method of both writers is written so that it can be called again.
         try {
             foreach ($source->rows() as $row) {
                 $sheetName = $strategy->sheetFor($rowIndex, $row, $context);
@@ -210,12 +211,12 @@ final class ExportBuilder
                 ++$rowIndex;
             }
 
-            // Hiç satır yoksa bile başlıklı boş bir sayfa üret: kullanıcı boş bir dosya değil,
-            // "sonuç yok" diyen bir tablo görmeli.
+            // Even when there is not a single row, produce an empty sheet with headers: the user
+            // should see a table that says "no results", not an empty file.
             //
-            // Sayfa adını stratejiye SORMUYORUZ: ortada satır olmadığı için uydurma bir `null`
-            // satır geçirmek gerekirdi ve `GroupedSheets`in kullanıcı kapanışı `fn (array $row)`
-            // olarak yazıldığında bu doğrudan TypeError'a dönerdi.
+            // We do NOT ASK the strategy for the sheet name: since there is no row, we would have
+            // to pass a made-up `null` row, and when `GroupedSheets`'s user closure is written as
+            // `fn (array $row)` that would turn straight into a TypeError.
             if (null === $currentSheet) {
                 $writer->startSheet($defaultSheetName, $columns);
                 ++$sheetCount;
@@ -235,20 +236,22 @@ final class ExportBuilder
         );
     }
 
-    // ---------------------------------------------------------------- iç
+    // ---------------------------------------------------------------- internals
 
     /**
-     * Sayfa ayarını yazıcıya iter — ya da yazıcı kâğıt tanımıyorsa DIŞA AKTARMAYI DURDURUR.
+     * Pushes the page setting to the writer — or STOPS THE EXPORT if the writer knows nothing
+     * about paper.
      *
-     * ★ Buradaki `throw` bu fazın özüdür. `PageAware` olmayan bir yazıcıya sessizce
-     * dokunmamak "ayar uygulanmadı" demektir ve kullanıcı bunu ancak çıktıyı ölçerek
-     * anlayabilir — mevcut ERP'nin dekoratif `setPaper()` çağrısının yaptığı tam olarak
-     * buydu. Ayar ya uygulanır ya da gürültü çıkarır; üçüncü seçenek yok.
+     * ★ The `throw` here is the essence of this phase. Silently not touching a writer that is not
+     * `PageAware` means "the setting was never applied", and the user can only find that out by
+     * measuring the output — which is exactly what the decorative `setPaper()` call of the system
+     * this replaces used to do. Either the setting is applied or it makes noise; there is no third
+     * option.
      *
-     * Kontrol, yazıcının fabrikadan mı yoksa `->writer()` ile elle mi geldiğine BAKMAZ:
-     * elle verilen bir `CsvWriter`ın sayfa ayarını yutması, fabrikadan gelenin yutmasından
-     * daha az zararlı değil. `withPage()` zaten yerinde değiştirmez, kopya döndürür — yani
-     * paylaşılan bir yazıcı örneğine A3 bulaşmaz (bkz. `PageAware`).
+     * The check DOES NOT CARE whether the writer came from the factory or was handed over by hand
+     * through `->writer()`: a hand-supplied `CsvWriter` swallowing the page setting is no less
+     * harmful than the factory-built one doing it. `withPage()` never mutates in place anyway, it
+     * returns a copy — so A3 does not bleed into a shared writer instance (see `PageAware`).
      */
     private function applyPage(Writer $writer): Writer
     {
@@ -260,8 +263,8 @@ final class ExportBuilder
             throw ExportException::pageSettingsUnsupported($this->format);
         }
 
-        // null geçilen argüman "elindekini koru" demektir; yalnız sayfayı değiştirip
-        // bütçeye dokunmamak (ya da tersi) böyle mümkün olur.
+        // A null argument means "keep what you have"; that is what makes it possible to change
+        // only the page without touching the budget (or the other way round).
         return $writer->withPage($this->page, $this->budget);
     }
 
@@ -284,7 +287,8 @@ final class ExportBuilder
 
     private function resolveSchema(): Schema
     {
-        // Sıra önemli: önce kullanıcı seçimi (tam şemaya karşı doğrulanır), sonra biçim elemesi.
+        // The order matters: the user's selection first (validated against the full schema), then
+        // the format filter.
         $schema = null === $this->keys ? $this->schema : $this->schema->only($this->keys);
 
         return $schema->forFormat($this->format);
@@ -306,11 +310,11 @@ final class ExportBuilder
         $directory = \dirname($path);
 
         if (!is_dir($directory)) {
-            throw ExportException::unwritableTarget($path, sprintf('"%s" klasörü yok.', $directory));
+            throw ExportException::unwritableTarget($path, sprintf('the "%s" folder does not exist.', $directory));
         }
 
         if (!is_writable($directory)) {
-            throw ExportException::unwritableTarget($path, sprintf('"%s" klasörüne yazma izni yok.', $directory));
+            throw ExportException::unwritableTarget($path, sprintf('no write permission for the "%s" folder.', $directory));
         }
     }
 

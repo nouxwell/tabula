@@ -7,15 +7,16 @@ namespace Balin\Tabula\Export\Page;
 use Balin\Tabula\Exception\ExportException;
 
 /**
- * PDF sayfasının geometrisi — TEK doğruluk kaynağı.
+ * The geometry of a PDF page — the SINGLE source of truth.
  *
- * Mevcut ERP'nin en sinsi hatası buradaydı: sayfa boyutu hem PHP'de (`Dompdf::setPaper()`)
- * hem şablonun `@page` CSS kuralında tanımlıydı ve Dompdf render anında CSS'i uyguladığı için
- * SESSİZCE CSS kazanıyordu. `setPaper()` çağrısı fiilen dekoratifti; journal şablonu A5 yatay
- * derken aynı yolun PHP'si A4 yatay diyordu ve kimse farkı görmüyordu.
+ * The most insidious bug of the system this replaces lived right here: the page size was defined
+ * both in PHP (`Dompdf::setPaper()`) and in the template's `@page` CSS rule, and because Dompdf
+ * applies the CSS at render time, the CSS SILENTLY won. The `setPaper()` call was effectively
+ * decorative; the journal template said A5 landscape while the PHP on the very same path said A4
+ * landscape, and nobody ever saw the difference.
  *
- * Bu yüzden burada `@page` kuralını KÜTÜPHANE üretir (`cssPageRule()`); şablona elle
- * `@page` yazılmaz. İki kaynak varsa biri mutlaka yalan söyler.
+ * That is why the `@page` rule is produced by the LIBRARY here (`cssPageRule()`); `@page` is never
+ * written into the template by hand. Where there are two sources, one of them is bound to lie.
  */
 final readonly class Page
 {
@@ -56,12 +57,13 @@ final readonly class Page
     }
 
     /**
-     * Ölçüler DİKEY yönde verilir; `landscape()` sonradan çevirir.
+     * The dimensions are given in PORTRAIT orientation; `landscape()` flips them afterwards.
      *
-     * Taban sınır 1 mm'dir, sıfırdan büyük olması değil: `cssPageRule()` ölçüyü iki ondalıkla
-     * yazdığı için 0.004 mm gibi bir değer doğrulamayı geçip kurala `0mm` olarak düşerdi ve
-     * Dompdf sessizce KENDİ varsayılan kâğıdına dönerdi. Bir milimetreden küçük sayfa zaten
-     * anlamsız; en küçük gerçek kullanım (etiket) bile 25 mm civarındadır.
+     * The floor is 1 mm rather than merely "greater than zero": because `cssPageRule()` prints the
+     * measurement with two decimals, a value such as 0.004 mm would pass validation and land in the
+     * rule as `0mm`, and Dompdf would silently fall back to ITS OWN default paper. A page smaller
+     * than a millimetre is meaningless anyway; even the smallest real-world use (a label) is around
+     * 25 mm.
      */
     public static function custom(float $widthMm, float $heightMm): self
     {
@@ -72,7 +74,7 @@ final readonly class Page
         return new self($widthMm, $heightMm, Orientation::Portrait, 10.0, 10.0, 10.0, 10.0);
     }
 
-    // ---------------------------------------------------------------- akıcı ayarlar
+    // ---------------------------------------------------------------- fluent settings
 
     public function landscape(): self
     {
@@ -84,7 +86,7 @@ final readonly class Page
         return $this->withOrientation(Orientation::Portrait);
     }
 
-    /** Dört kenara aynı boşluk. */
+    /** The same margin on all four sides. */
     public function margins(float $mm): self
     {
         return $this->marginsOf($mm, $mm, $mm, $mm);
@@ -109,9 +111,9 @@ final readonly class Page
         );
     }
 
-    // ---------------------------------------------------------------- ölçüler
+    // ---------------------------------------------------------------- dimensions
 
-    /** Yön uygulanmış genişlik. */
+    /** The width with the orientation applied. */
     public function widthMm(): float
     {
         return Orientation::Landscape === $this->orientation
@@ -119,7 +121,7 @@ final readonly class Page
             : $this->portraitWidthMm;
     }
 
-    /** Yön uygulanmış yükseklik. */
+    /** The height with the orientation applied. */
     public function heightMm(): float
     {
         return Orientation::Landscape === $this->orientation
@@ -127,16 +129,16 @@ final readonly class Page
             : $this->portraitHeightMm;
     }
 
-    /** Kolonların paylaşacağı gerçek genişlik: sayfa eni eksi sol/sağ boşluk. */
+    /** The real width the columns get to share: page width minus the left/right margins. */
     public function usableWidthMm(): float
     {
         return $this->widthMm() - $this->marginLeftMm - $this->marginRightMm;
     }
 
     /**
-     * Şablona gömülecek `@page` kuralı.
+     * The `@page` rule to be embedded into the template.
      *
-     * Kural buradan üretilir ki PHP ile CSS'in çelişmesi MÜMKÜN olmasın.
+     * The rule is produced here so that PHP and the CSS CANNOT contradict each other.
      */
     public function cssPageRule(): string
     {
@@ -164,7 +166,7 @@ final readonly class Page
         );
     }
 
-    /** `210` yazsın, `210.0` değil — CSS'te ikisi de geçerli ama kural okunur kalsın. */
+    /** Print `210`, not `210.0` — both are valid in CSS, but the rule should stay readable. */
     private function trim(float $value): string
     {
         return rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');

@@ -6,34 +6,34 @@ namespace Balin\Tabula\Exception;
 
 use InvalidArgumentException;
 
-/** Veri kaynağı yanlış kurulduğunda fırlatılır. */
+/** Thrown when a data source is set up incorrectly. */
 final class SourceException extends InvalidArgumentException implements TabulaException
 {
     public static function invalidChunkSize(int $size): self
     {
-        return new self(sprintf('Parça boyutu en az 1 olmalı, %d verildi.', $size));
+        return new self(sprintf('The chunk size must be at least 1, %d was given.', $size));
     }
 
     /**
-     * Ofset tabanlı sayfalama, kararlı bir sıralama olmadan satır ATLAR ve TEKRARLAR.
+     * Without a stable ordering, offset-based pagination SKIPS and REPEATS rows.
      *
-     * Veritabanı `ORDER BY` verilmediğinde satır sırasını garanti etmez; `LIMIT/OFFSET`
-     * ile sayfa sayfa okurken aynı satır iki sayfada birden çıkabilir ya da hiç çıkmayabilir.
-     * Dışa aktarmada bu, kimsenin fark etmediği sessiz bir veri bozulmasıdır — o yüzden
-     * yüksek sesle duruyoruz.
+     * A database gives no guarantee about row order when no `ORDER BY` is supplied; while
+     * reading page by page with `LIMIT/OFFSET`, the same row can show up on two pages at once
+     * or never show up at all. In an export this is silent data corruption that nobody
+     * notices — which is why we stop out loud.
      */
     /**
-     * Çağıranın koyduğu `setMaxResults` penceresi parçalı kiple bağdaşmaz.
+     * The `setMaxResults` window put in place by the caller is incompatible with chunked mode.
      *
-     * Parçalı kip her sayfada `setMaxResults($chunkSize)` yazar; çağıranın sınırı sessizce
-     * ezilir ve "en fazla 50 satırlık önizleme" olarak kurulmuş bir sorgu tüm tabloyu dışarı
-     * akıtır. Sessizce ezmektense reddediyoruz.
+     * Chunked mode writes `setMaxResults($chunkSize)` for every page; the caller's limit is
+     * silently overwritten, and a query set up as a "preview of at most 50 rows" streams the
+     * entire table out. Rather than overwrite it silently, we refuse.
      */
     public static function chunkingWithCallerLimit(int $limit): self
     {
         return new self(sprintf(
-            'Sorguda zaten setMaxResults(%d) var; parçalı okuma bunu ezerdi. Ya chunk() kullanmayın '
-            .'(akış kipi çağıranın penceresine saygı duyar) ya da sınırı sorgudan kaldırın.',
+            'The query already has setMaxResults(%d); chunked reading would overwrite it. Either do not use chunk() '
+            .'(streaming mode respects the window set by the caller), or remove the limit from the query.',
             $limit,
         ));
     }
@@ -41,9 +41,9 @@ final class SourceException extends InvalidArgumentException implements TabulaEx
     public static function chunkingWithoutOrder(): self
     {
         return new self(
-            'Parçalı okuma için sorguda ORDER BY şart: sıralama olmadan LIMIT/OFFSET satır atlar '
-            .'ve tekrar eder. Sorguya benzersiz bir alan üzerinden sıralama ekleyin '
-            .'(ör. ->addOrderBy(\'c.id\', \'ASC\')) ya da chunk() kullanmadan akış modunda okuyun.',
+            'Chunked reading requires an ORDER BY in the query: without an ordering, LIMIT/OFFSET skips '
+            .'and repeats rows. Add an ordering on a unique field to the query '
+            .'(e.g. ->addOrderBy(\'c.id\', \'ASC\')), or read in streaming mode without chunk().',
         );
     }
 }

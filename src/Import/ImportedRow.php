@@ -7,17 +7,17 @@ namespace Balin\Tabula\Import;
 use Balin\Tabula\Exception\ImportException;
 
 /**
- * Ayrıştırılmış ve doğrulanmış tek satır — geri çağırıma verilen şey.
+ * A single parsed and validated row — what gets handed to the callback.
  *
- * Değerler ALAN ANAHTARIYLA erişilir ve tipleri şemadaki `FieldType`e uygundur:
- * `quantity` float, `bool` gerçek bool, `enum` enum ÖRNEĞİ, `date` DateTimeImmutable.
- * Yani çağıran taraf dize ayrıştırmakla uğraşmaz.
+ * Values are accessed BY FIELD KEY and their types follow the schema's `FieldType`:
+ * `quantity` is a float, `bool` a real bool, `enum` an enum INSTANCE, `date` a
+ * DateTimeImmutable. In other words, the caller never has to parse strings.
  */
 final readonly class ImportedRow
 {
     /**
-     * @param int                  $row    Kullanıcının Excel'de gördüğü satır numarası
-     * @param array<string, mixed> $values alan anahtarı => ayrıştırılmış değer
+     * @param int                  $row    the row number the user sees in Excel
+     * @param array<string, mixed> $values field key => parsed value
      */
     public function __construct(
         public int $row,
@@ -25,7 +25,7 @@ final readonly class ImportedRow
     ) {
     }
 
-    /** Bilinmeyen anahtar sessizce null dönmez: yazım hatası hemen görünmeli. */
+    /** An unknown key does not silently return null: a typo must become visible at once. */
     public function get(string $key): mixed
     {
         if (!array_key_exists($key, $this->values)) {
@@ -35,7 +35,7 @@ final readonly class ImportedRow
         return $this->values[$key];
     }
 
-    /** Alan dosyada hiç yoksa ya da boşsa varsayılana düş. */
+    /** Fall back to the default if the field is absent from the file, or empty. */
     public function getOr(string $key, mixed $default): mixed
     {
         return $this->values[$key] ?? $default;

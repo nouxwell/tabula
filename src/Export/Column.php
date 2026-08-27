@@ -12,11 +12,11 @@ use Balin\Tabula\Value\FormatContext;
 use Closure;
 
 /**
- * Yazıcıya verilen ÇÖZÜLMÜŞ kolon.
+ * The RESOLVED column handed to the writer.
  *
- * Etiket bu noktada artık bir çeviri anahtarı değil, istenen dildeki metindir;
- * hizalama `Auto` değil, tipten türetilmiş nihai değerdir. Yazıcılar `Field` görmez —
- * yalnız bu düz veriyi görür.
+ * At this point the label is no longer a translation key but the text in the requested
+ * language; the alignment is no longer `Auto` but the final value derived from the type.
+ * Writers never see a `Field` — they only ever see this flat data.
  */
 final readonly class Column
 {
@@ -31,7 +31,7 @@ final readonly class Column
     ) {
     }
 
-    /** Alanın etiketini bağlamdaki dile çözerek kolonu üretir. */
+    /** Builds the column by resolving the field's label into the context's language. */
     public static function fromField(Field $field, FormatContext $context): self
     {
         return new self(
@@ -53,7 +53,8 @@ final readonly class Column
             return (string) $label($context->locale);
         }
 
-        // Etiket verilmemişse anahtarın kendisi başlık olur — çıktı asla başlıksız kalmaz.
+        // When no label was given, the key itself becomes the header — the output is never
+        // left without one.
         return $context->trans($label ?? $field->getKey());
     }
 }

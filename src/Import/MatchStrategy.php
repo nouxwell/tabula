@@ -5,30 +5,31 @@ declare(strict_types=1);
 namespace Balin\Tabula\Import;
 
 /**
- * Dosyadaki kolonların şemadaki alanlarla nasıl eşleştirileceği.
+ * How the columns in the file are matched against the fields in the schema.
  *
- * MEVCUT ERP'NİN ÖLÜMCÜL KUSURU BURADAYDI: eşleştirme ÇEVRİLMİŞ BAŞLIK METNİYLE yapılıyordu,
- * yani "Müşteri Kodu" dizesi dosyanın gerçek kimliğiydi. Sonuçları:
- *  - Çeviri dosyasındaki tek bir kelime değişikliği, kullanıcıların elindeki tüm eski
- *    şablonları sessizce okunamaz hâle getiriyordu.
- *  - İngilizce başlıklı bir dosya Türkçe oturumda hiç eşleşmiyordu.
+ * THE FATAL FLAW OF THE SYSTEM THIS REPLACES LIVED RIGHT HERE: matching was done with the
+ * TRANSLATED HEADER TEXT, meaning the string "Customer Code" was the file's real identity.
+ * The consequences:
+ *  - A single word changed in a translation file silently made every old template users
+ *    already had on disk unreadable.
+ *  - A file with English headers never matched at all in a Turkish session.
  *
- * Tabula'da kimlik ANAHTARDIR. Ürettiğimiz şablonun 1. satırı kanonik anahtarları taşır
- * (Excel'de gizlidir), 2. satır kullanıcının okuduğu çeviridir, veri 3. satırdan başlar.
+ * In Tabula the identity is the KEY. Row 1 of the template we generate carries the canonical
+ * keys (hidden in Excel), row 2 is the translation the user reads, and data starts at row 3.
  */
 enum MatchStrategy: string
 {
     /**
-     * Varsayılan: anahtar satırı VARSA onu kullan, yoksa etikete düş.
+     * The default: use the key row IF there is one, otherwise fall back to the label.
      *
-     * Bizim ürettiğimiz şablonlar kusursuz gidiş-dönüş yapar; kullanıcının elle hazırladığı
-     * ya da başka bir sistemden gelen dosyalar da çalışmaya devam eder.
+     * The templates we generate make a flawless round trip; files a user prepared by hand,
+     * or files coming from another system, keep working as well.
      */
     case Auto = 'auto';
 
-    /** Yalnız anahtar satırıyla eşleş; yoksa hata ver. Makineden makineye akışlar için. */
+    /** Match by the key row only; fail if there is none. For machine-to-machine flows. */
     case Key = 'key';
 
-    /** Yalnız çevrilmiş etiketle eşleş. Eski dosyalarla geriye dönük uyum için. */
+    /** Match by the translated label only. For backward compatibility with legacy files. */
     case Label = 'label';
 }

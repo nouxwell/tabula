@@ -5,18 +5,18 @@ declare(strict_types=1);
 namespace Balin\Tabula\Tests\Fixture;
 
 /**
- * Sahte bir `Doctrine\ORM\Query`'ye giden çağrıların defteri.
+ * The log of the calls that go to a fake `Doctrine\ORM\Query`.
  *
- * Veritabanı olmadan sınanabilen tek şey sorgunun SONUCU değil, sorguya NE İSTENDİĞİDİR:
- * hangi offset/limit penceresi açıldı, hangi hidrasyon kipi istendi. Bu defter olmasa
- * "parça boyutu 10 kaldı mı" gibi sorular yalnızca dolaylı olarak (parçalı kipteyiz mi)
- * yanıtlanabilirdi.
+ * The only thing that can be exercised without a database is not the RESULT of the query but
+ * WHAT WAS ASKED OF IT: which offset/limit window was opened, which hydration mode was
+ * requested. Without this log, questions such as "did the chunk size stay 10?" could only be
+ * answered indirectly (are we in chunked mode?).
  */
 final class QueryCallLog
 {
-    /** @var list<array{int, int|null}> her sayfa için [firstResult, maxResults] */
+    /** @var list<array{int, int|null}> [firstResult, maxResults] for each page */
     public array $windows = [];
 
-    /** @var list<string|int> her okuma için istenen hidrasyon kipi */
+    /** @var list<string|int> the hydration mode requested for each read */
     public array $hydrations = [];
 }

@@ -7,12 +7,12 @@ namespace Balin\Tabula\Export;
 use Balin\Tabula\Exception\ExportException;
 use Balin\Tabula\Format;
 
-/** Tamamlanmış bir dışa aktarmanın sonucu. */
+/** The result of a completed export. */
 final readonly class ExportResult
 {
     /**
-     * @param list<string> $paths   yazılan dosya yolları (CSV'de çok sayfa = çok dosya)
-     * @param list<string> $columns yazılan kolon anahtarları, yazıldıkları sırayla
+     * @param list<string> $paths   the file paths written (in CSV, several sheets = several files)
+     * @param list<string> $columns the column keys written, in the order they were written
      */
     public function __construct(
         public array $paths,
@@ -23,7 +23,7 @@ final readonly class ExportResult
     ) {
     }
 
-    /** Tek dosyalık çıktının yolu. */
+    /** The path of a single-file output. */
     public function path(): string
     {
         return $this->paths[0] ?? throw ExportException::noOutput();

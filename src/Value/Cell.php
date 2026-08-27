@@ -7,15 +7,16 @@ namespace Balin\Tabula\Value;
 use Balin\Tabula\Schema\Align;
 
 /**
- * Biçimlendirilmiş tek hücre.
+ * A single formatted cell.
  *
- * İki gösterimi birden taşır ve yazıcı hangisini kullanacağına kendi karar verir:
- *  - `value`  → Excel'e yazılan GERÇEK değer (float/int/bool/string), `numberFormat` ile birlikte.
- *               Böylece hücre Excel'de sayı olarak kalır; toplanabilir, sıralanabilir.
- *  - `text`   → CSV ve PDF'in yazdığı, yerelleştirilmiş görünen metin.
+ * It carries BOTH representations at once and lets the writer decide which one to use:
+ *  - `value`  → the REAL value written to Excel (float/int/bool/string), together with
+ *               `numberFormat`. That way the cell stays a number in Excel; it can be summed
+ *               and sorted.
+ *  - `text`   → the localised, visible text that CSV and PDF write.
  *
- * Mevcut ERP'de bu ayrım yoktu: Excel sayı yazarken PDF ve Twig önceden biçimlenmiş
- * dize yazıyor, CSV ise ondalıkları hiç biçimlendirmiyordu.
+ * The system this replaces made no such distinction: Excel was given a number while
+ * PDF and Twig were given a pre-formatted string, and CSV did not format decimals at all.
  */
 final readonly class Cell
 {

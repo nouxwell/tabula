@@ -14,37 +14,38 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\CellIterator;
 
 /**
- * PhpSpreadsheet ile okuyan .xlsx/.xls okuyucu.
+ * An .xlsx/.xls reader that reads through PhpSpreadsheet.
  *
- * `CsvReader`in aksine burada GERÇEK BİR AKIŞ YOKTUR ve olamaz: xlsx bir ZIP arşividir,
- * paylaşılan dize tablosu ayrı bir girdide durur ve satırlar ancak o tablo çözüldükten
- * sonra anlam kazanır. Kütüphane çalışma kitabını belleğe kurar; bunu biz seçmiyoruz.
- * Seçebildiğimiz — ve maliyeti belirgin biçimde düşüren — üç şey var:
+ * Unlike `CsvReader`, THERE IS NO REAL STREAMING here, and there cannot be: an xlsx is a ZIP
+ * archive, the shared string table sits in a separate entry, and the rows only take on meaning
+ * once that table has been resolved. The library builds the workbook in memory; that is not
+ * ours to choose. There are three things we can choose — and they lower the cost markedly:
  *
- *  1. `setReadDataOnly(true)`: stil, koşullu biçimlendirme, çizim, sayfa düzeni hiç
- *     okunmaz. İçe aktarmada bunların tamamı çöptür ve büyük bir şablonda dosyanın
- *     çözülme süresinin çoğunu yiyen kısımdır.
- *  2. `setReadEmptyCells(false)`: değeri boş olan hücre için nesne yaratılmaz. Kolon
- *     hizası bundan ETKİLENMEZ (bkz. `rows()`); yalnız bellek kazanılır.
- *  3. `disconnectWorksheets()`: Worksheet ile Spreadsheet birbirini tutar, PHP'nin
- *     sayaç tabanlı çöp toplayıcısı bu döngüyü kendi başına çözemez. Bağı koparmazsak
- *     art arda dosya işleyen bir kuyruk işçisi her dosyayı bellekte biriktirir.
+ *  1. `setReadDataOnly(true)`: styles, conditional formatting, drawings and page setup are
+ *     never read at all. In an import every one of those is rubbish, and in a large template
+ *     they are the part that eats up most of the file's parsing time.
+ *  2. `setReadEmptyCells(false)`: no object is created for a cell whose value is empty. Column
+ *     alignment is NOT AFFECTED by this (see `rows()`); only memory is saved.
+ *  3. `disconnectWorksheets()`: Worksheet and Spreadsheet hold on to each other, and PHP's
+ *     refcount-based garbage collector cannot break that cycle on its own. If we do not cut
+ *     the link, a queue worker processing files back to back piles every file up in memory.
  *
- * ★ Tarihler SERİ NUMARASI (float) olarak gelir. `setReadDataOnly(true)` sayı biçimlerini
- * okumadığı için "bu hücre tarih mi" sorusunun cevabı burada YOKTUR. Bu bilinçli bir
- * bölüşümdür: okuyucu ham veriyi taşır, tarihe çevirme kararını alanın TİPİNİ bilen
- * ayrıştırıcı verir (bkz. `Reader` arayüzünün sözleşmesi). Hücreyi burada dizeye
- * çevirseydik — eski ERP'nin yaptığı buydu — seri numarası "45296" gibi anlamsız bir
- * dizeye dönüşür ve tarih geri kazanılamazdı.
+ * ★ Dates arrive as a SERIAL NUMBER (float). Because `setReadDataOnly(true)` does not read
+ * number formats, the answer to "is this cell a date" DOES NOT EXIST here. That is a
+ * deliberate division of labour: the reader carries the raw value, and the decision to convert
+ * it to a date is made by the parser, which knows the field's TYPE (see the contract of the
+ * `Reader` interface). Had we converted the cell to a string here — which is what the system
+ * this replaces did — the serial number would turn into a meaningless string such as "45296"
+ * and the date could never be recovered.
  */
 final class XlsxReader implements Reader
 {
     /**
-     * Desteklenen uzantılar.
+     * The supported extensions.
      *
-     * Liste `ImportException::unsupportedFile()` mesajındaki listeyle bilerek birebir
-     * aynıdır: kullanıcıya "şunlar desteklenir" deyip sessizce başka bir uzantıyı da
-     * kabul etmek, hata mesajını yalancı yapar.
+     * The list is deliberately identical to the list in the `ImportException::unsupportedFile()`
+     * message: telling the user "these are supported" and then silently accepting some other
+     * extension as well turns the error message into a liar.
      *
      * @var list<string>
      */
@@ -56,48 +57,51 @@ final class XlsxReader implements Reader
     }
 
     /**
-     * @return Generator<int, list<mixed>> satır numarası (1 tabanlı) => hücre değerleri
+     * @return Generator<int, list<mixed>> row number (1-based) => cell values
      */
     public function rows(string $path): Generator
     {
         $spreadsheet = $this->load($path);
 
         try {
-            // İLK sayfa okunur, "aktif" sayfa değil. Aktiflik kullanıcının dosyayı en son
-            // hangi sekmede kaydettiğine bağlıdır; aynı şablonu iki kullanıcı doldurup
-            // gönderdiğinde farklı sayfaların okunması sessiz ve tekrarlanamaz bir hata olurdu.
-            // Şablonumuzun yardımcı "_lists" sayfası da her zaman ilkin ARDINDA durur.
+            // The FIRST sheet is read, not the "active" one. Which sheet is active depends on
+            // the tab the user happened to be on when they last saved the file; when two users
+            // fill in and send back the same template, reading different sheets would be a
+            // silent and non-reproducible bug. Our template's helper "_lists" sheet always
+            // sits BEHIND the first one, too.
             $sheet = $spreadsheet->getSheet(0);
 
-            // Kolon sınırı SAYFA genelinden alınır, satır satır değil: en uzun satır kaç
-            // kolonsa her satır o kadar hücreyle döner. Aksi hâlde kısa satırlar kısa
-            // dizilere çevrilir ve içe aktarma tarafında kolon indeksleri kayardı.
+            // The column limit is taken from the SHEET as a whole, not row by row: however
+            // many columns the longest row has, every row comes back with that many cells.
+            // Otherwise short rows would be turned into short arrays and the column indexes
+            // would drift on the import side.
             $highestColumn = $sheet->getHighestColumn();
 
             foreach ($sheet->getRowIterator() as $number => $row) {
                 $cells = $row->getCellIterator('A', $highestColumn);
 
-                // ★ BU SATIR BU SINIFTAKİ EN ÖNEMLİ AYRINTIDIR.
-                // `true` olsaydı yalnız GERÇEKTEN VAR OLAN hücreler gezilirdi; boş bir hücre
-                // atlanır, ondan sonraki her kolon bir sola kayar ve satırın tamamı yanlış
-                // alanlara eşlenirdi — "Kod" kolonundaki değer "Ad" alanına yazılır, üstelik
-                // hiçbir hata üretmeden. Boş hücre KOLON YERİNİ korumalıdır.
+                // ★ THIS LINE IS THE MOST IMPORTANT DETAIL IN THIS CLASS.
+                // Had it been `true`, only the cells that REALLY EXIST would be walked; an
+                // empty cell is skipped, every column after it shifts one to the left, and the
+                // whole row is mapped onto the wrong fields — the value in the "Code" column
+                // gets written into the "Name" field, and without producing a single error at
+                // that. An empty cell MUST HOLD ITS COLUMN POSITION.
                 $cells->setIterateOnlyExistingCells(false);
 
-                // Var olmayan hücre için YENİ HÜCRE YARATMA, null döndür. Varsayılan
-                // (IF_NOT_EXISTS_CREATE_NEW) davranışı okuma sırasında çalışma kitabını
-                // satır×kolon kadar hücre nesnesiyle şişirir: salt okuma bir işlemde
-                // belleğe yazmak.
+                // For a cell that does not exist, DO NOT CREATE A NEW CELL, return null. The
+                // default behaviour (IF_NOT_EXISTS_CREATE_NEW) inflates the workbook with as
+                // many cell objects as rows × columns while reading: writing to memory during
+                // a read-only operation.
                 $cells->setIfNotExists(CellIterator::IF_NOT_EXISTS_RETURN_NULL);
 
                 $values = [];
 
-                // `foreach` yerine ELLE gezinme: `CellIterator` kendini
-                // `Iterator<TKey, Cell>` diye tanıtır, oysa yukarıdaki ayar yüzünden
-                // `current()` gerçekten null döndürebilir. Elle gezinince `?Cell` olan
-                // GERÇEK dönüş tipini görürüz ve boş hücreyi null'a çevirebiliriz;
-                // `foreach` ile yazıldığında statik çözümleyici null kontrolünü
-                // "her zaman false" sayıp siler, çalışma anında ise hücre null gelir.
+                // Walking BY HAND instead of with `foreach`: `CellIterator` declares itself as
+                // `Iterator<TKey, Cell>`, yet because of the setting above `current()` really
+                // can return null. Walking by hand we see the REAL return type, which is
+                // `?Cell`, and can turn an empty cell into null; written with a `foreach`, the
+                // static analyser takes the null check for "always false" and removes it,
+                // while at runtime the cell arrives as null.
                 $cells->rewind();
 
                 while ($cells->valid()) {
@@ -106,37 +110,40 @@ final class XlsxReader implements Reader
                     $cells->next();
                 }
 
-                // Anahtar KULLANICININ GÖRDÜĞÜ satır numarasıdır; iterator zaten 1 tabanlı verir.
+                // The key is THE ROW NUMBER THE USER SEES; the iterator already gives 1-based numbers.
                 yield $number => $values;
             }
         } finally {
-            // `finally`: tüketici `foreach`ten `break` ile çıkarsa (ör. `ErrorMode::FailFast`)
-            // generator yok edilirken burası yine çalışır ve çalışma kitabı serbest kalır.
+            // `finally`: if the consumer leaves the `foreach` with a `break` (e.g.
+            // `ErrorMode::FailFast`), this still runs as the generator is destroyed and the
+            // workbook is released.
             $spreadsheet->disconnectWorksheets();
             unset($spreadsheet);
         }
     }
 
     /**
-     * Hücrenin değeri; formül ise SONUCU.
+     * The cell's value; if it is a formula, its RESULT.
      *
-     * Kullanıcı şablonu doldururken toplam/birleştirme formülü yazar ("=B2*C2", "=A2&' '&B2").
-     * `getValue()` bu hücrede formülün METNİNİ döndürür ve içe aktarma veritabanına
-     * "=B2*C2" dizesini yazar — eski ERP'de en sık görülen sessiz bozulmalardan biriydi.
+     * While filling in the template, the user writes sum or concatenation formulas ("=B2*C2",
+     * "=A2&' '&B2"). For such a cell `getValue()` returns the TEXT of the formula and the
+     * import writes the string "=B2*C2" into the database — one of the most frequently seen
+     * silent corruptions in the system this replaces.
      */
     private static function valueOf(SpreadsheetCell $cell): mixed
     {
         try {
             $value = $cell->getCalculatedValue();
         } catch (SpreadsheetException) {
-            // Hesap motoru bu formülü çözemedi (desteklenmeyen fonksiyon, dış dosya
-            // referansı, döngüsel başvuru). Tüm dosyayı reddetmek yerine ham değere
-            // düşeriz; hücre ayrıştırıcıya gider ve gerekiyorsa ORADA satır hatası olur.
+            // The calculation engine could not resolve this formula (an unsupported function,
+            // an external file reference, a circular reference). Rather than rejecting the
+            // whole file we fall back to the raw value; the cell goes on to the parser and, if
+            // need be, becomes a row error THERE.
             $value = $cell->getValue();
         }
 
-        // Taşan (spill) dizi formülleri dizi döndürebilir. Tek hücre okuyoruz, ilk skalere
-        // ineriz; boş dizi null olur.
+        // Spilled array formulas can return an array. We are reading a single cell, so we
+        // descend to the first scalar; an empty array becomes null.
         while (\is_array($value)) {
             $values = array_values($value);
             $value = $values[0] ?? null;
@@ -154,7 +161,7 @@ final class XlsxReader implements Reader
         try {
             $reader = IOFactory::createReaderForFile($path);
         } catch (SpreadsheetReaderException) {
-            // Uzantı doğru ama içerik tanınmıyor (ör. .xlsx diye kaydedilmiş bir HTML tablosu).
+            // The extension is right but the content is not recognised (e.g. an HTML table saved as .xlsx).
             throw ImportException::unsupportedFile($path);
         }
 
@@ -164,7 +171,7 @@ final class XlsxReader implements Reader
         try {
             $spreadsheet = $reader->load($path);
         } catch (SpreadsheetException) {
-            // Bozuk arşiv, şifreli dosya, yarım indirilmiş yükleme…
+            // A corrupt archive, an encrypted file, a half-downloaded upload…
             throw ImportException::fileNotReadable($path);
         }
 
