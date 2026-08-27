@@ -1,32 +1,34 @@
 # Tabula
 
-**Tek şema, üç yön.** Tablo verisini tek bir şema tanımından Excel, CSV ve PDF'e yazan; aynı şemayla
-içe aktaran ve şablon üreten PHP kütüphanesi.
+**One schema, three directions.** A PHP library that writes tabular data to Excel, CSV and PDF from a
+single schema definition — and uses that same definition to generate blank templates and to import
+files back in.
 
-Yazar: **Hüseyin Niyazi Balın**
+Author: **Hüseyin Niyazi Balın**
 
 ---
 
-## Neden
+## Why
 
-Bir kolonun ne olduğu tipik bir ERP'de dört ayrı yerde yaşar ve hiçbiri diğerini bilmez: tarayıcının
-görünür tablo kolonları, controller içindeki elle yazılmış kolon dizileri, alan **adına** bakan küresel
-bir ondalık haritası ve içe aktarma şablonlarının kendi şema sağlayıcısı. Sonuç: aynı kolon dört kez
-tarif edilir, dışa aktarılan dosya geri içe aktarılamaz, çeviri değişince eski dosyalar bozulur.
+In a typical ERP, "what a column is" lives in four separate places and none of them knows about the
+others: the columns the browser happens to be showing, hand-written column arrays inside controllers,
+a global decimals map keyed by *field name*, and the import templates' own schema provider. The result
+is that the same column is described four times, an exported file cannot be imported back, and
+changing a translation silently breaks every file users already have.
 
-Tabula bunu tersine çevirir: **bir kolonun tanımı yalnızca bir yerde yazılır.** Geri kalan her şey —
-yazıcılar, biçimlendiriciler, sayfa stratejileri — o tanımı okuyan tüketicilerdir.
+Tabula inverts that: **a column is defined in exactly one place.** Everything else — writers,
+formatters, parsers, sheet strategies — are consumers of that definition.
 
-## Kurulum
+## Installation
 
 ```bash
 composer require balin/tabula
 ```
 
-PHP 8.5+ gerekir. PDF çıktısı için ayrıca `dompdf/dompdf` kurun; kurulu değilse `Format::Pdf`
-istendiğinde yazıcı **kurulurken** hata verir — yani elli bin satır işlendikten sonra değil.
+Requires PHP 8.5+. For PDF output also install `dompdf/dompdf`; if it is missing, asking for
+`Format::Pdf` fails **when the writer is created** — not after fifty thousand rows have been processed.
 
-## Hızlı başlangıç
+## Quick start
 
 ```php
 use Balin\Tabula\Tabula;
@@ -51,103 +53,103 @@ $schema = Schema::make('customer')
     );
 
 $tabula = new Tabula(
-    new ArrayTranslator(['tr' => ['export.customer.code' => 'Kod', /* … */]]),
-    new TabulaSettings(numbers: new NumberSettings(currencySymbols: ['TRY' => '₺'])),
+    new ArrayTranslator(['en' => ['export.customer.code' => 'Code', /* … */]]),
+    new TabulaSettings(numbers: new NumberSettings(currencySymbols: ['USD' => '$'])),
 );
 
 $result = $tabula->export($schema)
     ->from(ArraySource::of($rows))
-    ->locale('tr')
+    ->locale('en')
     ->to(Format::Xlsx)
-    ->write('/tmp/musteriler.xlsx');
+    ->write('/tmp/customers.xlsx');
 
-$result->path();  // /tmp/musteriler.xlsx
-$result->rows;    // yazılan satır sayısı
+$result->path();  // /tmp/customers.xlsx
+$result->rows;    // number of rows written
 ```
 
-## Alan tanımı
+## Field definition
 
-| Anahtar | Ne işe yarar |
+| Key | What it does |
 | --- | --- |
-| `key` | Kanonik alan adı. Dosyadaki gerçek kimlik; çeviri değişse de sabit kalır. |
-| `label` | Çeviri anahtarı, düz metin ya da `fn(string $locale): string`. |
-| `from` | Değerin kaynağı: dizi anahtarı, nokta yolu (`address.city`), DQL takma adı ya da kapanış. |
+| `key` | Canonical field name. The file's real identity; it stays put when translations change. |
+| `label` | A translation key, plain text, or `fn(string $locale): string`. |
+| `from` | Where the value comes from: array key, dot path (`address.city`), DQL alias, or a closure. |
 | `type` | `string · integer · decimal · money · quantity · bool · date · datetime · enum · options` |
-| `decimals` | Basamak sayısı — **alanın kendinde**, küresel bir haritada değil. |
-| `currency` | Sabit kod ya da `fn($row): string`. Simge ve konumu ayardan gelir. |
-| `enumClass` | PHP enum sınıfı; değer otomatik olarak çeviri anahtarına dönüşür. |
-| `options` | `options` tipi için seçenek kümesi (dizi ya da kapanış). |
-| `width` | Kolon genişliği; verilmezse otomatik. |
-| `align` | Verilmezse tipten türetilir: sayı sağa, boole/tarih ortaya, metin sola. |
-| `required` | Şablonda başlığı işaretler, içe aktarmada boş geçilemez yapar. |
-| `priority` | PDF kolon bütçesinde önem sırası: `Always` · `Normal` · `Optional`. |
-| `only` | Alanı belirli çıktılara sınırlar. |
-| `format` | Biçimlendirmeyi tümüyle devralan kapanış. |
+| `decimals` | Digit count — **on the field itself**, not in a global map. |
+| `currency` | A fixed code or `fn($row): string`. Symbol and its position come from settings. |
+| `enumClass` | A PHP enum class; values resolve to translation keys automatically. |
+| `options` | The option set for the `options` type (array or closure). |
+| `width` | Column width; automatic when omitted. |
+| `align` | Derived from the type when omitted: numbers right, bool/date centre, text left. |
+| `required` | Marks the header in the template and makes the field non-empty on import. |
+| `priority` | Rank in the PDF column budget: `Always` · `Normal` · `Optional`. |
+| `only` | Restricts the field to specific output formats. |
+| `format` | A closure that takes over formatting entirely. |
 
-## Veri kaynakları
+## Data sources
 
-Veriyi elinle verebilir ya da kütüphanenin sayfa sayfa çekmesini sağlayabilirsin. Şema tarafı ikisini
-de aynı görür.
+You can hand the rows over yourself, or let the library page through them. The schema side treats
+both identically.
 
 ```php
 use Balin\Tabula\Source\{ArraySource, IteratorSource, CallableSource, DoctrineSource};
 
-ArraySource::of($rows);                      // elde hazır dizi
-IteratorSource::of(fn () => $generator());   // sabit bellekte akış
-CallableSource::of(                          // sunucu-taraflı sayfalama
+ArraySource::of($rows);                      // rows already in hand
+IteratorSource::of(fn () => $generator());   // streaming in constant memory
+CallableSource::of(                          // server-side pagination
     fn (int $page, int $limit) => $repo->fetchPaged($page, $limit),
     pageSize: 2000,
 );
-DoctrineSource::of($queryBuilder);           // tek sorgu, satır satır akış
-DoctrineSource::of($queryBuilder)->chunk(2000);  // sayfa sayfa (ORDER BY şart)
+DoctrineSource::of($queryBuilder);               // one query, row-by-row streaming
+DoctrineSource::of($queryBuilder)->chunk(2000);  // page by page (ORDER BY required)
 ```
 
-Tüm kaynaklar tembeldir: satırlar tüketildikçe üretilir, tamamı belleğe alınmaz.
+Every source is lazy: rows are produced as they are consumed, never collected up front.
 
-### DoctrineSource iki kip
+### DoctrineSource has two modes
 
-**Akış (varsayılan)** tek sorgu açar ve `Query::toIterable()` ile satırları teker teker hidrasyona
-sokar. Sayfalama aritmetiği hiç devreye girmediği için satır atlama/tekrar riski yoktur ve çağıranın
-koyduğu `setFirstResult`/`setMaxResults` penceresi korunur.
+**Streaming (default)** opens a single query and hydrates rows one at a time via
+`Query::toIterable()`. No pagination arithmetic is involved, so rows can neither be skipped nor
+repeated, and any `setFirstResult`/`setMaxResults` window the caller set is preserved.
 
-**Parçalı** (`chunk(n)`) her sayfa için ayrı sorgu açar. İki katı kural vardır ve ikisi de sessiz veri
-bozulmasını önlemek içindir:
+**Chunked** (`chunk(n)`) issues one query per page. It enforces two hard rules, both of them there to
+prevent silent data corruption:
 
-- **ORDER BY zorunludur.** Sıralama olmadan `LIMIT/OFFSET` satır atlar ve tekrar eder.
-- **Çağıranın `setMaxResults` penceresi varsa reddedilir.** Parçalı kip onu ezerdi; "en fazla 50
-  satırlık önizleme" diye kurulmuş bir sorgu tüm tabloyu dışarı akıtırdı.
+- **ORDER BY is mandatory.** Without a stable sort, `LIMIT/OFFSET` skips and repeats rows.
+- **A caller-supplied `setMaxResults` is rejected.** Chunking would overwrite it, so a query built as
+  a "preview, at most 50 rows" would quietly stream the entire table.
 
-Sayfalama yalnızca **gerçekten boş** bir sayfada durur, kısa sayfada değil: `getResult()` hidrate
-edilmiş sonuç döndürür ve birleştirmeli sorgularda tekrar eden kök satırlar tek nesneye indirgenir,
-yani 2000 SQL satırı 900 köke inebilir. "Kısa sayfa = bitti" kuralı böyle bir durumda aktarımı
-sessizce ilk sayfada bitirirdi.
+Paging stops only on a **genuinely empty** page, never on a short one: `getResult()` returns *hydrated*
+results, and in joined queries repeated root rows collapse into a single object — 2000 SQL rows can
+become 900 roots. A "short page means we're done" rule would silently end the export on page one.
 
-> ⚠ `hydrateAs(AbstractQuery::HYDRATE_OBJECT)` kullanırsan belleği kendin yönet: varlıklar
-> UnitOfWork'te yönetilmeye devam eder ve kütüphane senin nesnelerini altından çekmemek için
-> kendiliğinden `detach()` çağırmaz.
+> ⚠ If you use `hydrateAs(AbstractQuery::HYDRATE_OBJECT)`, manage memory yourself: entities stay
+> managed in the UnitOfWork, and the library deliberately does not call `detach()` behind your back.
 
-## Çıktı biçimleri
+## Output formats
 
-| Yazıcı | Motor | Çok sayfa |
+| Writer | Engine | Multiple sheets |
 | --- | --- | --- |
-| `Format::Xlsx` | PhpSpreadsheet | Gerçek sekmeler |
-| `Format::Csv` | Yerel `fputcsv`, tam akış | Parça başına ayrı dosya |
-| `Format::Pdf` | Dompdf | Sayfa adı tablonun üstünde başlık |
+| `Format::Xlsx` | PhpSpreadsheet | Real tabs |
+| `Format::Csv` | Native `fputcsv`, fully streamed | One file per chunk |
+| `Format::Pdf` | Dompdf | Sheet name rendered above the table |
 
-CSV varsayılan ayracı `;`'dir: Türkçe/Avrupa Excel'inde `,` **ondalık** ayracıdır ve virgülle ayrılmış
-dosya sayıları iki kolona böler. Dosyalar UTF-8 BOM ile yazılır, aksi hâlde Excel Türkçe karakterleri bozar.
+The CSV delimiter defaults to `;`. In Turkish/European Excel, `,` is the **decimal** separator, so a
+comma-delimited file splits numbers across two columns. Files are written with a UTF-8 BOM; without
+it Excel mangles non-ASCII characters.
 
-## PDF: kâğıt ve kolon bütçesi
+## PDF: paper and the column budget
 
-Xlsx ve CSV'nin sayfa boyutu diye bir kavramı yoktur; PDF'in **fiziksel bir eni** vardır. Bu yüzden
-kolon sayısı bir tercih değil, hesaplanabilir bir bütçedir:
+Xlsx and CSV have no notion of page size; a PDF has a **physical width**. That makes the column count
+not a preference but a computable budget:
 
 ```
-bütçe = floor( (kâğıt eni − sol/sağ boşluk) ÷ asgari kolon genişliği )
+budget = floor( (paper width − left/right margins) ÷ minimum column width )
 ```
 
-A4 yatayda 297 − 2×10 = 277 mm; 22 mm asgari genişlikle 12 kolon. Aynı şemayı A3 yataya taşımak
-bütçeyi 18'e çıkarır — **sayfayı büyütmek kolon sayısını kendiliğinden büyütür**, ayrıca ayar gerekmez.
+A4 landscape gives 297 − 2×10 = 277 mm; at a 22 mm minimum that is 12 columns. Moving the same schema
+to A3 landscape raises the budget to 18 — **enlarging the page widens the table on its own**, with no
+extra configuration.
 
 ```php
 use Balin\Tabula\Format;
@@ -155,62 +157,132 @@ use Balin\Tabula\Export\Page\{Page, ColumnBudget, Overflow};
 
 $tabula->export($schema)
     ->from(ArraySource::of($rows))
-    ->locale('tr')
+    ->locale('en')
     ->to(Format::Pdf)
     ->page(Page::a3()->landscape()->margins(8))
     ->columns(ColumnBudget::fit()->minWidth(25)->anchor('code', 'name'))
-    ->write('/tmp/musteriler.pdf');
+    ->write('/tmp/customers.pdf');
 ```
 
-`Page` kâğıt geometrisidir: `a3() · a4() · a5() · letter() · custom(w, h)`, ardından
-`landscape()/portrait()` ve `margins(mm)` / `marginsOf(t, r, b, l)`. Ölçüler her zaman **dikey**
-verilir; yönü `Page` uygular. Varsayılan **A4 yatay**'dır — mevcut ERP tüm listeleri A4 dikey basıyor
-ve on kolonluk bir fatura listesinin son kolonları kâğıdın dışında kalıyordu.
+`Page` is the paper geometry: `a3() · a4() · a5() · letter() · custom(w, h)`, then
+`landscape()/portrait()` and `margins(mm)` / `marginsOf(t, r, b, l)`. Dimensions are always given in
+**portrait**; `Page` applies the orientation. The default is **A4 landscape**.
 
-`ColumnBudget` kolonların o kâğıda nasıl sığdırılacağıdır. Sığmadıklarında üç davranış var:
+`ColumnBudget` decides how the columns are fitted onto that paper. When they do not fit, there are
+three behaviours:
 
-| `Overflow` | Ne yapar | Veri kaybı |
+| `Overflow` | What it does | Data loss |
 | --- | --- | --- |
-| `NextPageSet` (varsayılan) | Kolonları gruplara böler, her grup kendi sayfa takımına basılır | yok |
-| `Drop` | Düşük öncelikli kolonları eler (`Optional` önce, `Always` asla) | **var** |
-| `Shrink` | Hiç bölmez, hepsini sığdırmaya çalışır | yok (okunaksızlaşabilir) |
+| `NextPageSet` (default) | Splits columns into groups; each group gets its own set of pages | none |
+| `Drop` | Sheds low-priority columns (`Optional` first, `Always` never) | **yes** |
+| `Shrink` | Never splits, tries to fit everything | none (may become unreadable) |
 
 ```php
-->columns(ColumnBudget::fit()->max(8)->overflow(Overflow::Drop))   // tek sayfalık özet çıktı
-->columns(ColumnBudget::unlimited())                               // kolon sayısı zaten az
+->columns(ColumnBudget::fit()->max(8)->overflow(Overflow::Drop))   // one-page summary
+->columns(ColumnBudget::unlimited())                               // few columns anyway
 ```
 
-`anchor('code', 'name')` verilen kolonlar **her grupta tekrarlanır**: ikinci gruba bakan okuyucu
-hangi satırda olduğunu ancak onlarla bilir. Dışa aktarmada yer almayan bir çapa anahtarı sessizce
-yok sayılır — kullanıcı o kolonu seçmemişse çapalanacak bir şey yoktur.
+Columns passed to `anchor('code', 'name')` are **repeated in every group**: without them, a reader
+looking at the second group cannot tell which row they are on. An anchor key that is not part of the
+export is silently ignored — if the user did not select that column, there is nothing to anchor.
 
-> ⚠ `->page()` ya da `->columns()`, kâğıt kavramı olmayan bir biçime (Xlsx, CSV) verilirse dışa
-> aktarma **başlamaz**; `ExportException` fırlatılır. Sessizce yok saymak, bu fazın ortadan
-> kaldırmak için var olduğu hatanın kendisi olurdu: eski kodda sayfa boyutu hem PHP'de
-> (`Dompdf::setPaper()`) hem şablonun `@page` kuralında tanımlıydı, Dompdf render sırasında CSS'i
-> uyguluyordu ve `setPaper()` çağrısı fiilen dekoratifti. Artık `@page` kuralını **yalnızca**
-> `Page::cssPageRule()` üretir.
+`Drop` never sheds an `Always` column. If the mandatory columns alone exceed the budget the export
+stops with an error instead of quietly shipping an incomplete document.
 
-Yazı tipi ailesi Latin Extended-A kapsamalıdır. Dompdf'in çekirdek yazı tipleri (Helvetica, Times,
-Courier) WinAnsi'ye bağlıdır ve o kümede `ş ğ ı İ` **yoktur**; pakette bu harfleri taşıyan tek aile
-`DejaVu Sans`tır ve varsayılan odur.
+> ⚠ Passing `->page()` or `->columns()` to a format that has no notion of paper (Xlsx, CSV) **aborts**
+> the export with an `ExportException`. Ignoring them silently would be the very bug this design
+> exists to remove: in the original code the page size was declared both in PHP (`Dompdf::setPaper()`)
+> and in the template's `@page` rule, Dompdf applied the CSS at render time, and the `setPaper()` call
+> was effectively decorative. The `@page` rule is now produced **only** by `Page::cssPageRule()`.
 
-## Sayfa stratejileri (sekmeler)
+The font family must cover Latin Extended-A. Dompdf's core fonts (Helvetica, Times, Courier) are bound
+to WinAnsi, which does **not** contain `ş ğ ı İ`; the only bundled family that carries them is
+`DejaVu Sans`, which is therefore the default.
+
+## Sheet strategies (tabs)
 
 ```php
 use Balin\Tabula\Export\Sheet\{SingleSheet, ChunkedSheets, GroupedSheets};
 
-->sheets(new SingleSheet('Müşteriler'))        // hepsi tek sayfada (varsayılan)
-->sheets(new ChunkedSheets(50_000))            // her 50.000 satırda yeni sayfa
-->sheets(new GroupedSheets('warehouseName'))   // alan değerine göre sayfa
+->sheets(new SingleSheet('Customers'))         // everything on one sheet (default)
+->sheets(new ChunkedSheets(50_000))            // a new sheet every 50,000 rows
+->sheets(new GroupedSheets('warehouseName'))   // one sheet per field value
 ```
 
-> `GroupedSheets` satırları yeniden sıralamaz. Aynı grubun tek sayfada toplanması için veri kaynağı
-> o alana göre **sıralı** gelmelidir.
+> `GroupedSheets` does not reorder rows. For a group to land on a single sheet, the data source must
+> already be **sorted** by that field.
 
-## Çeviri
+## Templates and import
 
-Çekirdek Symfony'yi tanımaz; `Translator` portu üzerinden konuşur.
+The same schema produces a blank template and reads filled files back, which is what makes the
+round trip work by construction.
+
+```php
+// 1 · generate a blank template
+$tabula->template()->write($schema, '/tmp/template.xlsx', 'en');
+
+// 2 · the user fills it in, then:
+$result = $tabula->import($schema)
+    ->from('/tmp/filled.xlsx')
+    ->locale('en')
+    ->each(static fn (ImportedRow $row) => $repository->save($row->toArray()))
+    ->run();
+
+$result->imported;        // 4812
+$result->errors;          // list<RowError>: row number + field key + message
+$result->errorsByRow();   // grouped for display
+```
+
+### Matching is by key, not by label
+
+The generated template is laid out as:
+
+```
+row 1  →  canonical field KEYS      (hidden in xlsx)
+row 2  →  translated labels          (what the user reads)
+row 3+ →  data
+```
+
+Detection needs no marker: if every non-empty cell of row 1 matches a schema key, it *is* a key row.
+
+This is the point of the whole design. When the translated header string is the file's identity —
+as it commonly is — renaming one word in a translation catalogue silently invalidates every template
+users already downloaded, and a file with English headers will not match in a Turkish session. Here,
+**re-translating every label leaves existing files perfectly readable.**
+
+`MatchStrategy::Auto` (default) uses the key row when present and falls back to labels, so files
+produced elsewhere or filled in by hand still work. `Key` requires the key row; `Label` ignores it.
+
+> ⚠ Known limit: the key row protects **headers**, not cell *contents*. Enum and boolean values are
+> written as translated text, so re-translating those option labels does break an already-filled file.
+
+### Values come back typed
+
+`ImportedRow` hands you real types, not strings: `bool` is a bool, an enum field is an enum instance,
+a date is a `DateTimeImmutable`, a quantity is a float.
+
+### Parsers are strict where formatters are lenient
+
+An export may swallow a broken cell and print a blank; an import doing the same writes wrong data into
+your database. So an unparseable value raises a `RowError` for that row and field, and the run
+continues. Two consequences worth knowing:
+
+- An empty value is **not** an error — the required check happens against the field, not in the parser.
+- `ErrorMode::Collect` (default) processes the valid rows and reports the rest;
+  `ErrorMode::FailFast` stops at the first error.
+
+Transactions are **yours**: the library parses and validates, it never writes to your database.
+
+### Templates carry dropdowns
+
+Bool, enum and options columns get real Excel data-validation dropdowns, backed by a hidden `_lists`
+sheet with identical option sets de-duplicated. The dropdown entries and the values the parser accepts
+are derived from the same translation call, so a value written by the template is always a member of
+its own allowed list.
+
+## Translation
+
+The core does not know about Symfony; it talks through a `Translator` port.
 
 ```php
 interface Translator {
@@ -218,20 +290,21 @@ interface Translator {
 }
 ```
 
-Hazır uygulamalar: `ArrayTranslator` (düz ya da iç içe katalog) ve `PassthroughTranslator` (anahtarı
-aynen döndürür). Symfony köprüsü bu portu framework translator'ına bağlar.
+Bundled implementations: `ArrayTranslator` (flat or nested catalogues) and `PassthroughTranslator`
+(returns the key unchanged). The Symfony bridge binds the port to the framework translator.
 
-Locale **her çağrıda açıkça** taşınır — kuyruk işçisinde "istekten gelen dil" diye bir şey yoktur.
+The locale is passed **explicitly on every call** — there is no "language from the current request"
+inside a queue worker.
 
-### Enum çevirisi
+### Enum translation
 
-`EnumFormatter` bir enum değerinden çeviri anahtarını sırayla şöyle çıkarır:
+An enum value resolves to a translation key by trying, in order:
 
 1. `Balin\Tabula\Contract\TranslatableEnum::translationKey()`
-2. Enum üzerinde `label(): string` metodu (mevcut ERP geleneği — 200'den fazla enum hiç değişmeden çalışır)
-3. `BackedEnum::$value` ya da `UnitEnum::$name`
+2. A `label(): string` method on the enum (a widespread convention — existing enums work unchanged)
+3. `BackedEnum::$value` or `UnitEnum::$name`
 
-## Symfony ile kullanım
+## Using it with Symfony
 
 `config/bundles.php`:
 
@@ -246,64 +319,64 @@ tabula:
     default_locale: '%kernel.default_locale%'
     empty_text: '-'
     translation:
-        domains: ['messages', 'enum']       # sırayla denenir, ilk TANIMLI alan kazanır
-        addressable_domains: ['validators'] # 'validators:key' önekiyle ayrıca erişilebilir
+        domains: ['messages', 'enum']       # tried in order, first DEFINING domain wins
+        addressable_domains: ['validators'] # also reachable as 'validators:key'
     numbers:
         currency_symbols:
-            TRY: '₺'
-    csv:                     # varsayılanlar Türkçe Excel içindir
+            USD: '$'
+    csv:                     # defaults target Excel
         delimiter: ';'
         write_bom: true
         line_ending: crlf    # crlf | lf
     xlsx:
-        creator: 'Ionsis ERP'
+        creator: 'My App'
         freeze_header: true
         auto_filter: true
     pdf:
-        page_size: a4            # a3 | a4 | a5 | letter | legal (ölçüler dikey)
+        page_size: a4            # a3 | a4 | a5 | letter | legal (portrait dimensions)
         orientation: landscape   # portrait | landscape
         margin_mm: 10.0
         min_column_width_mm: 22.0
-        max_columns: ~           # ~ = sert tavan yok
+        max_columns: ~           # ~ = no hard cap
         overflow: next_page_set  # next_page_set | drop | shrink
         font_family: 'DejaVu Sans'
         font_size_pt: 8.0
         repeat_header: true
 ```
 
-Ardından `Balin\Tabula\Tabula` her yere enjekte edilebilir.
+`Balin\Tabula\Tabula` can then be injected anywhere.
 
-**Yazıcı ayarları.** Tek bir CSV varsayılanı yoktur: insan dosyayı Türkçe Excel'de açar (`;` + BOM
-şart), makine RFC 4180 bekler (`,`, BOM yok). İkisi de gerekiyorsa ayarı çağrı yerinde geçebilirsin:
+**Writer settings.** There is no single right CSV default: a human opens the file in Excel (`;` plus a
+BOM), a machine expects RFC 4180 (`,`, no BOM). When you need both, pass the options at the call site:
 
 ```php
 use Balin\Tabula\Export\Writer\{CsvWriter, CsvOptions, XlsxWriter, XlsxOptions};
 
-->writer(new CsvWriter(CsvOptions::rfc4180()))   // makineye giden besleme
-->writer(new XlsxWriter(XlsxOptions::plain()))   // süslemesiz ara dosya
+->writer(new CsvWriter(CsvOptions::rfc4180()))   // machine-to-machine feed
+->writer(new XlsxWriter(XlsxOptions::plain()))   // undecorated intermediate file
 ```
 
-`line_ending` YAML'da `crlf`/`lf` adıyla verilir; ham `"\r\n"` yazmak kaçış kurallarına takılıp
-sessizce iki harfe dönüşürdü. Aynı gerekçeyle `pdf.page_size` / `orientation` / `overflow` de
-adla verilir, milimetre ya da sınıf adıyla değil.
+`line_ending` is given by name (`crlf`/`lf`) because writing a literal `"\r\n"` in YAML runs into
+escaping rules and silently becomes two characters. `pdf.page_size`, `orientation` and `overflow` are
+named for the same reason, rather than millimetres or class names.
 
-`pdf` düğümündeki ölçülerin **pozitif olma** kuralı config ağacında değil, değer nesnelerinde
-(`Page`, `ColumnBudget`, `PdfOptions`) yaşar: oradaki mesajlar çözümü de söyler ("A4 yerine A3,
-yatay çevirin, kenar boşluğunu azaltın…") ve aynı kuralın yarısını ağaca kopyalamak, tam olarak
-bu fazın ortadan kaldırdığı şeyin — aynı gerçeğin iki yerde yaşamasının — küçük bir örneği olurdu.
-`->page()`/`->columns()` çağrı yerinde verilirse yapılandırmadaki varsayılanı ezer.
+Range rules for the `pdf` values (positive dimensions, sane minimums) live in the value objects
+(`Page`, `ColumnBudget`, `PdfOptions`), not in the config tree: those messages also state the fix
+("use A3 instead of A4, rotate to landscape, reduce the margin…"), and copying half of a rule into the
+tree would be a small instance of exactly what this library exists to remove — one truth living in two
+places. `->page()`/`->columns()` at the call site override the configured defaults.
 
-**Çeviri alanı meselesi.** ERP'de etiketler `messages`, enum karşılıkları `enum` alanındadır; ama
-enum'lar anahtarı `label(): string` ile döndürür ve o anahtar alan bilgisi taşımaz. Köprü bunu
-**alan zinciriyle** çözer: anahtarı hangi alanın TANIMLADIĞI kataloğa sorulur ve ilk tanımlayan
-kazanır. Dönen dizeye bakıp "ıska mı?" diye tahmin etmek üç durumda yanlış sonuç verir — kendi
-anahtarına eşit çeviriler (`IBAN`, `KDV`, ISO kodları), ICU alanları ve `|` içeren çoğul anahtarlar —
-o yüzden `TranslatorBagInterface::defines()` kullanılır.
+**About translation domains.** Labels commonly live in `messages` while enum captions live in `enum`,
+yet an enum's `label()` returns a key that carries no domain. The bridge resolves this with a **domain
+chain**: it asks the catalogue which domain *defines* the key and the first one that does wins.
+Guessing from the returned string instead ("does it look like a miss?") is wrong in three real cases —
+translations equal to their own key (`IBAN`, ISO codes), ICU domains, and pluralised keys containing
+`|` — so `TranslatorBagInterface::defines()` is used.
 
-**Çevirmeni olmayan uygulama.** `symfony/translation` kurulu değilse ya da `framework.translator`
-kapalıysa bundle otomatik olarak `PassthroughTranslator`a düşer; konteyner çökmez.
+**Applications without a translator.** If `symfony/translation` is absent or `framework.translator` is
+disabled, the bundle falls back to `PassthroughTranslator` instead of taking the container down.
 
-## Geliştirme
+## Development
 
 ```bash
 composer install
@@ -312,17 +385,19 @@ composer stan     # PHPStan
 composer cs       # php-cs-fixer
 ```
 
-## Yol haritası
+The suite runs with `failOnWarning`, `failOnRisky` and `failOnDeprecation` enabled, and PHPStan runs
+at level 8 over both `src` and `tests`.
 
-| Faz | Kapsam | Durum |
-| --- | --- | --- |
-| 0 | Çekirdek şema, biçimlendiriciler, `ArraySource`, Xlsx + CSV yazıcıları | **bitti** |
-| 1 | `DoctrineSource`, Symfony köprü bundle'ı | **bitti** |
-| 2a | Yazıcı ayarlarının config'e açılması (`WriterFactory`, `CsvOptions`, `XlsxOptions`) | **bitti** |
-| 2b | Şemanın sunucuya alınması — istemci yalnız anahtar gönderir (ERP tarafı) | sırada |
-| 3 | PDF yazıcısı, sayfa boyutu (A3/A4/A5) ve kolon bütçesi | **bitti** |
-| 4 | İçe aktarma + şablon üretimi (anahtarla eşleşme, satır bazlı hata, kısmi kabul) | |
+## Status
 
-## Lisans
+| Area | State |
+| --- | --- |
+| Schema, formatters, Xlsx + CSV writers | done |
+| `DoctrineSource`, Symfony bridge bundle | done |
+| Configurable writer options | done |
+| PDF writer, page size and column budget | done |
+| Import + template generation | done |
+
+## License
 
 Proprietary.

@@ -1,7 +1,18 @@
 {
     "name": "balin/tabula",
-    "description": "Şema tabanlı tablo verisi dışa/içe aktarma: Excel, CSV, PDF. Tek şema, üç yön.",
+    "description": "Schema-driven tabular export and import for Excel, CSV and PDF. One schema, three directions.",
     "type": "library",
+    "keywords": [
+        "excel",
+        "xlsx",
+        "csv",
+        "pdf",
+        "export",
+        "import",
+        "spreadsheet",
+        "schema",
+        "symfony"
+    ],
     "license": "proprietary",
     "authors": [
         {
@@ -26,10 +37,11 @@
         "symfony/translation-contracts": "^3.5"
     },
     "suggest": {
-        "dompdf/dompdf": "Format::Pdf ile PDF yazmak için",
-        "doctrine/orm": "DoctrineSource ile QueryBuilder üzerinden okumak için",
-        "symfony/http-kernel": "TabulaBundle (Symfony köprüsü) için",
-        "symfony/translation-contracts": "SymfonyTranslator adaptörü için"
+        "dompdf/dompdf": "Required to write PDF output with Format::Pdf",
+        "doctrine/orm": "Required by DoctrineSource to read through a QueryBuilder",
+        "symfony/http-kernel": "Required by TabulaBundle, the Symfony bridge",
+        "symfony/translation": "Lets SymfonyTranslator ask the catalogue which domain defines a key",
+        "symfony/translation-contracts": "Required by the SymfonyTranslator adapter"
     },
     "autoload": {
         "psr-4": {
