@@ -293,8 +293,76 @@ final class TemplateBuilderTest extends TestCase
         $sheet = $this->build()->getSheet(0);
 
         // An empty drop-down list is worse than no list at all: Excel locks the cell.
-        self::assertFalse($sheet->dataValidationExists('A3'), 'A text column must have no list.');
-        self::assertFalse($sheet->dataValidationExists('F3'), 'A quantity column must have no list.');
+        self::assertFalse($sheet->dataValidationExists('A3'), 'A text column must have no validation at all.');
+
+        // The quantity column DOES carry a validation now — a numeric one, not a list.
+        // Asserting mere existence here would pass for a dropdown too, which is the thing
+        // this test exists to rule out.
+        self::assertSame(
+            DataValidation::TYPE_DECIMAL,
+            $sheet->getDataValidation('F3')->getType(),
+            'A quantity column must be validated as a number, never as a list.',
+        );
+    }
+
+    // ---------------------------------------------------------------- type validation
+
+    #[Test]
+    public function aDateColumnIsValidatedAsADateAndAnIntegerAsAWholeNumber(): void
+    {
+        $schema = Schema::make('doc')->fields(
+            Field::date('issuedAt')->label('col.date'),
+            Field::integer('lineNo')->label('col.line'),
+        );
+
+        $path = $this->dir->file('typed.xlsx');
+        (new TemplateBuilder($this->translator(), new TabulaSettings(), new TemplateOptions()))
+            ->write($schema, $path, 'tr');
+
+        $sheet = IOFactory::load($path)->getSheet(0);
+
+        self::assertSame(DataValidation::TYPE_DATE, $sheet->getDataValidation('A3')->getType());
+        // WHOLE, not decimal: "12,5" typed into a line number is a typo, and silently
+        // rounding it is precisely what the import refuses to do.
+        self::assertSame(DataValidation::TYPE_WHOLE, $sheet->getDataValidation('B3')->getType());
+    }
+
+    /**
+     * The bounds exist to make the rule well-formed, not to express a limit.
+     *
+     * Excel has no "any number" rule; a decimal validation must carry an operator and bounds.
+     * Tight, sensible-looking bounds would reject the one legitimate value that exceeds them
+     * and leave the user no way to see why the cell refuses it.
+     */
+    #[Test]
+    public function theNumericBoundsExcludeNothingASpreadsheetCanHold(): void
+    {
+        $validation = $this->build()->getSheet(0)->getDataValidation('F3');
+
+        self::assertSame(DataValidation::OPERATOR_BETWEEN, $validation->getOperator());
+        self::assertLessThanOrEqual(-1.0e15, (float) $validation->getFormula1());
+        self::assertGreaterThanOrEqual(1.0e15, (float) $validation->getFormula2());
+    }
+
+    /**
+     * Blank stays allowed on every rule.
+     *
+     * Requiredness belongs to the import, where the failure can name the row and the field.
+     * Made Excel's job, it fires a warning box for merely tabbing through a row the user has
+     * not reached yet — and a user who meets that box twice switches validation off for good,
+     * taking the rules that do matter with it.
+     */
+    #[Test]
+    public function everyValidationAllowsABlankCell(): void
+    {
+        $sheet = $this->build()->getSheet(0);
+
+        foreach (['C3', 'E3', 'F3'] as $cell) {
+            self::assertTrue(
+                $sheet->getDataValidation($cell)->getAllowBlank(),
+                "{$cell} must accept an empty cell.",
+            );
+        }
     }
 
     // ---------------------------------------------------------------- options

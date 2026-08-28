@@ -147,6 +147,7 @@ final class TemplateBuilder
             $this->applyColumnStyles($sheet, $fields, $letters);
             $lastSampleRow = $this->createSampleRows($sheet, $lastLetter, $firstDataRow);
             $this->applyDropdowns($spreadsheet, $sheet, $fields, $letters, $firstDataRow, $context);
+            $this->applyTypeValidation($sheet, $fields, $letters, $firstDataRow);
 
             if ($this->options->xlsx->freezeHeader) {
                 // "Freeze A3" = both the key AND the label row stay fixed. `XlsxWriter` freezes
@@ -464,6 +465,119 @@ final class TemplateBuilder
                 $validation,
             );
         }
+    }
+
+    /**
+     * Rejects values of the wrong TYPE as they are typed, before the file is ever uploaded.
+     *
+     * The import parser catches these mistakes anyway, but only once the user has filled the
+     * whole file in and sent it back. Catching them in the cell is the difference between "row
+     * 348 could not be read" and the cursor never leaving the cell in the first place.
+     *
+     * Only shape is enforced here, never business meaning. Requiredness, ranges and
+     * cross-field rules stay on the import side, where they can produce a `RowError` that
+     * names the row and the field. A template is not the place to encode policy: it is opened
+     * once, kept for months, and filled in against rules that have moved on since.
+     *
+     * String columns get NOTHING. They are already formatted as text so that "0501" keeps its
+     * leading zero, and any validation on top of that would only ever fire on a value Excel
+     * has no opinion about.
+     *
+     * @param list<Field>  $fields
+     * @param list<string> $letters
+     */
+    private function applyTypeValidation(
+        Worksheet $sheet,
+        array $fields,
+        array $letters,
+        int $firstDataRow,
+    ): void {
+        foreach ($fields as $index => $field) {
+            $type = $field->getType();
+
+            // An enumerable column already carries a list validation from applyDropdowns();
+            // a second rule on the same range would simply overwrite it.
+            if ($type->isEnumerable()) {
+                continue;
+            }
+
+            $validation = match (true) {
+                $type->isTemporal() => $this->dateValidation(),
+                FieldType::Integer === $type => $this->numberValidation(DataValidation::TYPE_WHOLE),
+                $type->isNumeric() => $this->numberValidation(DataValidation::TYPE_DECIMAL),
+                default => null,
+            };
+
+            if (null === $validation) {
+                continue;
+            }
+
+            // Whole column, exactly as in applyDropdowns(): an sqref is only a range string
+            // and creates no cells, so this stays free however far the user pastes.
+            $sheet->setDataValidation(
+                $letters[$index].$firstDataRow.':'.$letters[$index].AddressRange::MAX_ROW,
+                $validation,
+            );
+        }
+    }
+
+    /**
+     * "This has to be a number" — expressed the only way Excel understands it.
+     *
+     * Excel has no bare "is numeric" rule; a decimal validation is required to carry an
+     * operator and bounds. The bounds below are therefore deliberately absurd: they exist so
+     * that the rule is well-formed, not to express a limit. ±1e15 sits below the 2^53 mark
+     * where doubles stop representing integers exactly, so nothing a spreadsheet can hold
+     * faithfully is excluded.
+     *
+     * Picking tighter, "sensible-looking" bounds would be the mistake here. A quantity column
+     * capped at a million rejects the one legitimate stock count that exceeds it, and the user
+     * has no way to see why the cell refuses their number.
+     */
+    private function numberValidation(string $type): DataValidation
+    {
+        $validation = new DataValidation();
+        $validation->setType($type);
+        $validation->setErrorStyle(DataValidation::STYLE_STOP);
+        $validation->setOperator(DataValidation::OPERATOR_BETWEEN);
+        $validation->setFormula1('-1E15');
+        $validation->setFormula2('1E15');
+
+        return $this->finishValidation($validation);
+    }
+
+    /**
+     * "This has to be a date.".
+     *
+     * The window is wide on purpose but not unbounded: 1900 is where Excel's own serial
+     * numbering begins, and an upper edge in the far future still catches the mistake this
+     * rule is really for — a date typed as text, or a stray number landing in a date column,
+     * which would otherwise be read back as some day in 1901.
+     */
+    private function dateValidation(): DataValidation
+    {
+        $validation = new DataValidation();
+        $validation->setType(DataValidation::TYPE_DATE);
+        $validation->setErrorStyle(DataValidation::STYLE_STOP);
+        $validation->setOperator(DataValidation::OPERATOR_BETWEEN);
+        // Excel serials: 1900-01-01 and 2199-12-31.
+        $validation->setFormula1('1');
+        $validation->setFormula2('109574');
+
+        return $this->finishValidation($validation);
+    }
+
+    private function finishValidation(DataValidation $validation): DataValidation
+    {
+        // Blank is allowed, for the same reason as in applyDropdowns(): requiredness belongs
+        // to the import, and a warning box for merely tabbing through an unfilled row teaches
+        // users to switch validation off.
+        $validation->setAllowBlank(true);
+        // No error text of our own — Excel shows its message in the language of the user's
+        // Excel, which ours could not match.
+        $validation->setShowErrorMessage(true);
+
+        return $validation;
     }
 
     /**
