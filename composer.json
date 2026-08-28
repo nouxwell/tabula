@@ -2,6 +2,7 @@
     "name": "nouxwell/tabula",
     "description": "Schema-driven tabular export and import for Excel, CSV and PDF. One schema, three directions.",
     "type": "library",
+    "license": "MIT",
     "keywords": [
         "excel",
         "xlsx",

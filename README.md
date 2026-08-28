@@ -408,7 +408,6 @@ at level 8 over both `src` and `tests`.
 
 ## License
 
-None. All rights reserved.
+MIT — see [LICENSE](LICENSE). Copyright © 2026 IONSIS.
 
-The source is readable here, but no licence to use, copy, modify or distribute it is granted. If you
-want to use it, ask.
+Written by Hüseyin Niyazi Balın.
