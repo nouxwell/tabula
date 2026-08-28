@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Page;
+namespace Nouxwell\Tabula\Export\Page;
 
-use Balin\Tabula\Exception\ExportException;
-use Balin\Tabula\Export\Column;
-use Balin\Tabula\Schema\Priority;
+use Nouxwell\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Export\Column;
+use Nouxwell\Tabula\Schema\Priority;
 
 /**
  * CALCULATES how many columns fit on the page and decides what to do with the ones that do not.

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Value;
+namespace Nouxwell\Tabula\Tests\Value;
 
 use ArrayObject;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Value\ValueResolver;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Value\ValueResolver;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

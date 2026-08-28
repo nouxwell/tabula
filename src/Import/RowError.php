@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import;
+namespace Nouxwell\Tabula\Import;
 
 /**
  * Why a single cell, or a whole row, was not accepted.

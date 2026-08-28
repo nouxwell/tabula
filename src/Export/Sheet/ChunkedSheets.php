@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Sheet;
+namespace Nouxwell\Tabula\Export\Sheet;
 
-use Balin\Tabula\Value\FormatContext;
 use InvalidArgumentException;
+use Nouxwell\Tabula\Value\FormatContext;
 
 /**
  * A new sheet every N rows.

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Page;
+namespace Nouxwell\Tabula\Export\Page;
 
-use Balin\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Exception\ExportException;
 
 /**
  * The geometry of a PDF page — the SINGLE source of truth.

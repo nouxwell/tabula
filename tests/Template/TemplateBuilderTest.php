@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Template;
+namespace Nouxwell\Tabula\Tests\Template;
 
-use Balin\Tabula\Port\ArrayTranslator;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Template\TemplateBuilder;
-use Balin\Tabula\Template\TemplateOptions;
-use Balin\Tabula\Tests\Fixture\Status;
-use Balin\Tabula\Tests\Fixture\TempDirectory;
+use Nouxwell\Tabula\Port\ArrayTranslator;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Template\TemplateBuilder;
+use Nouxwell\Tabula\Template\TemplateOptions;
+use Nouxwell\Tabula\Tests\Fixture\Status;
+use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\IOFactory;

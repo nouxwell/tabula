@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value;
+namespace Nouxwell\Tabula\Value;
 
-use Balin\Tabula\Exception\ValueException;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Value\Formatter\BoolFormatter;
-use Balin\Tabula\Value\Formatter\DateFormatter;
-use Balin\Tabula\Value\Formatter\EnumFormatter;
-use Balin\Tabula\Value\Formatter\MoneyFormatter;
-use Balin\Tabula\Value\Formatter\NumberFormatter;
-use Balin\Tabula\Value\Formatter\StringFormatter;
+use Nouxwell\Tabula\Exception\ValueException;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Value\Formatter\BoolFormatter;
+use Nouxwell\Tabula\Value\Formatter\DateFormatter;
+use Nouxwell\Tabula\Value\Formatter\EnumFormatter;
+use Nouxwell\Tabula\Value\Formatter\MoneyFormatter;
+use Nouxwell\Tabula\Value\Formatter\NumberFormatter;
+use Nouxwell\Tabula\Value\Formatter\StringFormatter;
 
 /**
  * Maps a type to a formatter.

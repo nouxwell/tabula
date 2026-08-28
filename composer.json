@@ -44,12 +44,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Balin\\Tabula\\": "src/"
+            "Nouxwell\\Tabula\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Balin\\Tabula\\Tests\\": "tests/"
+            "Nouxwell\\Tabula\\Tests\\": "tests/"
         }
     },
     "scripts": {

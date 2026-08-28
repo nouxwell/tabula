@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Exception;
+namespace Nouxwell\Tabula\Exception;
 
-use Balin\Tabula\Format;
+use Nouxwell\Tabula\Format;
 use RuntimeException;
 
 /** Thrown when the export pipeline is set up incorrectly. */

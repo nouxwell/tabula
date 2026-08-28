@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import;
+namespace Nouxwell\Tabula\Import;
 
 /** The result of a completed import. */
 final readonly class ImportResult

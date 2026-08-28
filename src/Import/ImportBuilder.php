@@ -2,23 +2,23 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import;
+namespace Nouxwell\Tabula\Import;
 
 use ArrayIterator;
-use Balin\Tabula\Exception\ImportException;
-use Balin\Tabula\Exception\ParseException;
-use Balin\Tabula\Import\Reader\ReaderRegistry;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Value\ParseContext;
-use Balin\Tabula\Value\Parser\StringParser;
-use Balin\Tabula\Value\ParserRegistry;
-use Balin\Tabula\Value\ValueParser;
 use Closure;
 use Iterator;
 use IteratorIterator;
+use Nouxwell\Tabula\Exception\ImportException;
+use Nouxwell\Tabula\Exception\ParseException;
+use Nouxwell\Tabula\Import\Reader\ReaderRegistry;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Value\ParseContext;
+use Nouxwell\Tabula\Value\Parser\StringParser;
+use Nouxwell\Tabula\Value\ParserRegistry;
+use Nouxwell\Tabula\Value\ValueParser;
 use Traversable;
 
 /**

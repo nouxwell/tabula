@@ -39,12 +39,12 @@ Requires PHP 8.3+. For PDF output also install `dompdf/dompdf`; if it is missing
 ## Quick start
 
 ```php
-use Balin\Tabula\Tabula;
-use Balin\Tabula\Format;
-use Balin\Tabula\Schema\{Schema, Field, Priority};
-use Balin\Tabula\Source\ArraySource;
-use Balin\Tabula\Port\ArrayTranslator;
-use Balin\Tabula\Settings\{TabulaSettings, NumberSettings};
+use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Schema\{Schema, Field, Priority};
+use Nouxwell\Tabula\Source\ArraySource;
+use Nouxwell\Tabula\Port\ArrayTranslator;
+use Nouxwell\Tabula\Settings\{TabulaSettings, NumberSettings};
 
 $schema = Schema::make('customer')
     ->title('export.customer.title')
@@ -100,7 +100,7 @@ You can hand the rows over yourself, or let the library page through them. The s
 both identically.
 
 ```php
-use Balin\Tabula\Source\{ArraySource, IteratorSource, CallableSource, DoctrineSource};
+use Nouxwell\Tabula\Source\{ArraySource, IteratorSource, CallableSource, DoctrineSource};
 
 ArraySource::of($rows);                      // rows already in hand
 IteratorSource::of(fn () => $generator());   // streaming in constant memory
@@ -160,8 +160,8 @@ to A3 landscape raises the budget to 18 — **enlarging the page widens the tabl
 extra configuration.
 
 ```php
-use Balin\Tabula\Format;
-use Balin\Tabula\Export\Page\{Page, ColumnBudget, Overflow};
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Export\Page\{Page, ColumnBudget, Overflow};
 
 $tabula->export($schema)
     ->from(ArraySource::of($rows))
@@ -210,7 +210,7 @@ to WinAnsi, which does **not** contain `ş ğ ı İ`; the only bundled family th
 ## Sheet strategies (tabs)
 
 ```php
-use Balin\Tabula\Export\Sheet\{SingleSheet, ChunkedSheets, GroupedSheets};
+use Nouxwell\Tabula\Export\Sheet\{SingleSheet, ChunkedSheets, GroupedSheets};
 
 ->sheets(new SingleSheet('Customers'))         // everything on one sheet (default)
 ->sheets(new ChunkedSheets(50_000))            // a new sheet every 50,000 rows
@@ -308,7 +308,7 @@ inside a queue worker.
 
 An enum value resolves to a translation key by trying, in order:
 
-1. `Balin\Tabula\Contract\TranslatableEnum::translationKey()`
+1. `Nouxwell\Tabula\Contract\TranslatableEnum::translationKey()`
 2. A `label(): string` method on the enum (a widespread convention — existing enums work unchanged)
 3. `BackedEnum::$value` or `UnitEnum::$name`
 
@@ -317,7 +317,7 @@ An enum value resolves to a translation key by trying, in order:
 `config/bundles.php`:
 
 ```php
-Balin\Tabula\Bridge\Symfony\TabulaBundle::class => ['all' => true],
+Nouxwell\Tabula\Bridge\Symfony\TabulaBundle::class => ['all' => true],
 ```
 
 `config/packages/tabula.yaml`:
@@ -352,13 +352,13 @@ tabula:
         repeat_header: true
 ```
 
-`Balin\Tabula\Tabula` can then be injected anywhere.
+`Nouxwell\Tabula\Tabula` can then be injected anywhere.
 
 **Writer settings.** There is no single right CSV default: a human opens the file in Excel (`;` plus a
 BOM), a machine expects RFC 4180 (`,`, no BOM). When you need both, pass the options at the call site:
 
 ```php
-use Balin\Tabula\Export\Writer\{CsvWriter, CsvOptions, XlsxWriter, XlsxOptions};
+use Nouxwell\Tabula\Export\Writer\{CsvWriter, CsvOptions, XlsxWriter, XlsxOptions};
 
 ->writer(new CsvWriter(CsvOptions::rfc4180()))   // machine-to-machine feed
 ->writer(new XlsxWriter(XlsxOptions::plain()))   // undecorated intermediate file

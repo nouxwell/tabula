@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Settings;
+namespace Nouxwell\Tabula\Settings;
 
 /**
  * The whole configuration of the library in one place.

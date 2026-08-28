@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Export\Sheet;
+namespace Nouxwell\Tabula\Tests\Export\Sheet;
 
-use Balin\Tabula\Export\Sheet\ChunkedSheets;
-use Balin\Tabula\Export\Sheet\GroupedSheets;
-use Balin\Tabula\Format;
-use Balin\Tabula\Port\PassthroughTranslator;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Source\ArraySource;
-use Balin\Tabula\Tabula;
-use Balin\Tabula\Tests\Fixture\TempDirectory;
-use Balin\Tabula\Value\FormatContext;
+use Nouxwell\Tabula\Export\Sheet\ChunkedSheets;
+use Nouxwell\Tabula\Export\Sheet\GroupedSheets;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Port\PassthroughTranslator;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Source\ArraySource;
+use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
+use Nouxwell\Tabula\Value\FormatContext;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

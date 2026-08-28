@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula;
+namespace Nouxwell\Tabula;
 
 /**
  * The output format.

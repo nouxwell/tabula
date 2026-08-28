@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Bridge\Symfony;
+namespace Nouxwell\Tabula\Bridge\Symfony;
 
-use Balin\Tabula\Port\PassthroughTranslator;
-use Balin\Tabula\Port\Translator;
+use Nouxwell\Tabula\Port\PassthroughTranslator;
+use Nouxwell\Tabula\Port\Translator;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;

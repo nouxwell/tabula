@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value;
+namespace Nouxwell\Tabula\Value;
 
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
 
 /**
  * The unit that turns a raw value into a cell.

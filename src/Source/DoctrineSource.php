@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Source;
+namespace Nouxwell\Tabula\Source;
 
-use Balin\Tabula\Exception\SourceException;
 use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\QueryBuilder;
+use Nouxwell\Tabula\Exception\SourceException;
 
 /**
  * A row source over a Doctrine `QueryBuilder`.

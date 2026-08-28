@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value;
+namespace Nouxwell\Tabula\Value;
 
-use Balin\Tabula\Exception\ParseException;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Value\Parser\BoolParser;
-use Balin\Tabula\Value\Parser\DateParser;
-use Balin\Tabula\Value\Parser\EnumParser;
-use Balin\Tabula\Value\Parser\MoneyParser;
-use Balin\Tabula\Value\Parser\NumberParser;
-use Balin\Tabula\Value\Parser\StringParser;
+use Nouxwell\Tabula\Exception\ParseException;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Value\Parser\BoolParser;
+use Nouxwell\Tabula\Value\Parser\DateParser;
+use Nouxwell\Tabula\Value\Parser\EnumParser;
+use Nouxwell\Tabula\Value\Parser\MoneyParser;
+use Nouxwell\Tabula\Value\Parser\NumberParser;
+use Nouxwell\Tabula\Value\Parser\StringParser;
 
 /**
  * Maps a type to a parser — the reverse-direction twin of `FormatterRegistry`.

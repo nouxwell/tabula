@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Bridge\Symfony;
+namespace Nouxwell\Tabula\Bridge\Symfony;
 
-use Balin\Tabula\Export\Writer\CsvOptions;
-use Balin\Tabula\Export\Writer\DefaultWriterFactory;
-use Balin\Tabula\Export\Writer\PdfOptions;
-use Balin\Tabula\Export\Writer\WriterFactory;
-use Balin\Tabula\Export\Writer\XlsxOptions;
-use Balin\Tabula\Import\Reader\ReaderRegistry;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Settings\DateSettings;
-use Balin\Tabula\Settings\NumberSettings;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Tabula;
-use Balin\Tabula\Template\TemplateBuilder;
-use Balin\Tabula\Template\TemplateOptions;
-use Balin\Tabula\Value\FormatterRegistry;
-use Balin\Tabula\Value\ParserRegistry;
-use Balin\Tabula\Value\ValueResolver;
+use Nouxwell\Tabula\Export\Writer\CsvOptions;
+use Nouxwell\Tabula\Export\Writer\DefaultWriterFactory;
+use Nouxwell\Tabula\Export\Writer\PdfOptions;
+use Nouxwell\Tabula\Export\Writer\WriterFactory;
+use Nouxwell\Tabula\Export\Writer\XlsxOptions;
+use Nouxwell\Tabula\Import\Reader\ReaderRegistry;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Settings\DateSettings;
+use Nouxwell\Tabula\Settings\NumberSettings;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Template\TemplateBuilder;
+use Nouxwell\Tabula\Template\TemplateOptions;
+use Nouxwell\Tabula\Value\FormatterRegistry;
+use Nouxwell\Tabula\Value\ParserRegistry;
+use Nouxwell\Tabula\Value\ValueResolver;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -38,7 +38,7 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
  *
  * Installation — `config/bundles.php`:
  *
- *     Balin\Tabula\Bridge\Symfony\TabulaBundle::class => ['all' => true],
+ *     Nouxwell\Tabula\Bridge\Symfony\TabulaBundle::class => ['all' => true],
  *
  * Configuration — `config/packages/tabula.yaml`:
  *
@@ -55,7 +55,7 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
  *         template:
  *             sample_rows: 5
  *
- * After that, `Balin\Tabula\Tabula` can be autowired anywhere.
+ * After that, `Nouxwell\Tabula\Tabula` can be autowired anywhere.
  */
 final class TabulaBundle extends AbstractBundle
 {

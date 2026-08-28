@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export;
+namespace Nouxwell\Tabula\Export;
 
-use Balin\Tabula\Schema\Align;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Schema\Priority;
-use Balin\Tabula\Value\FormatContext;
 use Closure;
+use Nouxwell\Tabula\Schema\Align;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Schema\Priority;
+use Nouxwell\Tabula\Value\FormatContext;
 
 /**
  * The RESOLVED column handed to the writer.

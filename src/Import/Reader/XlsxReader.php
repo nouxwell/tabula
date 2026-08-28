@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import\Reader;
+namespace Nouxwell\Tabula\Import\Reader;
 
-use Balin\Tabula\Exception\ImportException;
 use Generator;
+use Nouxwell\Tabula\Exception\ImportException;
 use PhpOffice\PhpSpreadsheet\Cell\Cell as SpreadsheetCell;
 use PhpOffice\PhpSpreadsheet\Exception as SpreadsheetException;
 use PhpOffice\PhpSpreadsheet\IOFactory;

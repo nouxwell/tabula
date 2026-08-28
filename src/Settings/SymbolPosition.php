@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Settings;
+namespace Nouxwell\Tabula\Settings;
 
 /** Where the currency symbol sits relative to the number. */
 enum SymbolPosition: string

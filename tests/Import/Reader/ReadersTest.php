@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Import\Reader;
+namespace Nouxwell\Tabula\Tests\Import\Reader;
 
-use Balin\Tabula\Exception\ImportException;
-use Balin\Tabula\Import\Reader\CsvReader;
-use Balin\Tabula\Import\Reader\Reader;
-use Balin\Tabula\Import\Reader\ReaderRegistry;
-use Balin\Tabula\Import\Reader\XlsxReader;
-use Balin\Tabula\Tests\Fixture\TempDirectory;
+use Nouxwell\Tabula\Exception\ImportException;
+use Nouxwell\Tabula\Import\Reader\CsvReader;
+use Nouxwell\Tabula\Import\Reader\Reader;
+use Nouxwell\Tabula\Import\Reader\ReaderRegistry;
+use Nouxwell\Tabula\Import\Reader\XlsxReader;
+use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx as SpreadsheetXlsxWriter;

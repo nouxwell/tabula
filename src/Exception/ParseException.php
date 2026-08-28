@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Exception;
+namespace Nouxwell\Tabula\Exception;
 
-use Balin\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Field;
 use RuntimeException;
 
 /**

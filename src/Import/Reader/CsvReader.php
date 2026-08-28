@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import\Reader;
+namespace Nouxwell\Tabula\Import\Reader;
 
-use Balin\Tabula\Exception\ImportException;
 use Generator;
+use Nouxwell\Tabula\Exception\ImportException;
 
 /**
  * A CSV reader that works through native PHP streams (fopen/fgetcsv).

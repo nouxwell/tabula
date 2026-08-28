@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Value;
+namespace Nouxwell\Tabula\Tests\Value;
 
-use Balin\Tabula\Format;
-use Balin\Tabula\Port\PassthroughTranslator;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Settings\NumberSettings;
-use Balin\Tabula\Settings\SymbolPosition;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Value\FormatContext;
-use Balin\Tabula\Value\Formatter\MoneyFormatter;
-use Balin\Tabula\Value\Formatter\NumberFormatter;
-use Balin\Tabula\Value\ParseContext;
-use Balin\Tabula\Value\Parser\MoneyParser;
-use Balin\Tabula\Value\Parser\NumberParser;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Port\PassthroughTranslator;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Settings\NumberSettings;
+use Nouxwell\Tabula\Settings\SymbolPosition;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Value\FormatContext;
+use Nouxwell\Tabula\Value\Formatter\MoneyFormatter;
+use Nouxwell\Tabula\Value\Formatter\NumberFormatter;
+use Nouxwell\Tabula\Value\ParseContext;
+use Nouxwell\Tabula\Value\Parser\MoneyParser;
+use Nouxwell\Tabula\Value\Parser\NumberParser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

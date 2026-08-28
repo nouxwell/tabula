@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Bridge\Symfony;
+namespace Nouxwell\Tabula\Tests\Bridge\Symfony;
 
-use Balin\Tabula\Bridge\Symfony\SettingsFactory;
-use Balin\Tabula\Bridge\Symfony\SymfonyTranslator;
-use Balin\Tabula\Bridge\Symfony\TabulaBundle;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Settings\SymbolPosition;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Tabula;
-use Balin\Tabula\Tests\Fixture\StubSymfonyTranslator;
 use Generator;
+use Nouxwell\Tabula\Bridge\Symfony\SettingsFactory;
+use Nouxwell\Tabula\Bridge\Symfony\SymfonyTranslator;
+use Nouxwell\Tabula\Bridge\Symfony\TabulaBundle;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Settings\SymbolPosition;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Tests\Fixture\StubSymfonyTranslator;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;

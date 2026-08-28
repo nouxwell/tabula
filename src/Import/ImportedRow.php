@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import;
+namespace Nouxwell\Tabula\Import;
 
-use Balin\Tabula\Exception\ImportException;
+use Nouxwell\Tabula\Exception\ImportException;
 
 /**
  * A single parsed and validated row — what gets handed to the callback.

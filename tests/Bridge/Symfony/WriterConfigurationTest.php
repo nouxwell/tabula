@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Bridge\Symfony;
+namespace Nouxwell\Tabula\Tests\Bridge\Symfony;
 
-use Balin\Tabula\Bridge\Symfony\SettingsFactory;
-use Balin\Tabula\Bridge\Symfony\TabulaBundle;
-use Balin\Tabula\Exception\WriterException;
-use Balin\Tabula\Export\Page\Page;
-use Balin\Tabula\Format;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Source\ArraySource;
-use Balin\Tabula\Tabula;
-use Balin\Tabula\Tests\Fixture\PdfDocument;
-use Balin\Tabula\Tests\Fixture\StubSymfonyTranslator;
-use Balin\Tabula\Tests\Fixture\TempDirectory;
 use InvalidArgumentException;
+use Nouxwell\Tabula\Bridge\Symfony\SettingsFactory;
+use Nouxwell\Tabula\Bridge\Symfony\TabulaBundle;
+use Nouxwell\Tabula\Exception\WriterException;
+use Nouxwell\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Source\ArraySource;
+use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Tests\Fixture\PdfDocument;
+use Nouxwell\Tabula\Tests\Fixture\StubSymfonyTranslator;
+use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Page;
+namespace Nouxwell\Tabula\Export\Page;
 
 /**
  * Standard paper sizes, in millimetres, in PORTRAIT orientation.

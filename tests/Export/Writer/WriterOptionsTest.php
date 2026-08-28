@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Export\Writer;
+namespace Nouxwell\Tabula\Tests\Export\Writer;
 
-use Balin\Tabula\Export\Writer\CsvOptions;
-use Balin\Tabula\Export\Writer\DefaultWriterFactory;
-use Balin\Tabula\Export\Writer\XlsxOptions;
-use Balin\Tabula\Format;
-use Balin\Tabula\Port\ArrayTranslator;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Source\ArraySource;
-use Balin\Tabula\Tabula;
-use Balin\Tabula\Tests\Fixture\TempDirectory;
+use Nouxwell\Tabula\Export\Writer\CsvOptions;
+use Nouxwell\Tabula\Export\Writer\DefaultWriterFactory;
+use Nouxwell\Tabula\Export\Writer\XlsxOptions;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Port\ArrayTranslator;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Source\ArraySource;
+use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PHPUnit\Framework\Attributes\CoversClass;

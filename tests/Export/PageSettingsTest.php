@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Export;
+namespace Nouxwell\Tabula\Tests\Export;
 
-use Balin\Tabula\Exception\ExportException;
-use Balin\Tabula\Export\ExportBuilder;
-use Balin\Tabula\Export\Page\ColumnBudget;
-use Balin\Tabula\Export\Page\Page;
-use Balin\Tabula\Export\Writer\PdfOptions;
-use Balin\Tabula\Export\Writer\PdfWriter;
-use Balin\Tabula\Format;
-use Balin\Tabula\Port\ArrayTranslator;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Source\ArraySource;
-use Balin\Tabula\Tabula;
-use Balin\Tabula\Tests\Fixture\PdfDocument;
-use Balin\Tabula\Tests\Fixture\TempDirectory;
+use Nouxwell\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Export\ExportBuilder;
+use Nouxwell\Tabula\Export\Page\ColumnBudget;
+use Nouxwell\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Export\Writer\PdfOptions;
+use Nouxwell\Tabula\Export\Writer\PdfWriter;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Port\ArrayTranslator;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Source\ArraySource;
+use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Tests\Fixture\PdfDocument;
+use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

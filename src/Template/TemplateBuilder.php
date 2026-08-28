@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Template;
+namespace Nouxwell\Tabula\Template;
 
-use Balin\Tabula\Exception\ExportException;
-use Balin\Tabula\Format;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Schema\Align;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Value\FormatContext;
-use Balin\Tabula\Value\FormatterRegistry;
 use Closure;
+use Nouxwell\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Schema\Align;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Value\FormatContext;
+use Nouxwell\Tabula\Value\FormatterRegistry;
 use PhpOffice\PhpSpreadsheet\Cell\AddressRange;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;

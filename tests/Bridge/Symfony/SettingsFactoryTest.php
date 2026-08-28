@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Bridge\Symfony;
+namespace Nouxwell\Tabula\Tests\Bridge\Symfony;
 
-use Balin\Tabula\Bridge\Symfony\SettingsFactory;
-use Balin\Tabula\Export\Column;
-use Balin\Tabula\Export\Page\Orientation;
-use Balin\Tabula\Export\Page\Overflow;
-use Balin\Tabula\Schema\Align;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Schema\Priority;
-use Balin\Tabula\Settings\DateSettings;
-use Balin\Tabula\Settings\NumberSettings;
-use Balin\Tabula\Settings\SymbolPosition;
+use Nouxwell\Tabula\Bridge\Symfony\SettingsFactory;
+use Nouxwell\Tabula\Export\Column;
+use Nouxwell\Tabula\Export\Page\Orientation;
+use Nouxwell\Tabula\Export\Page\Overflow;
+use Nouxwell\Tabula\Schema\Align;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Schema\Priority;
+use Nouxwell\Tabula\Settings\DateSettings;
+use Nouxwell\Tabula\Settings\NumberSettings;
+use Nouxwell\Tabula\Settings\SymbolPosition;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;

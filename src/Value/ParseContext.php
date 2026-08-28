@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value;
+namespace Nouxwell\Tabula\Value;
 
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Settings\TabulaSettings;
 
 /**
  * The context the parsers need — the mirror image of `FormatContext`.

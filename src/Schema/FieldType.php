@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Schema;
+namespace Nouxwell\Tabula\Schema;
 
 /**
  * Field types — a SINGLE vocabulary.

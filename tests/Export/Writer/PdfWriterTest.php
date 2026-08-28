@@ -2,26 +2,26 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Export\Writer;
+namespace Nouxwell\Tabula\Tests\Export\Writer;
 
-use Balin\Tabula\Exception\WriterException;
-use Balin\Tabula\Export\Column;
-use Balin\Tabula\Export\Page\ColumnBudget;
-use Balin\Tabula\Export\Page\Overflow;
-use Balin\Tabula\Export\Page\Page;
-use Balin\Tabula\Export\Writer\PdfOptions;
-use Balin\Tabula\Export\Writer\PdfWriter;
-use Balin\Tabula\Format;
-use Balin\Tabula\Port\ArrayTranslator;
-use Balin\Tabula\Schema\Align;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Schema\Priority;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Source\ArraySource;
-use Balin\Tabula\Tabula;
-use Balin\Tabula\Tests\Fixture\TempDirectory;
-use Balin\Tabula\Value\Cell;
+use Nouxwell\Tabula\Exception\WriterException;
+use Nouxwell\Tabula\Export\Column;
+use Nouxwell\Tabula\Export\Page\ColumnBudget;
+use Nouxwell\Tabula\Export\Page\Overflow;
+use Nouxwell\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Export\Writer\PdfOptions;
+use Nouxwell\Tabula\Export\Writer\PdfWriter;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Port\ArrayTranslator;
+use Nouxwell\Tabula\Schema\Align;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Schema\Priority;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Source\ArraySource;
+use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
+use Nouxwell\Tabula\Value\Cell;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value\Parser;
+namespace Nouxwell\Tabula\Value\Parser;
 
 use BackedEnum;
-use Balin\Tabula\Contract\TranslatableEnum;
-use Balin\Tabula\Exception\ParseException;
-use Balin\Tabula\Exception\ValueException;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Value\ParseContext;
-use Balin\Tabula\Value\ValueParser;
 use Closure;
+use Nouxwell\Tabula\Contract\TranslatableEnum;
+use Nouxwell\Tabula\Exception\ParseException;
+use Nouxwell\Tabula\Exception\ValueException;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Value\ParseContext;
+use Nouxwell\Tabula\Value\ValueParser;
 use Stringable;
 use UnitEnum;
 

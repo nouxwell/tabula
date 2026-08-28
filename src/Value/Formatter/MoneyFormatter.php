@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value\Formatter;
+namespace Nouxwell\Tabula\Value\Formatter;
 
 use BackedEnum;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Settings\NumberSettings;
-use Balin\Tabula\Settings\SymbolPosition;
-use Balin\Tabula\Value\Cell;
-use Balin\Tabula\Value\FormatContext;
-use Balin\Tabula\Value\ValueFormatter;
 use Closure;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Settings\NumberSettings;
+use Nouxwell\Tabula\Settings\SymbolPosition;
+use Nouxwell\Tabula\Value\Cell;
+use Nouxwell\Tabula\Value\FormatContext;
+use Nouxwell\Tabula\Value\ValueFormatter;
 use Stringable;
 
 /**

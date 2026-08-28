@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export;
+namespace Nouxwell\Tabula\Export;
 
-use Balin\Tabula\Exception\ExportException;
-use Balin\Tabula\Format;
+use Nouxwell\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Format;
 
 /** The result of a completed export. */
 final readonly class ExportResult

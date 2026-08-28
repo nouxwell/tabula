@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import;
+namespace Nouxwell\Tabula\Import;
 
 /**
  * What to do when a broken row is encountered.

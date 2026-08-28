@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Export\Page;
+namespace Nouxwell\Tabula\Tests\Export\Page;
 
-use Balin\Tabula\Exception\ExportException;
-use Balin\Tabula\Export\Column;
-use Balin\Tabula\Export\Page\ColumnBudget;
-use Balin\Tabula\Export\Page\Overflow;
-use Balin\Tabula\Export\Page\Page;
-use Balin\Tabula\Schema\Align;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Schema\Priority;
+use Nouxwell\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Export\Column;
+use Nouxwell\Tabula\Export\Page\ColumnBudget;
+use Nouxwell\Tabula\Export\Page\Overflow;
+use Nouxwell\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Schema\Align;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Schema\Priority;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

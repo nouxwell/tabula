@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import\Reader;
+namespace Nouxwell\Tabula\Import\Reader;
 
-use Balin\Tabula\Exception\ImportException;
+use Nouxwell\Tabula\Exception\ImportException;
 
 /**
  * Maps a file to a reader.

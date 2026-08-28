@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Import;
+namespace Nouxwell\Tabula\Tests\Import;
 
-use Balin\Tabula\Exception\ImportException;
-use Balin\Tabula\Import\ImportedRow;
-use Balin\Tabula\Import\ImportResult;
-use Balin\Tabula\Import\MatchStrategy;
-use Balin\Tabula\Port\ArrayTranslator;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Settings\NumberSettings;
-use Balin\Tabula\Settings\SymbolPosition;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Tabula;
-use Balin\Tabula\Template\TemplateBuilder;
-use Balin\Tabula\Template\TemplateOptions;
-use Balin\Tabula\Tests\Fixture\Status;
-use Balin\Tabula\Tests\Fixture\TempDirectory;
 use DateTimeImmutable;
+use Nouxwell\Tabula\Exception\ImportException;
+use Nouxwell\Tabula\Import\ImportedRow;
+use Nouxwell\Tabula\Import\ImportResult;
+use Nouxwell\Tabula\Import\MatchStrategy;
+use Nouxwell\Tabula\Port\ArrayTranslator;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Settings\NumberSettings;
+use Nouxwell\Tabula\Settings\SymbolPosition;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Template\TemplateBuilder;
+use Nouxwell\Tabula\Template\TemplateOptions;
+use Nouxwell\Tabula\Tests\Fixture\Status;
+use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx as SpreadsheetXlsxWriter;

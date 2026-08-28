@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Writer;
+namespace Nouxwell\Tabula\Export\Writer;
 
-use Balin\Tabula\Exception\ExportException;
-use Balin\Tabula\Exception\WriterException;
-use Balin\Tabula\Export\Column;
-use Balin\Tabula\Export\Page\ColumnBudget;
-use Balin\Tabula\Export\Page\Page;
-use Balin\Tabula\Schema\Align;
-use Balin\Tabula\Value\Cell;
 use Dompdf\Dompdf;
 use Dompdf\Exception as DompdfException;
 use Dompdf\Options;
+use Nouxwell\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Exception\WriterException;
+use Nouxwell\Tabula\Export\Column;
+use Nouxwell\Tabula\Export\Page\ColumnBudget;
+use Nouxwell\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Schema\Align;
+use Nouxwell\Tabula\Value\Cell;
 
 /**
  * A PDF writer built on Dompdf.

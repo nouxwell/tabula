@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Schema;
+namespace Nouxwell\Tabula\Schema;
 
-use Balin\Tabula\Exception\SchemaException;
-use Balin\Tabula\Format;
 use Closure;
+use Nouxwell\Tabula\Exception\SchemaException;
+use Nouxwell\Tabula\Format;
 
 /**
  * All of the field definitions of a table — the SINGLE source of truth.

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Schema;
+namespace Nouxwell\Tabula\Schema;
 
-use Balin\Tabula\Format;
 use Closure;
+use Nouxwell\Tabula\Format;
 
 /**
  * The SINGLE definition of a column.

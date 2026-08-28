@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import;
+namespace Nouxwell\Tabula\Import;
 
-use Balin\Tabula\Exception\ImportException;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Value\ParseContext;
-use Balin\Tabula\Value\Parser\StringParser;
 use Closure;
+use Nouxwell\Tabula\Exception\ImportException;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Value\ParseContext;
+use Nouxwell\Tabula\Value\Parser\StringParser;
 
 /**
  * Binds the file's headers to the schema's fields — THIS IS WHERE THE FLAW OF THE SYSTEM THIS

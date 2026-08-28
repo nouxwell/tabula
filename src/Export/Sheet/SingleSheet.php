@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Sheet;
+namespace Nouxwell\Tabula\Export\Sheet;
 
-use Balin\Tabula\Value\FormatContext;
 use InvalidArgumentException;
+use Nouxwell\Tabula\Value\FormatContext;
 
 /**
  * Everything on a single sheet — the default behaviour.

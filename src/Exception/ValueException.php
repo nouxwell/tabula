@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Exception;
+namespace Nouxwell\Tabula\Exception;
 
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
 use RuntimeException;
 
 /** Thrown when a value cannot be read out of a row, or cannot be formatted. */

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Writer;
+namespace Nouxwell\Tabula\Export\Writer;
 
-use Balin\Tabula\Format;
+use Nouxwell\Tabula\Format;
 
 /**
  * Produces a writer for a given format.

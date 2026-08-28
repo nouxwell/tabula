@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value\Formatter;
+namespace Nouxwell\Tabula\Value\Formatter;
 
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Value\Cell;
-use Balin\Tabula\Value\FormatContext;
-use Balin\Tabula\Value\ValueFormatter;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Value\Cell;
+use Nouxwell\Tabula\Value\FormatContext;
+use Nouxwell\Tabula\Value\ValueFormatter;
 
 /**
  * Boolean fields.

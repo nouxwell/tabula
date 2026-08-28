@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Fixture;
+namespace Nouxwell\Tabula\Tests\Fixture;
 
 /**
  * The log of the calls that go to a fake `Doctrine\ORM\Query`.

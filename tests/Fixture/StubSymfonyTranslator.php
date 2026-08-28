@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Fixture;
+namespace Nouxwell\Tabula\Tests\Fixture;
 
 use Symfony\Contracts\Translation\TranslatorInterface;
 

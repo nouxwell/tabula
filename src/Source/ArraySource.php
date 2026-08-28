@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Source;
+namespace Nouxwell\Tabula\Source;
 
 /**
  * An array of rows already at hand.

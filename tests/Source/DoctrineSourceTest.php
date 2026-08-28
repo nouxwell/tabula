@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Source;
+namespace Nouxwell\Tabula\Tests\Source;
 
-use Balin\Tabula\Exception\SourceException;
-use Balin\Tabula\Exception\TabulaException;
-use Balin\Tabula\Source\DataSource;
-use Balin\Tabula\Source\DoctrineSource;
-use Balin\Tabula\Tests\Fixture\QueryCallLog;
 use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
 use Doctrine\ORM\QueryBuilder;
 use Generator;
+use Nouxwell\Tabula\Exception\SourceException;
+use Nouxwell\Tabula\Exception\TabulaException;
+use Nouxwell\Tabula\Source\DataSource;
+use Nouxwell\Tabula\Source\DoctrineSource;
+use Nouxwell\Tabula\Tests\Fixture\QueryCallLog;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;

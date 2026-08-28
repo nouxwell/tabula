@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Writer;
+namespace Nouxwell\Tabula\Export\Writer;
 
-use Balin\Tabula\Exception\WriterException;
-use Balin\Tabula\Export\Page\ColumnBudget;
-use Balin\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Exception\WriterException;
+use Nouxwell\Tabula\Export\Page\ColumnBudget;
+use Nouxwell\Tabula\Export\Page\Page;
 
 /**
  * The options of the PDF writer.

@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula;
+namespace Nouxwell\Tabula;
 
-use Balin\Tabula\Export\ExportBuilder;
-use Balin\Tabula\Export\Writer\DefaultWriterFactory;
-use Balin\Tabula\Export\Writer\WriterFactory;
-use Balin\Tabula\Import\ImportBuilder;
-use Balin\Tabula\Import\Reader\ReaderRegistry;
-use Balin\Tabula\Port\PassthroughTranslator;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Template\TemplateBuilder;
-use Balin\Tabula\Template\TemplateOptions;
-use Balin\Tabula\Value\FormatterRegistry;
-use Balin\Tabula\Value\ParserRegistry;
-use Balin\Tabula\Value\ValueResolver;
+use Nouxwell\Tabula\Export\ExportBuilder;
+use Nouxwell\Tabula\Export\Writer\DefaultWriterFactory;
+use Nouxwell\Tabula\Export\Writer\WriterFactory;
+use Nouxwell\Tabula\Import\ImportBuilder;
+use Nouxwell\Tabula\Import\Reader\ReaderRegistry;
+use Nouxwell\Tabula\Port\PassthroughTranslator;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Template\TemplateBuilder;
+use Nouxwell\Tabula\Template\TemplateOptions;
+use Nouxwell\Tabula\Value\FormatterRegistry;
+use Nouxwell\Tabula\Value\ParserRegistry;
+use Nouxwell\Tabula\Value\ValueResolver;
 
 /**
  * The entry point of the library.

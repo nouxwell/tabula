@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Fixture;
+namespace Nouxwell\Tabula\Tests\Fixture;
 
 /**
  * Imitates a widespread convention of the system this replaces: the enum carries a `label()`

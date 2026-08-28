@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Port;
+namespace Nouxwell\Tabula\Port;
 
 /**
  * Translates nothing; returns the key exactly as it came in.

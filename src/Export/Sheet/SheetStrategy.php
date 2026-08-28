@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Sheet;
+namespace Nouxwell\Tabula\Export\Sheet;
 
-use Balin\Tabula\Value\FormatContext;
+use Nouxwell\Tabula\Value\FormatContext;
 
 /**
  * How rows are split across sheets.

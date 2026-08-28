@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Writer;
+namespace Nouxwell\Tabula\Export\Writer;
 
-use Balin\Tabula\Exception\WriterException;
+use Nouxwell\Tabula\Exception\WriterException;
 
 /**
  * The options of the CSV writer.

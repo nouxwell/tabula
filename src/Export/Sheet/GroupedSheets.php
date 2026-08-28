@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Sheet;
+namespace Nouxwell\Tabula\Export\Sheet;
 
 use BackedEnum;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Value\FormatContext;
-use Balin\Tabula\Value\ValueResolver;
 use Closure;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Value\FormatContext;
+use Nouxwell\Tabula\Value\ValueResolver;
 use UnitEnum;
 
 /**

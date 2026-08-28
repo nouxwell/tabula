@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value\Parser;
+namespace Nouxwell\Tabula\Value\Parser;
 
-use Balin\Tabula\Exception\ParseException;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Value\Formatter\NumberFormatter;
-use Balin\Tabula\Value\ParseContext;
-use Balin\Tabula\Value\ValueParser;
+use Nouxwell\Tabula\Exception\ParseException;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Value\Formatter\NumberFormatter;
+use Nouxwell\Tabula\Value\ParseContext;
+use Nouxwell\Tabula\Value\ValueParser;
 
 /**
  * The parser for integer, decimal and quantity fields.

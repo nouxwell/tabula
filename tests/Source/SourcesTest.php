@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Source;
+namespace Nouxwell\Tabula\Tests\Source;
 
-use Balin\Tabula\Source\ArraySource;
-use Balin\Tabula\Source\CallableSource;
-use Balin\Tabula\Source\DataSource;
-use Balin\Tabula\Source\IteratorSource;
 use Generator;
 use InvalidArgumentException;
+use Nouxwell\Tabula\Source\ArraySource;
+use Nouxwell\Tabula\Source\CallableSource;
+use Nouxwell\Tabula\Source\DataSource;
+use Nouxwell\Tabula\Source\IteratorSource;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

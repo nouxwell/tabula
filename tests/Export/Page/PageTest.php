@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Export\Page;
+namespace Nouxwell\Tabula\Tests\Export\Page;
 
-use Balin\Tabula\Exception\ExportException;
-use Balin\Tabula\Export\Page\Orientation;
-use Balin\Tabula\Export\Page\Page;
-use Balin\Tabula\Export\Page\PageSize;
+use Nouxwell\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Export\Page\Orientation;
+use Nouxwell\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Export\Page\PageSize;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

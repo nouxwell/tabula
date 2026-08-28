@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value;
+namespace Nouxwell\Tabula\Value;
 
 use ArrayAccess;
-use Balin\Tabula\Schema\Field;
 use Closure;
+use Nouxwell\Tabula\Schema\Field;
 
 /**
  * Reads a field's raw value out of a row.

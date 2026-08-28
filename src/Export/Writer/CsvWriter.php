@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Writer;
+namespace Nouxwell\Tabula\Export\Writer;
 
-use Balin\Tabula\Exception\ExportException;
-use Balin\Tabula\Exception\WriterException;
-use Balin\Tabula\Export\Column;
-use Balin\Tabula\Value\Cell;
+use Nouxwell\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Exception\WriterException;
+use Nouxwell\Tabula\Export\Column;
+use Nouxwell\Tabula\Value\Cell;
 
 /**
  * A CSV writer that writes through native PHP streams (fopen/fputcsv).

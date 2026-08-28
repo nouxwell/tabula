@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Value;
+namespace Nouxwell\Tabula\Tests\Value;
 
-use Balin\Tabula\Settings\NumberSettings;
-use Balin\Tabula\Value\Formatter\NumberFormatter;
+use Nouxwell\Tabula\Settings\NumberSettings;
+use Nouxwell\Tabula\Value\Formatter\NumberFormatter;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

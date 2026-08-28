@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Port;
+namespace Nouxwell\Tabula\Port;
 
 /**
  * The default, framework-free translator implementation — so the library can stand on its own.

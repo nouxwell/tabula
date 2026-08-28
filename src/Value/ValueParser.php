@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value;
+namespace Nouxwell\Tabula\Value;
 
-use Balin\Tabula\Exception\ParseException;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Exception\ParseException;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
 
 /**
  * Converts the raw value in a cell to the field's type — the reverse direction of `ValueFormatter`.

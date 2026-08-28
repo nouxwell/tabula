@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Bridge\Symfony;
+namespace Nouxwell\Tabula\Bridge\Symfony;
 
-use Balin\Tabula\Export\Page\ColumnBudget;
-use Balin\Tabula\Export\Page\Orientation;
-use Balin\Tabula\Export\Page\Overflow;
-use Balin\Tabula\Export\Page\Page;
-use Balin\Tabula\Export\Page\PageSize;
-use Balin\Tabula\Export\Writer\CsvOptions;
-use Balin\Tabula\Export\Writer\PdfOptions;
-use Balin\Tabula\Export\Writer\XlsxOptions;
-use Balin\Tabula\Settings\DateSettings;
-use Balin\Tabula\Settings\NumberSettings;
-use Balin\Tabula\Settings\SymbolPosition;
-use Balin\Tabula\Settings\TabulaSettings;
 use InvalidArgumentException;
+use Nouxwell\Tabula\Export\Page\ColumnBudget;
+use Nouxwell\Tabula\Export\Page\Orientation;
+use Nouxwell\Tabula\Export\Page\Overflow;
+use Nouxwell\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Export\Page\PageSize;
+use Nouxwell\Tabula\Export\Writer\CsvOptions;
+use Nouxwell\Tabula\Export\Writer\PdfOptions;
+use Nouxwell\Tabula\Export\Writer\XlsxOptions;
+use Nouxwell\Tabula\Settings\DateSettings;
+use Nouxwell\Tabula\Settings\NumberSettings;
+use Nouxwell\Tabula\Settings\SymbolPosition;
+use Nouxwell\Tabula\Settings\TabulaSettings;
 
 /**
  * Builds the settings objects from a configuration array.

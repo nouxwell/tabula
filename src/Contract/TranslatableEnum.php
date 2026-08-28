@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Contract;
+namespace Nouxwell\Tabula\Contract;
 
 /**
  * An enum that knows its own translation key.

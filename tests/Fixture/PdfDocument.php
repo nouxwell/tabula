@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Fixture;
+namespace Nouxwell\Tabula\Tests\Fixture;
 
-use Balin\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Export\Page\Page;
 use PHPUnit\Framework\Assert;
 
 /**

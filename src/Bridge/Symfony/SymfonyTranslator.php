@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Bridge\Symfony;
+namespace Nouxwell\Tabula\Bridge\Symfony;
 
-use Balin\Tabula\Port\Translator;
+use Nouxwell\Tabula\Port\Translator;
 use Symfony\Component\Translation\MessageCatalogueInterface;
 use Symfony\Component\Translation\TranslatorBagInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;

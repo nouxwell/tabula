@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export;
+namespace Nouxwell\Tabula\Export;
 
-use Balin\Tabula\Exception\ExportException;
-use Balin\Tabula\Export\Page\ColumnBudget;
-use Balin\Tabula\Export\Page\Page;
-use Balin\Tabula\Export\Sheet\SheetStrategy;
-use Balin\Tabula\Export\Sheet\SingleSheet;
-use Balin\Tabula\Export\Writer\PageAware;
-use Balin\Tabula\Export\Writer\Writer;
-use Balin\Tabula\Export\Writer\WriterFactory;
-use Balin\Tabula\Format;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Value\FormatContext;
-use Balin\Tabula\Value\FormatterRegistry;
-use Balin\Tabula\Value\ValueResolver;
 use Closure;
+use Nouxwell\Tabula\Exception\ExportException;
+use Nouxwell\Tabula\Export\Page\ColumnBudget;
+use Nouxwell\Tabula\Export\Page\Page;
+use Nouxwell\Tabula\Export\Sheet\SheetStrategy;
+use Nouxwell\Tabula\Export\Sheet\SingleSheet;
+use Nouxwell\Tabula\Export\Writer\PageAware;
+use Nouxwell\Tabula\Export\Writer\Writer;
+use Nouxwell\Tabula\Export\Writer\WriterFactory;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Value\FormatContext;
+use Nouxwell\Tabula\Value\FormatterRegistry;
+use Nouxwell\Tabula\Value\ValueResolver;
 
 /**
  * Fluent set-up and execution of a single export.
@@ -34,7 +34,7 @@ use Closure;
  */
 final class ExportBuilder
 {
-    private ?\Balin\Tabula\Source\DataSource $source = null;
+    private ?\Nouxwell\Tabula\Source\DataSource $source = null;
 
     /** @var list<string>|null null = every field in the schema */
     private ?array $keys = null;
@@ -63,7 +63,7 @@ final class ExportBuilder
 
     // ---------------------------------------------------------------- set-up
 
-    public function from(\Balin\Tabula\Source\DataSource $source): self
+    public function from(\Nouxwell\Tabula\Source\DataSource $source): self
     {
         return $this->with(static function (self $b) use ($source): void {
             $b->source = $source;
@@ -271,7 +271,7 @@ final class ExportBuilder
     /**
      * @param list<Field> $fields
      *
-     * @return list<\Balin\Tabula\Value\Cell>
+     * @return list<\Nouxwell\Tabula\Value\Cell>
      */
     private function buildRow(array $fields, mixed $row, FormatContext $context): array
     {

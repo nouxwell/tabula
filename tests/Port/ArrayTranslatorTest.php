@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Port;
+namespace Nouxwell\Tabula\Tests\Port;
 
-use Balin\Tabula\Port\ArrayTranslator;
-use Balin\Tabula\Port\Translator;
+use Nouxwell\Tabula\Port\ArrayTranslator;
+use Nouxwell\Tabula\Port\Translator;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

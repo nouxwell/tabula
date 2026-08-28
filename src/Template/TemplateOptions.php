@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Template;
+namespace Nouxwell\Tabula\Template;
 
-use Balin\Tabula\Export\Writer\XlsxOptions;
+use Nouxwell\Tabula\Export\Writer\XlsxOptions;
 
 /**
  * The generation settings of an import template.

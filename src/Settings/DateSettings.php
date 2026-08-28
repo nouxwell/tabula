@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Settings;
+namespace Nouxwell\Tabula\Settings;
 
-use Balin\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Schema\FieldType;
 
 /** Date formatting settings. If the field supplies its own `pattern()` value, that one wins. */
 final readonly class DateSettings

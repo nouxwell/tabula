@@ -2,23 +2,23 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Value\Parser;
+namespace Nouxwell\Tabula\Tests\Value\Parser;
 
-use Balin\Tabula\Exception\ParseException;
-use Balin\Tabula\Format;
-use Balin\Tabula\Port\ArrayTranslator;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\FieldType;
-use Balin\Tabula\Settings\NumberSettings;
-use Balin\Tabula\Settings\SymbolPosition;
-use Balin\Tabula\Settings\TabulaSettings;
-use Balin\Tabula\Tests\Fixture\Status;
-use Balin\Tabula\Value\FormatContext;
-use Balin\Tabula\Value\FormatterRegistry;
-use Balin\Tabula\Value\ParseContext;
-use Balin\Tabula\Value\ParserRegistry;
 use DateTimeImmutable;
+use Nouxwell\Tabula\Exception\ParseException;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Port\ArrayTranslator;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\FieldType;
+use Nouxwell\Tabula\Settings\NumberSettings;
+use Nouxwell\Tabula\Settings\SymbolPosition;
+use Nouxwell\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Tests\Fixture\Status;
+use Nouxwell\Tabula\Value\FormatContext;
+use Nouxwell\Tabula\Value\FormatterRegistry;
+use Nouxwell\Tabula\Value\ParseContext;
+use Nouxwell\Tabula\Value\ParserRegistry;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

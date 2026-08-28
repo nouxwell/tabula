@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Bridge\Symfony;
+namespace Nouxwell\Tabula\Tests\Bridge\Symfony;
 
-use Balin\Tabula\Bridge\Symfony\SymfonyTranslator;
-use Balin\Tabula\Port\Translator;
+use Nouxwell\Tabula\Bridge\Symfony\SymfonyTranslator;
+use Nouxwell\Tabula\Port\Translator;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;

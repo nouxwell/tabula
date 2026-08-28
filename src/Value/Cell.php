@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value;
+namespace Nouxwell\Tabula\Value;
 
-use Balin\Tabula\Schema\Align;
+use Nouxwell\Tabula\Schema\Align;
 
 /**
  * A single formatted cell.

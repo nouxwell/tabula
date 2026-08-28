@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Import\Reader;
+namespace Nouxwell\Tabula\Import\Reader;
 
 /**
  * Reads raw rows from a file.

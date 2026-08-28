@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Value;
+namespace Nouxwell\Tabula\Value;
 
-use Balin\Tabula\Format;
-use Balin\Tabula\Port\Translator;
-use Balin\Tabula\Settings\TabulaSettings;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Port\Translator;
+use Nouxwell\Tabula\Settings\TabulaSettings;
 
 /**
  * Everything the formatters need — a single carrier.

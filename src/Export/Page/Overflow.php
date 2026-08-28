@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Export\Page;
+namespace Nouxwell\Tabula\Export\Page;
 
 /**
  * What to do when the columns do not fit on the page.

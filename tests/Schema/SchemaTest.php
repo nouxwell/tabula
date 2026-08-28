@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Balin\Tabula\Tests\Schema;
+namespace Nouxwell\Tabula\Tests\Schema;
 
-use Balin\Tabula\Exception\SchemaException;
-use Balin\Tabula\Exception\TabulaException;
-use Balin\Tabula\Format;
-use Balin\Tabula\Schema\Field;
-use Balin\Tabula\Schema\Schema;
 use InvalidArgumentException;
+use Nouxwell\Tabula\Exception\SchemaException;
+use Nouxwell\Tabula\Exception\TabulaException;
+use Nouxwell\Tabula\Format;
+use Nouxwell\Tabula\Schema\Field;
+use Nouxwell\Tabula\Schema\Schema;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
