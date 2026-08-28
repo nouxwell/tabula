@@ -408,6 +408,6 @@ at level 8 over both `src` and `tests`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Copyright © 2026 IONSIS.
+MIT — see [LICENSE](LICENSE). Copyright © 2026 [IONSIS](https://ionsis.com).
 
 Written by Hüseyin Niyazi Balın.
