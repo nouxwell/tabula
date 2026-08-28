@@ -4,3 +4,11 @@ parameters:
         - src
         - tests
     treatPhpDocTypesAsCertain: false
+
+    # The whole supported range is analysed, not just the interpreter that happens to be
+    # installed. composer.json claims ">=8.3"; without this the claim would never be checked,
+    # and an 8.4-only function slipped in on a developer machine running 8.5 would only fail
+    # for the user who actually runs 8.3.
+    phpVersion:
+        min: 80300
+        max: 80599

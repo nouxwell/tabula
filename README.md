@@ -33,7 +33,7 @@ The package is not on Packagist. Point Composer at the repository:
 ]
 ```
 
-Requires PHP 8.5+. For PDF output also install `dompdf/dompdf`; if it is missing, asking for
+Requires PHP 8.3+. For PDF output also install `dompdf/dompdf`; if it is missing, asking for
 `Format::Pdf` fails **when the writer is created** — not after fifty thousand rows have been processed.
 
 ## Quick start

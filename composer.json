@@ -20,7 +20,7 @@
         }
     ],
     "require": {
-        "php": ">=8.5",
+        "php": ">=8.3",
         "phpoffice/phpspreadsheet": "^5.1"
     },
     "require-dev": {
