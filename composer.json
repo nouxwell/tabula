@@ -14,12 +14,17 @@
         "schema",
         "symfony"
     ],
+    "homepage": "https://ionsis.com",
     "authors": [
         {
             "name": "Hüseyin Niyazi Balın",
             "role": "Author"
         }
     ],
+    "support": {
+        "issues": "https://github.com/nouxwell/tabula/issues",
+        "source": "https://github.com/nouxwell/tabula"
+    },
     "require": {
         "php": ">=8.3",
         "phpoffice/phpspreadsheet": "^5.1"
