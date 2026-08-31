@@ -83,8 +83,17 @@ final class TabulaBundle extends AbstractBundle
                     ->defaultValue('')
                     ->info('The text written into an empty cell (e.g. "-"). If left empty, the cell is not created at all.')
                 ->end()
-                ->scalarNode('bool_true_key')->defaultValue('tabula.bool.yes')->end()
-                ->scalarNode('bool_false_key')->defaultValue('tabula.bool.no')->end()
+                // Words, not translation keys — see TabulaSettings::$boolTrueKey. A key the
+                // catalogue does not define is handed straight back and written into the cell
+                // as it stands, so a key here silently prints itself.
+                ->scalarNode('bool_true_key')
+                    ->defaultValue('Yes')
+                    ->info('What a true cell says. A plain word is written as-is; a translation key is resolved.')
+                ->end()
+                ->scalarNode('bool_false_key')
+                    ->defaultValue('No')
+                    ->info('What a false cell says. A plain word is written as-is; a translation key is resolved.')
+                ->end()
                 ->integerNode('max_rows_per_sheet')
                     ->defaultValue(1_048_575)
                     ->min(1)

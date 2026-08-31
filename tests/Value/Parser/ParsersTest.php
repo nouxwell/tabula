@@ -61,6 +61,11 @@ final class ParsersTest extends TestCase
                 currencySymbols: ['TRY' => '₺'],
                 symbolPosition: SymbolPosition::After,
             ),
+            // These tests exercise the TRANSLATED bool path, so they name the keys their
+            // catalogue defines. The shipped defaults are the plain words "Yes"/"No" — a key
+            // the catalogue does not define is handed straight back and printed as it stands.
+            boolTrueKey: 'tabula.bool.yes',
+            boolFalseKey: 'tabula.bool.no',
         );
     }
 

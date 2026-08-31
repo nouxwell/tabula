@@ -16,9 +16,22 @@ final readonly class TabulaSettings
         public NumberSettings $numbers = new NumberSettings(),
         public DateSettings $dates = new DateSettings(),
         public string $defaultLocale = 'en',
-        /** Translation keys for boolean values — a SINGLE family (the system this replaces had three parallel families). */
-        public string $boolTrueKey = 'tabula.bool.yes',
-        public string $boolFalseKey = 'tabula.bool.no',
+        /**
+         * What a boolean cell says — a SINGLE family (the system this replaces had three parallel ones).
+         *
+         * ★ The defaults are WORDS, not translation keys, and that is the whole point. A
+         * translator hands back whatever it cannot translate, so a key with no catalogue entry
+         * ends up written into the cell verbatim: the old defaults printed the literal text
+         * "tabula.bool.yes" in every boolean column of every export made without a catalogue.
+         * Silent nonsense, in a library whose reason for existing is to prevent exactly that —
+         * and the round trip broke too, since `BoolParser` has never heard of that string.
+         *
+         * Plain words survive both routes. Untranslated they read as "Yes"/"No", and `BoolParser`
+         * accepts them coming back. Give a key here to translate them, and it works as before:
+         * anything the translator DOES recognise is still resolved.
+         */
+        public string $boolTrueKey = 'Yes',
+        public string $boolFalseKey = 'No',
         /** The text written into an empty cell. */
         public string $emptyText = '',
         /**

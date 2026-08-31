@@ -100,7 +100,10 @@ final class TemplateBuilderTest extends TestCase
     {
         $builder = new TemplateBuilder(
             $this->translator(),
-            new TabulaSettings(),
+            // Naming the keys this file's catalogue defines. The shipped defaults are the plain
+            // words "Yes"/"No" so that an unconfigured template cannot offer a dropdown whose
+            // options are translation keys.
+            new TabulaSettings(boolTrueKey: 'tabula.bool.yes', boolFalseKey: 'tabula.bool.no'),
             $options ?? new TemplateOptions(),
         );
 

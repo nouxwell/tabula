@@ -75,8 +75,40 @@ final class ExportPipelineTest extends TestCase
                     currencySymbols: ['TRY' => '₺'],
                     symbolPosition: SymbolPosition::After,
                 ),
+                // Naming the keys the catalogue above defines: the shipped defaults are the
+                // plain words "Yes"/"No", precisely so an unconfigured export cannot print a
+                // translation key into the cell.
+                boolTrueKey: 'tabula.bool.yes',
+                boolFalseKey: 'tabula.bool.no',
             ),
         );
+    }
+
+    /**
+     * What an export says when nobody configured the boolean texts.
+     *
+     * The old defaults were translation keys, and a translator hands back whatever it cannot
+     * translate — so every unconfigured export wrote the literal "tabula.bool.yes" into its
+     * boolean columns. Silent nonsense, and the round trip broke with it: `BoolParser` has
+     * never heard of that string, while it does accept "Yes".
+     */
+    #[Test]
+    public function anUnconfiguredBoolColumnSaysYesNotATranslationKey(): void
+    {
+        $path = $this->dir->file('plain-bool.csv');
+
+        $tabula = new Tabula(new ArrayTranslator([]), new TabulaSettings());
+        $tabula->export(Schema::make('t')->fields(Field::bool('active')->label('Active')))
+            ->from(ArraySource::of([['active' => true], ['active' => false]]))
+            ->locale('tr')
+            ->to(Format::Csv)
+            ->write($path);
+
+        $contents = (string) file_get_contents($path);
+
+        self::assertStringNotContainsString('tabula.bool', $contents, 'A translation key must never reach the cell.');
+        self::assertStringContainsString('Yes', $contents);
+        self::assertStringContainsString('No', $contents);
     }
 
     private function schema(): Schema

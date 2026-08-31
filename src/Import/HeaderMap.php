@@ -119,33 +119,14 @@ final readonly class HeaderMap
      */
     private static function detectKeyRow(array $row, Schema $schema): ?array
     {
-        $keys = [];
-
-        foreach ($row as $index => $cell) {
-            // A blank cell DOES NOT BREAK the decision: the extra column a user added to the
-            // template has no counterpart in the hidden key row, and that must not stop the
-            // file from being a template. That column later ends up in `ignored`.
-            if (StringParser::isBlank($cell)) {
-                continue;
-            }
-
-            $text = StringParser::describe($cell);
-
-            // ★ Key matching is CASE SENSITIVE. A key is a canonical identifier, not a text a
-            // human reads; a schema may well carry a `code` and a `Code` field separately, and
-            // folding case would conflate the two. The tolerance on the label side (below)
-            // exists for exactly the opposite reason.
-            if (!$schema->has($text)) {
-                return null;
-            }
-
-            $keys[$index] = $text;
-        }
-
-        // A completely empty row 1 satisfies "every non-blank cell matched" vacuously. Taking
-        // it for a key row would mean mistaking the first two rows of the file for headers and
-        // swallowing REAL DATA.
-        return [] === $keys ? null : $keys;
+        // The rule itself lives in `KeyRow`, because an application with its own reader has to
+        // answer this same question before it knows which row the data starts on. Held here as
+        // well, the two copies would drift, and the day they did the reader would stop being
+        // able to read the files this library writes.
+        return KeyRow::detect($row, array_map(
+            static fn (Field $field): string => $field->getKey(),
+            array_values($schema->getFields()),
+        ));
     }
 
     /**

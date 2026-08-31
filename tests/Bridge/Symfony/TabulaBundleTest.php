@@ -156,8 +156,13 @@ final class TabulaBundleTest extends TestCase
         self::assertInstanceOf(TabulaSettings::class, $settings);
 
         self::assertSame('', $settings->emptyText);
-        self::assertSame('tabula.bool.yes', $settings->boolTrueKey);
-        self::assertSame('tabula.bool.no', $settings->boolFalseKey);
+        // Plain WORDS, not translation keys. A key the catalogue does not define is handed
+        // straight back by the translator and written into the cell as it stands, so keys as
+        // defaults meant every unconfigured export printed "tabula.bool.yes" in its boolean
+        // columns — and the round trip broke with it, since BoolParser has never heard of that
+        // string. "Yes"/"No" survive both directions.
+        self::assertSame('Yes', $settings->boolTrueKey);
+        self::assertSame('No', $settings->boolFalseKey);
         // The default is Excel's real row ceiling (1,048,576 − the header row).
         self::assertSame(1_048_575, $settings->maxRowsPerSheet);
         self::assertSame(',', $settings->numbers->decimalSeparator);
