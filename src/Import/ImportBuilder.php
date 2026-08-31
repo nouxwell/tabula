@@ -10,7 +10,9 @@ use Iterator;
 use IteratorIterator;
 use Nouxwell\Tabula\Exception\ImportException;
 use Nouxwell\Tabula\Exception\ParseException;
+use Nouxwell\Tabula\Import\Reader\Reader;
 use Nouxwell\Tabula\Import\Reader\ReaderRegistry;
+use Nouxwell\Tabula\Import\Reader\SheetAware;
 use Nouxwell\Tabula\Port\Translator;
 use Nouxwell\Tabula\Schema\Field;
 use Nouxwell\Tabula\Schema\Schema;
@@ -43,6 +45,9 @@ final class ImportBuilder
     private ?string $path = null;
 
     private ?string $locale = null;
+
+    /** @see sheet() */
+    private ?string $sheetName = null;
 
     private MatchStrategy $strategy = MatchStrategy::Auto;
 
@@ -83,6 +88,20 @@ final class ImportBuilder
         });
     }
 
+    /**
+     * Which sheet to read, by name.
+     *
+     * Only needed when the workbook holds more than one data sheet — an export that was split
+     * per group or per chunk. With a single sheet this is unnecessary, and on a format that
+     * has no sheets at all it is refused rather than quietly ignored.
+     */
+    public function sheet(string $name): self
+    {
+        return $this->with(static function (self $b) use ($name): void {
+            $b->sheetName = $name;
+        });
+    }
+
     public function matchBy(MatchStrategy $strategy): self
     {
         return $this->with(static function (self $b) use ($strategy): void {
@@ -113,6 +132,49 @@ final class ImportBuilder
 
     // ---------------------------------------------------------------- execution
 
+    /**
+     * The reader for this file, with the sheet question settled BEFORE any row is read.
+     *
+     * Settling it up front is the point. A workbook split across sheets — one per warehouse,
+     * one per chunk of rows — used to come back in with only its first sheet and no complaint;
+     * the row count looked plausible and nothing pointed at what was missing. Silent loss on
+     * accounting data is the one failure this library exists to prevent, so an ambiguous
+     * workbook is refused outright and the caller is told to name a sheet.
+     *
+     * Hidden sheets do not count, so a filled-in template — which always carries the hidden
+     * `_lists` helper — stays a single-sheet file and is never refused.
+     */
+    private function resolveReader(string $path): Reader
+    {
+        $reader = $this->readers->for($path);
+
+        if (!$reader instanceof SheetAware) {
+            // A sheet was named for a format that has none. Ignoring it would leave the caller
+            // believing a selection took effect.
+            if (null !== $this->sheetName) {
+                throw ImportException::sheetsUnsupported($path);
+            }
+
+            return $reader;
+        }
+
+        $sheets = $reader->dataSheets($path);
+
+        if (null !== $this->sheetName) {
+            if (!\in_array($this->sheetName, $sheets, true)) {
+                throw ImportException::sheetNotFound($this->sheetName, $path, $sheets);
+            }
+
+            return $reader->forSheet($this->sheetName);
+        }
+
+        if (\count($sheets) > 1) {
+            throw ImportException::ambiguousSheet($sheets, $path);
+        }
+
+        return $reader;
+    }
+
     public function run(): ImportResult
     {
         $path = $this->path ?? throw ImportException::noSource();
@@ -126,7 +188,7 @@ final class ImportBuilder
             throw ImportException::fileNotReadable($path);
         }
 
-        $reader = $this->readers->for($path);
+        $reader = $this->resolveReader($path);
 
         $context = new ParseContext(
             locale: $this->locale ?? $this->settings->defaultLocale,

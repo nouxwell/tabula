@@ -58,6 +58,56 @@ final class ImportException extends RuntimeException implements TabulaException
     }
 
     /**
+     * The workbook holds several data sheets and none was named.
+     *
+     * Reading the first one and moving on is what makes this dangerous: an export split across
+     * sheets — one per warehouse, or one per chunk of rows — would come back in with only its
+     * first sheet, the rest dropped without a word. The row count would look plausible and
+     * nothing would ever point at the missing data.
+     *
+     * The message lists the sheets by name so the caller can pick one straight from it.
+     *
+     * @param list<string> $sheets
+     */
+    public static function ambiguousSheet(array $sheets, string $path): self
+    {
+        return new self(sprintf(
+            '"%s" holds %d data sheets (%s), so which one to import is not clear. '
+            .'Name one with ->sheet("..."). Reading only the first would silently drop the rest.',
+            $path,
+            \count($sheets),
+            implode(', ', array_map(static fn (string $s): string => '"'.$s.'"', $sheets)),
+        ));
+    }
+
+    /**
+     * A sheet was named but the workbook has no such sheet.
+     *
+     * @param list<string> $available
+     */
+    public static function sheetNotFound(string $name, string $path, array $available = []): self
+    {
+        return new self(sprintf(
+            '"%s" has no sheet named "%s".%s',
+            $path,
+            $name,
+            [] === $available ? '' : ' Available: '.implode(', ', $available).'.',
+        ));
+    }
+
+    /**
+     * A sheet was named for a format that has no sheets.
+     */
+    public static function sheetsUnsupported(string $path): self
+    {
+        return new self(sprintf(
+            'A sheet was selected, but "%s" is a format without sheets. '
+            .'Drop the ->sheet(...) call, or import a spreadsheet.',
+            $path,
+        ));
+    }
+
+    /**
      * None of the headers in the file matched the schema.
      *
      * @param list<string> $found

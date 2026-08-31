@@ -12,6 +12,7 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Reader\Exception as SpreadsheetReaderException;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\CellIterator;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
  * An .xlsx/.xls reader that reads through PhpSpreadsheet.
@@ -38,8 +39,15 @@ use PhpOffice\PhpSpreadsheet\Worksheet\CellIterator;
  * this replaces did — the serial number would turn into a meaningless string such as "45296"
  * and the date could never be recovered.
  */
-final class XlsxReader implements Reader
+final class XlsxReader implements Reader, SheetAware
 {
+    /**
+     * The sheet to read, by name; null means "the only data sheet there is".
+     *
+     * @see forSheet()
+     */
+    private ?string $sheetName = null;
+
     /**
      * The supported extensions.
      *
@@ -56,6 +64,41 @@ final class XlsxReader implements Reader
         return \in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), self::EXTENSIONS, true);
     }
 
+    public function forSheet(string $name): static
+    {
+        $clone = clone $this;
+        $clone->sheetName = $name;
+
+        return $clone;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function dataSheets(string $path): array
+    {
+        $spreadsheet = $this->load($path);
+
+        try {
+            $names = [];
+
+            foreach ($spreadsheet->getAllSheets() as $sheet) {
+                // Hidden sheets are helpers, not data. The template puts its dropdown sources
+                // into a hidden `_lists` sheet, so every filled-in template holds two sheets;
+                // counting that one would make an ordinary single-sheet import look ambiguous
+                // and refuse a file that is perfectly fine.
+                if (Worksheet::SHEETSTATE_VISIBLE === $sheet->getSheetState()) {
+                    $names[] = $sheet->getTitle();
+                }
+            }
+
+            return $names;
+        } finally {
+            $spreadsheet->disconnectWorksheets();
+            unset($spreadsheet);
+        }
+    }
+
     /**
      * @return Generator<int, list<mixed>> row number (1-based) => cell values
      */
@@ -64,12 +107,19 @@ final class XlsxReader implements Reader
         $spreadsheet = $this->load($path);
 
         try {
-            // The FIRST sheet is read, not the "active" one. Which sheet is active depends on
-            // the tab the user happened to be on when they last saved the file; when two users
-            // fill in and send back the same template, reading different sheets would be a
-            // silent and non-reproducible bug. Our template's helper "_lists" sheet always
-            // sits BEHIND the first one, too.
-            $sheet = $spreadsheet->getSheet(0);
+            // A named sheet is honoured; otherwise the FIRST one is read, not the "active" one.
+            // Which sheet is active depends on the tab the user happened to be on when they
+            // last saved the file; when two users fill in and send back the same template,
+            // reading different sheets would be a silent and non-reproducible bug. The
+            // template's hidden "_lists" helper sits behind the first sheet, too.
+            //
+            // Choosing WHICH sheet when there are several is not decided here: `ImportBuilder`
+            // refuses an ambiguous workbook before a single row is read, so by the time this
+            // runs either there is one data sheet or the caller has named one.
+            $sheet = null === $this->sheetName
+                ? $spreadsheet->getSheet(0)
+                : ($spreadsheet->getSheetByName($this->sheetName)
+                    ?? throw ImportException::sheetNotFound($this->sheetName, $path));
 
             // The column limit is taken from the SHEET as a whole, not row by row: however
             // many columns the longest row has, every row comes back with that many cells.

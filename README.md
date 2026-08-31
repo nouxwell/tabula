@@ -220,6 +220,20 @@ use Nouxwell\Tabula\Export\Sheet\{SingleSheet, ChunkedSheets, GroupedSheets};
 > `GroupedSheets` does not reorder rows. For a group to land on a single sheet, the data source must
 > already be **sorted** by that field.
 
+A workbook split this way is read back one sheet at a time — the import refuses a file with more
+than one data sheet rather than picking for you, because reading the first and stopping would drop
+the rest without saying so:
+
+```php
+foreach (['Ankara', 'Izmir'] as $sheet) {
+    $tabula->import($schema)->from($path)->sheet($sheet)->each(…)->run();
+}
+```
+
+The refusal names the sheets, so the choice is visible without opening the file. A single-sheet file
+needs none of this: a filled-in template carries a hidden `_lists` helper sheet, and hidden sheets do
+not count as data.
+
 ## Templates and import
 
 The same schema produces a blank template and reads filled files back, which is what makes the
