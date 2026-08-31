@@ -9,6 +9,53 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-31
+
+### Fixed
+
+- **A boolean cell no longer prints a translation key.** The defaults for what a true or false
+  cell says were `tabula.bool.yes` and `tabula.bool.no`, which no catalogue defines — so an
+  export made without configuring them wrote those strings into the file, and `BoolParser` could
+  not read them back. They are now the plain words `Yes` and `No`, which survive both
+  directions. Naming a key still translates exactly as before.
+
+### Added
+
+- `KeyRow` makes the hidden-key-row rule public. An application with its own reader has to
+  answer "is row 1 the key row?" before it knows where the data starts; sharing the rule keeps
+  it from being written a second time and drifting.
+
+### Notes
+
+- **Breaking** for anyone whose catalogue defines `tabula.bool.yes`: it is no longer consulted.
+  Name the key in the settings to restore the old behaviour.
+- Found by using the library for real: of twenty schemas written against it during an
+  integration, nineteen avoided `Field::bool()` entirely.
+
+## [0.7.3] — 2026-08-31
+
+### Fixed
+
+- Column widths are clamped to Excel's maximum of 255. Auto-sizing measures the header text and
+  nothing clamped the result, so a header of around 210 characters produced a width Excel
+  refuses and the workbook opened saying it needed repairing.
+
+## [0.7.2] — 2026-08-31
+
+### Fixed
+
+- **A numeric header no longer sits under the auto-filter button.** The button is drawn at the
+  cell's right edge and a right-aligned label is pushed to that same edge, so they overlapped
+  however wide the column was — widening a right-aligned cell adds the room on the left. The
+  header cell loses its right alignment; the data column keeps it.
+
+## [0.7.1] — 2026-08-31
+
+### Fixed
+
+- Auto-sized template columns leave room for the auto-filter button, which used to cover the
+  last characters of the header. A width set by hand is untouched.
+
 ## [0.7.0] — 2026-08-31
 
 ### Fixed
@@ -80,7 +127,11 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/nouxwell/tabula/compare/v0.7.3...v0.8.0
+[0.7.3]: https://github.com/nouxwell/tabula/compare/v0.7.2...v0.7.3
+[0.7.2]: https://github.com/nouxwell/tabula/compare/v0.7.1...v0.7.2
+[0.7.1]: https://github.com/nouxwell/tabula/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/nouxwell/tabula/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/nouxwell/tabula/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/nouxwell/tabula/compare/v0.5.2...v0.5.3
