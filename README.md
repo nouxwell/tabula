@@ -23,6 +23,46 @@ changing a translation silently breaks every file users already have.
 Tabula inverts that: **a column is defined in exactly one place.** Everything else — writers,
 formatters, parsers, sheet strategies — are consumers of that definition.
 
+## Is this the right library for you?
+
+PHP has good spreadsheet libraries and this is not trying to replace them. It solves a narrower
+problem, and outside that problem the others are the better choice.
+
+**Reach for something else when:**
+
+- You need to write an array to a file. `spatie/simple-excel` or `league/csv` do that in three lines
+  and will not ask you to declare a schema.
+- You need millions of rows. `openspout` streams properly; this holds the workbook in memory for
+  xlsx (see [USAGE §16](USAGE.md#16-how-much-can-it-export)).
+- You are on Laravel and want the ecosystem's conventions. `maatwebsite/excel` is built for that.
+
+**Reach for this when the file makes a round trip.** That is the case it exists for: you hand users
+a template, they fill it in, they send it back, and what comes back has to be trusted enough to
+write into a database. Four things follow from that and are hard to retrofit:
+
+**The file's identity is the field key, not the header text.** The template hides the canonical keys
+in row 1 and matches on those. Rename a column in your translation catalogue and every template your
+users already downloaded still imports. Where the header string is the identity — the usual
+arrangement — that same rename invalidates all of them at once, and you find out when a customer
+says the import stopped working.
+
+**Export, template and import come from one definition.** Not three code paths that agree today. A
+file this library wrote is a file it can read, because the same `Field` produced the column, the
+header and the parser.
+
+**The parser is strict where the formatter is lenient**, deliberately. An export may print an
+unreadable cell blank and carry on — a 40,000-row report should not die over one bad value. An
+import doing the same writes wrong data into your database, so it raises a per-row error instead and
+the run continues. The two directions are not symmetric because the cost of being wrong is not
+symmetric.
+
+**Locale handling is the actual work.** `1.234` means 1234 in Turkish and 1.234 in English, and
+guessing wrong is a silent thousand-fold error in a balance column. Money keeps both a real number
+Excel can sum and the localised text a human reads. Accounting notations — `(1.234,56)` for
+negative, a trailing minus from an ERP feed — are understood rather than turned into positives.
+
+None of that matters if you are dumping a report nobody sends back. It is most of the work if they do.
+
 ## Installation
 
 ```bash
