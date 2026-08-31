@@ -280,6 +280,10 @@ Templates carry real Excel dropdowns for bool, enum and options columns. The dro
 the values the parser accepts come from the same call, so a value the template offered can never be
 rejected by the import that reads it.
 
+Typed columns are also validated **in the cell**: a date column takes dates, an integer column whole
+numbers, the other numeric types decimals. The import would catch these too, but only after the user
+had filled the whole file in and uploaded it.
+
 ---
 
 ## 8. Reporting import errors to the user

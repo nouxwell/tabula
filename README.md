@@ -294,12 +294,36 @@ continues. Two consequences worth knowing:
 
 Transactions are **yours**: the library parses and validates, it never writes to your database.
 
-### Templates carry dropdowns
+### Templates refuse bad input in the cell
 
 Bool, enum and options columns get real Excel data-validation dropdowns, backed by a hidden `_lists`
 sheet with identical option sets de-duplicated. The dropdown entries and the values the parser accepts
 are derived from the same translation call, so a value written by the template is always a member of
 its own allowed list.
+
+Typed columns are validated as they are typed: a date column takes dates, an integer column whole
+numbers, the other numeric types decimals. The parser catches these anyway — but only once the file
+has been filled in and sent back, which is the difference between "row 348 could not be read" and the
+cursor never leaving the cell.
+
+Blank stays allowed on every rule, because requiredness belongs to the import where the failure can
+name the row and the field. Made Excel's job it fires a warning box for merely tabbing through an
+unfinished row, and a user who meets that box twice switches validation off for good — taking the
+rules that do matter with it.
+
+### What a boolean cell says
+
+`Yes` and `No`, unless you say otherwise:
+
+```php
+new TabulaSettings(boolTrueKey: 'Evet', boolFalseKey: 'Hayır');   // plain words
+new TabulaSettings(boolTrueKey: 'app.yes', boolFalseKey: 'app.no'); // translation keys
+```
+
+Plain words are written as they stand; anything the translator recognises is resolved. The defaults
+are words rather than keys deliberately — a translator hands back whatever it cannot translate, so a
+key with no catalogue entry would be printed into the cell verbatim, and `BoolParser` has never heard
+of `tabula.bool.yes` coming back.
 
 ## Translation
 
@@ -409,15 +433,11 @@ composer cs       # php-cs-fixer
 The suite runs with `failOnWarning`, `failOnRisky` and `failOnDeprecation` enabled, and PHPStan runs
 at level 8 over both `src` and `tests`.
 
-## Status
+## Versioning
 
-| Area | State |
-| --- | --- |
-| Schema, formatters, Xlsx + CSV writers | done |
-| `DoctrineSource`, Symfony bridge bundle | done |
-| Configurable writer options | done |
-| PDF writer, page size and column budget | done |
-| Import + template generation | done |
+Below 1.0, a **minor** bump is where a breaking change lands — which is how Composer already treats
+`^0.8`. [CHANGELOG.md](CHANGELOG.md) says what each release changed and, for the breaking ones, what
+to do about it.
 
 ## License
 
