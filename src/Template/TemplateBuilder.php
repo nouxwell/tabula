@@ -145,6 +145,14 @@ final class TemplateBuilder
 
             $this->writeHeader($sheet, $fields, $letters, $keyRow, $labelRow, $context);
             $this->applyColumnStyles($sheet, $fields, $letters);
+
+            // ★ AFTER applyColumnStyles, never inside writeHeader(). The column style is applied
+            // to the WHOLE column — the header cell included — so anything writeHeader() sets is
+            // overwritten a moment later. This cost one debugging round: the alignment was set,
+            // and then silently undone.
+            if ($this->options->xlsx->autoFilter) {
+                $this->unRightAlignHeaders($sheet, $fields, $letters, $labelRow);
+            }
             $lastSampleRow = $this->createSampleRows($sheet, $lastLetter, $firstDataRow);
             $this->applyDropdowns($spreadsheet, $sheet, $fields, $letters, $firstDataRow, $context);
             $this->applyTypeValidation($sheet, $fields, $letters, $firstDataRow);
@@ -303,6 +311,38 @@ final class TemplateBuilder
             $sheet->getStyle($range)
                 ->getAlignment()
                 ->setHorizontal(self::horizontalOf($field->getAlign()));
+        }
+    }
+
+    /**
+     * Takes right alignment off the HEADER cells — the data below keeps it.
+     *
+     * The filter button is drawn inside the cell, hard against its right edge, and a
+     * right-aligned label is pushed to that same edge. The two land on top of each other:
+     * "Döviz Kuru" renders as "Döviz Ku▾" however wide the column is, because widening a
+     * right-aligned cell adds the room on the LEFT, where nothing needed it.
+     *
+     * Only right alignment collides. Left starts at the far side and centre keeps its distance
+     * once the column has headroom — measured on a real file, the left and centre headers were
+     * clean and every right-aligned one was clipped.
+     *
+     * The columns themselves are untouched: numbers still line up on the decimal point, which
+     * is the reason they were right-aligned in the first place. Only the label moves, and a
+     * left label over right-aligned figures is the ordinary arrangement in a spreadsheet.
+     *
+     * @param list<Field>  $fields
+     * @param list<string> $letters
+     */
+    private function unRightAlignHeaders(Worksheet $sheet, array $fields, array $letters, int $labelRow): void
+    {
+        foreach ($fields as $index => $field) {
+            if (Align::Right !== $field->getAlign()) {
+                continue;
+            }
+
+            $sheet->getStyle($letters[$index].$labelRow)
+                ->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_LEFT);
         }
     }
 

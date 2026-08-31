@@ -17,6 +17,7 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -342,6 +343,33 @@ final class TemplateBuilderTest extends TestCase
                 "{$letter} is too narrow for its header plus the filter button.",
             );
         }
+    }
+
+    /**
+     * The collision the width headroom alone could not fix.
+     *
+     * The filter button sits at the cell's right edge and a right-aligned label is pushed to
+     * that same edge, so they overlap however wide the column is — widening a right-aligned
+     * cell adds the room on the LEFT. Only the header moves; the column below keeps its
+     * alignment, because lining figures up on the decimal point is why it was right-aligned.
+     */
+    #[Test]
+    public function aNumericHeaderIsNotRightAlignedUnderTheFilterButton(): void
+    {
+        $sheet = $this->build()->getSheet(0);
+
+        // F is the quantity column: right-aligned data, header moved off the edge.
+        self::assertSame(
+            Alignment::HORIZONTAL_LEFT,
+            $sheet->getStyle('F2')->getAlignment()->getHorizontal(),
+            'A right-aligned header would sit under the filter button.',
+        );
+
+        self::assertSame(
+            Alignment::HORIZONTAL_RIGHT,
+            $sheet->getStyle('F3')->getAlignment()->getHorizontal(),
+            'The data must still line up on the right.',
+        );
     }
 
     /** A width the caller set by hand is left exactly as given — they said what they wanted. */
