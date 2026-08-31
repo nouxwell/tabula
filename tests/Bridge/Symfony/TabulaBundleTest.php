@@ -12,6 +12,7 @@ use Nouxwell\Tabula\Port\Translator;
 use Nouxwell\Tabula\Settings\SymbolPosition;
 use Nouxwell\Tabula\Settings\TabulaSettings;
 use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Tests\Fixture\KernelParameters;
 use Nouxwell\Tabula\Tests\Fixture\StubSymfonyTranslator;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -63,6 +64,7 @@ final class TabulaBundleTest extends TestCase
     public function tabulaIsThePublicEntryPointOfTheBundle(): void
     {
         $container = new ContainerBuilder();
+        KernelParameters::applyTo($container);
         $container->setParameter('kernel.default_locale', self::KERNEL_LOCALE);
         $this->registerSymfonyTranslator($container);
         $this->loadExtension($container, []);
@@ -203,6 +205,9 @@ final class TabulaBundleTest extends TestCase
     public function theDefaultLocaleIsAParameterReferenceNotAHardcodedString(): void
     {
         $container = new ContainerBuilder();
+        // kernel.default_locale stays UNSET on purpose: this test proves the bundle emits a
+        // parameter reference rather than a resolved string, which only shows while it is absent.
+        KernelParameters::applyTo($container);
         $this->registerSymfonyTranslator($container);
         $this->loadExtension($container, []);
 
@@ -353,6 +358,7 @@ final class TabulaBundleTest extends TestCase
     private function compile(array $config = [], array $catalogue = []): ContainerBuilder
     {
         $container = new ContainerBuilder();
+        KernelParameters::applyTo($container);
         $container->setParameter('kernel.default_locale', self::KERNEL_LOCALE);
 
         $this->registerSymfonyTranslator($container, $catalogue);

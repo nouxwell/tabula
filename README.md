@@ -1,5 +1,9 @@
 # Tabula
 
+[![CI](https://github.com/nouxwell/tabula/actions/workflows/ci.yml/badge.svg)](https://github.com/nouxwell/tabula/actions/workflows/ci.yml)
+[![Packagist](https://img.shields.io/packagist/v/nouxwell/tabula)](https://packagist.org/packages/nouxwell/tabula)
+[![PHP](https://img.shields.io/packagist/dependency-v/nouxwell/tabula/php)](https://www.php.net/)
+
 **One schema, three directions.** A PHP library that writes tabular data to Excel, CSV and PDF from a
 single schema definition — and uses that same definition to generate blank templates and to import
 files back in.

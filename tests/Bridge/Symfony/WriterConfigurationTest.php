@@ -14,6 +14,7 @@ use Nouxwell\Tabula\Schema\Field;
 use Nouxwell\Tabula\Schema\Schema;
 use Nouxwell\Tabula\Source\ArraySource;
 use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Tests\Fixture\KernelParameters;
 use Nouxwell\Tabula\Tests\Fixture\PdfDocument;
 use Nouxwell\Tabula\Tests\Fixture\StubSymfonyTranslator;
 use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
@@ -54,6 +55,7 @@ final class WriterConfigurationTest extends TestCase
     private function tabula(array $config = []): Tabula
     {
         $container = new ContainerBuilder();
+        KernelParameters::applyTo($container);
         $container->setParameter('kernel.default_locale', 'tr');
         $container->set(TranslatorInterface::class, new StubSymfonyTranslator([]));
 

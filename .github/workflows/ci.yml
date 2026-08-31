@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # composer.json claims ">=8.3". PHPStan checks that statically against the whole declared
+  # range, but nothing has ever RUN the suite on anything except the maintainer's 8.5 - so the
+  # oldest supported version was, until now, an untested claim. That is what this matrix is for.
+  tests:
+    name: Tests — PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Every version reports. Stopping at the first failure hides whether a break is specific
+      # to one version or common to all, which is the first thing worth knowing.
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          # PhpSpreadsheet's hard requirements. Left implicit they are present on the runner
+          # anyway today, which is exactly how a dependency goes missing without anyone noticing.
+          extensions: dom, fileinfo, gd, iconv, mbstring, simplexml, xml, xmlwriter, zip, zlib
+          coverage: none
+
+      - name: Install dependencies
+        # No lock file is committed - a library must be tested against what a consumer would
+        # actually resolve, not against one pinned snapshot.
+        run: composer update --no-interaction --no-progress --prefer-dist
+
+      - name: Tests
+        run: vendor/bin/phpunit --no-coverage
+
+  # Static analysis and style run once. Both read the same source on every version, so repeating
+  # them across the matrix would buy nothing but minutes.
+  static:
+    name: PHPStan and code style
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: dom, fileinfo, gd, iconv, mbstring, simplexml, xml, xmlwriter, zip, zlib
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --no-interaction --no-progress --prefer-dist
+
+      # phpstan.neon.dist pins phpVersion to 8.3-8.5, so this analyses the whole supported
+      # range rather than whichever interpreter happens to be installed here.
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: Code style
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff --using-cache=no
+
+  # A dependency that is only ever installed at its newest resolvable version is not really
+  # constrained by composer.json. This proves the declared minimums are installable and green.
+  lowest:
+    name: Lowest supported dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: dom, fileinfo, gd, iconv, mbstring, simplexml, xml, xmlwriter, zip, zlib
+          coverage: none
+
+      - name: Install lowest dependencies
+        run: composer update --no-interaction --no-progress --prefer-dist --prefer-lowest
+
+      - name: Tests
+        run: vendor/bin/phpunit --no-coverage
