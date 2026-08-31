@@ -29,16 +29,11 @@ formatters, parsers, sheet strategies — are consumers of that definition.
 composer require nouxwell/tabula
 ```
 
-The package is not on Packagist. Point Composer at the repository:
-
-```json
-"repositories": [
-    { "type": "vcs", "url": "git@github.com:nouxwell/tabula.git" }
-]
-```
-
 Requires PHP 8.3+. For PDF output also install `dompdf/dompdf`; if it is missing, asking for
 `Format::Pdf` fails **when the writer is created** — not after fifty thousand rows have been processed.
+
+Worked examples for the common jobs — a Doctrine query to Excel, one tab per warehouse, a PDF that
+fits the paper, a template and the import that reads it back — are in **[USAGE.md](USAGE.md)**.
 
 ## Quick start
 
