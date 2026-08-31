@@ -305,6 +305,62 @@ final class TemplateBuilderTest extends TestCase
         );
     }
 
+    // ---------------------------------------------------------------- column widths
+
+    /**
+     * Two of the builder's own defaults used to fight each other.
+     *
+     * Auto-sizing measures the header TEXT and stops; the auto-filter then draws its button
+     * inside the cell against the right edge. A column sized exactly to its header lost its
+     * last characters behind the arrow — "Döviz Kuru" rendered as "Döviz Ku▾".
+     */
+    #[Test]
+    public function anAutoSizedColumnLeavesRoomForTheFilterButton(): void
+    {
+        $schema = Schema::make('w')->fields(
+            Field::string('narrow')->label('col.code'),
+            Field::string('wide')->label('col.name'),
+        );
+
+        $path = $this->dir->file('widths.xlsx');
+        (new TemplateBuilder($this->translator(), new TabulaSettings(), new TemplateOptions()))
+            ->write($schema, $path, 'tr');
+
+        $sheet = IOFactory::load($path)->getSheet(0);
+
+        foreach (['A', 'B'] as $letter) {
+            $dimension = $sheet->getColumnDimension($letter);
+
+            // The width must be RESOLVED, not left on auto-size: a column still on auto-size
+            // is re-measured by Excel on open, without the headroom.
+            self::assertFalse($dimension->getAutoSize(), "{$letter} must carry a resolved width.");
+
+            $label = (string) $sheet->getCell($letter.'2')->getValue();
+            self::assertGreaterThan(
+                mb_strlen($label) + 2,
+                $dimension->getWidth(),
+                "{$letter} is too narrow for its header plus the filter button.",
+            );
+        }
+    }
+
+    /** A width the caller set by hand is left exactly as given — they said what they wanted. */
+    #[Test]
+    public function anExplicitWidthIsNotWidened(): void
+    {
+        $schema = Schema::make('w')->fields(
+            Field::string('fixed')->label('col.code')->width(9),
+        );
+
+        $path = $this->dir->file('fixed-width.xlsx');
+        (new TemplateBuilder($this->translator(), new TabulaSettings(), new TemplateOptions()))
+            ->write($schema, $path, 'tr');
+
+        $sheet = IOFactory::load($path)->getSheet(0);
+
+        self::assertEqualsWithDelta(9.0, $sheet->getColumnDimension('A')->getWidth(), 0.01);
+    }
+
     // ---------------------------------------------------------------- type validation
 
     #[Test]

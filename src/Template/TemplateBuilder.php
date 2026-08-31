@@ -158,6 +158,7 @@ final class TemplateBuilder
 
             if ($this->options->xlsx->autoFilter) {
                 $sheet->setAutoFilter('A'.$labelRow.':'.$lastLetter.max($labelRow, $lastSampleRow));
+                $this->makeRoomForFilterButtons($sheet, $letters);
             }
 
             // The user should open the file on the DATA sheet; the hidden "_lists" cannot be
@@ -302,6 +303,61 @@ final class TemplateBuilder
             $sheet->getStyle($range)
                 ->getAlignment()
                 ->setHorizontal(self::horizontalOf($field->getAlign()));
+        }
+    }
+
+    /**
+     * Widens auto-sized columns so the filter button does not sit on top of the header.
+     *
+     * Two of this class's own defaults were fighting each other. Auto-sizing measures the TEXT
+     * and stops there; the auto-filter then draws its button INSIDE the cell, hard against the
+     * right edge. A column sized exactly to its header therefore loses its last two characters
+     * behind the arrow — "Döviz Kuru" reads as "Döviz Ku▾", and the wider the header the worse
+     * it looks, because the button is a fixed width the measurement never knew about.
+     *
+     * The widths have to be resolved BEFORE they can be adjusted: while a column is on
+     * auto-size, its width is -1 and the real number is only worked out during save.
+     * `calculateColumnWidths()` performs that measurement early, after which each column can be
+     * given an explicit width — which also turns auto-size off, so the value survives the save
+     * instead of being recomputed without the headroom.
+     *
+     * A column with a width set by hand is left alone: the caller said what they wanted.
+     *
+     * @param list<string> $letters
+     */
+    private function makeRoomForFilterButtons(Worksheet $sheet, array $letters): void
+    {
+        // Excel's filter button is a fixed ~2 width units. Three leaves the header clear of it
+        // without opening a visible gap; two was still touching the last glyph.
+        $headroom = 3.0;
+
+        // Which columns are ours to touch has to be noted BEFORE the measurement: resolving a
+        // width clears the auto-size flag, and afterwards an auto-sized column is
+        // indistinguishable from one the caller sized by hand.
+        $auto = [];
+        foreach ($letters as $letter) {
+            if ($sheet->getColumnDimension($letter)->getAutoSize()) {
+                $auto[] = $letter;
+            }
+        }
+
+        if ([] === $auto) {
+            return;
+        }
+
+        $sheet->calculateColumnWidths();
+
+        foreach ($auto as $letter) {
+            $dimension = $sheet->getColumnDimension($letter);
+            $width = $dimension->getWidth();
+
+            // -1 means the measurement produced nothing to widen (an empty column).
+            if ($width <= 0) {
+                continue;
+            }
+
+            $dimension->setAutoSize(false);
+            $dimension->setWidth($width + $headroom);
         }
     }
 
