@@ -372,6 +372,34 @@ final class TemplateBuilderTest extends TestCase
         );
     }
 
+    /**
+     * A header long enough to blow past Excel's own ceiling still produces an openable file.
+     *
+     * Auto-sizing measures the text and stops; nothing in PhpSpreadsheet clamps the result, so
+     * around 210 characters the computed width crosses 255 and Excel opens the workbook saying
+     * it needs repairing. Labels come from translation files, so "nobody would write that" is
+     * not a guarantee.
+     */
+    #[Test]
+    public function anAbsurdlyLongHeaderStaysWithinExcelsColumnLimit(): void
+    {
+        $schema = Schema::make('w')->fields(
+            Field::string('long')->label('col.long'),
+        );
+
+        $translator = new ArrayTranslator(['tr' => ['col.long' => str_repeat('A', 400)]]);
+
+        $path = $this->dir->file('long-header.xlsx');
+        (new TemplateBuilder($translator, new TabulaSettings(), new TemplateOptions()))
+            ->write($schema, $path, 'tr');
+
+        $sheet = IOFactory::load($path)->getSheet(0);
+
+        self::assertLessThanOrEqual(255.0, $sheet->getColumnDimension('A')->getWidth());
+        // The label itself is never truncated — only the column stops widening.
+        self::assertSame(400, mb_strlen((string) $sheet->getCell('A2')->getValue()));
+    }
+
     /** A width the caller set by hand is left exactly as given — they said what they wanted. */
     #[Test]
     public function anExplicitWidthIsNotWidened(): void

@@ -69,6 +69,17 @@ final class TemplateBuilder
     private const string FALLBACK_TITLE = 'Sablon';
 
     /**
+     * Excel's own ceiling for a column width.
+     *
+     * Auto-sizing measures the text and stops there, so a header long enough — around 210
+     * characters, plus the filter headroom — produces a number Excel will not accept, and it
+     * opens the file saying it needs repairing. Nothing in PhpSpreadsheet clamps it. A label
+     * that long is absurd, but "absurd" is not the same as "cannot happen": these come from
+     * translation files, and one bad paste is all it takes.
+     */
+    private const float MAX_COLUMN_WIDTH = 255.0;
+
+    /**
      * The hidden helper sheet that holds the sources of the dropdown lists.
      *
      * The options could just as well have been embedded straight into the validation
@@ -220,7 +231,9 @@ final class TemplateBuilder
             if (null === $field->getWidth()) {
                 $dimension->setAutoSize(true);
             } else {
-                $dimension->setWidth($field->getWidth());
+                // Clamped for the same reason as the auto-sized ones: a width above Excel's
+                // ceiling makes the workbook unopenable, and a caller can ask for one.
+                $dimension->setWidth(min((float) $field->getWidth(), self::MAX_COLUMN_WIDTH));
             }
         }
 
@@ -397,7 +410,7 @@ final class TemplateBuilder
             }
 
             $dimension->setAutoSize(false);
-            $dimension->setWidth($width + $headroom);
+            $dimension->setWidth(min($width + $headroom, self::MAX_COLUMN_WIDTH));
         }
     }
 
