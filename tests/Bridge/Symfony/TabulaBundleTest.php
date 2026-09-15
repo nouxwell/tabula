@@ -380,6 +380,26 @@ final class TabulaBundleTest extends TestCase
         self::assertSame('import.template.tooltip.required', $options->requiredWord);
     }
 
+    #[Test]
+    public function theHeaderIsNotProtectedUnlessConfigured(): void
+    {
+        $options = $this->compile()->get(TemplateOptions::class);
+        self::assertInstanceOf(TemplateOptions::class, $options);
+
+        self::assertFalse($options->protectHeader);
+    }
+
+    #[Test]
+    public function aConfiguredHeaderProtectionReachesTheOptions(): void
+    {
+        $options = $this->compile(['template' => ['protect_header' => true]])->get(TemplateOptions::class);
+        self::assertInstanceOf(TemplateOptions::class, $options);
+
+        self::assertTrue($options->protectHeader);
+        // The arguments are positional: an off-by-one would put the flag into the wrong slot.
+        self::assertSame('Required', $options->requiredWord);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /**

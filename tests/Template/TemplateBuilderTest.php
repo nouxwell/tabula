@@ -19,6 +19,7 @@ use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Protection;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -713,5 +714,119 @@ final class TemplateBuilderTest extends TestCase
         self::assertSame(['Kod', 'Ünvan', 'Aktif', 'Kilitli', 'Durum', 'Miktar'], $this->rowValues($sheet, 1));
         self::assertSame('A2', $sheet->getFreezePane());
         self::assertTrue($sheet->dataValidationExists('C2'));
+    }
+
+    // ---------------------------------------------------------------- protection
+
+    #[Test]
+    public function aTemplateIsNotProtectedUnlessAskedTo(): void
+    {
+        $spreadsheet = $this->build();
+
+        self::assertNotTrue($spreadsheet->getSheet(0)->getProtection()->getSheet());
+        self::assertNotSame(Protection::PROTECTION_UNPROTECTED, $spreadsheet->getDefaultStyle()->getProtection()->getLocked());
+    }
+
+    /**
+     * Hidden is not the same as out of reach.
+     *
+     * A user who unhides row 1 can type over a key, and two keys swapped between columns of the
+     * same type import without a single error — each column's values land in the other's field.
+     * Protection locks the two header rows; everything else must stay open, or the template
+     * stops being fillable.
+     */
+    #[Test]
+    public function protectingTheHeaderLocksTheKeyAndLabelRowsAndNothingElse(): void
+    {
+        $spreadsheet = $this->build(new TemplateOptions(protectHeader: true));
+        $sheet = $spreadsheet->getSheet(0);
+
+        self::assertTrue($sheet->getProtection()->getSheet());
+        // Read before anything below calls getStyle(), which moves the selection itself.
+        // The cursor opens on the first data cell, not in the hidden, locked key row.
+        self::assertSame('A3', $sheet->getSelectedCells());
+
+        foreach (['A1', 'F1', 'A2', 'F2'] as $cell) {
+            self::assertSame(Protection::PROTECTION_PROTECTED, $sheet->getStyle($cell)->getProtection()->getLocked(), $cell);
+        }
+
+        // The data area is the columns' own styles, and past the last column the default one.
+        // Both have to be unlocked: a single locked cell in a row is enough for Excel to refuse
+        // deleting or clearing that row.
+        foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $letter) {
+            $xf = $spreadsheet->getCellXfByIndex($sheet->getColumnDimension($letter)->getXfIndex() ?? 0);
+            self::assertSame(Protection::PROTECTION_UNPROTECTED, $xf->getProtection()->getLocked(), 'column '.$letter);
+        }
+        self::assertSame(Protection::PROTECTION_UNPROTECTED, $spreadsheet->getDefaultStyle()->getProtection()->getLocked());
+
+        // The key row is still hidden, the lists and the rules are still in place.
+        self::assertFalse($sheet->getRowDimension(1)->getVisible());
+        self::assertTrue($sheet->dataValidationExists('C3'));
+        self::assertSame('A3', $sheet->getFreezePane());
+    }
+
+    /**
+     * The flags, one by one — several do not do what their name suggests, and each was measured
+     * in Excel. In PhpSpreadsheet `true` means the action is PROHIBITED.
+     */
+    #[Test]
+    public function theProtectionAllowsFillingInAndNothingThatWouldReachTheHeader(): void
+    {
+        $protection = $this->build(new TemplateOptions(protectHeader: true))->getSheet(0)->getProtection();
+
+        // Allowed: what filling a template in takes.
+        self::assertFalse($protection->getInsertRows(), 'insert rows');
+        self::assertFalse($protection->getDeleteRows(), 'delete rows');
+        self::assertFalse($protection->getSort(), 'sort');
+        self::assertFalse($protection->getAutoFilter(), 'auto filter');
+        self::assertFalse($protection->getFormatColumns(), 'column widths');
+        self::assertFalse($protection->getSelectLockedCells(), 'select locked cells');
+        self::assertFalse($protection->getSelectUnlockedCells(), 'select unlocked cells');
+
+        // Prohibited. Formatting rows would unhide the key row; formatting cells would let a
+        // pasted block overwrite the text format with its own; a new or deleted column would
+        // carry off a key.
+        self::assertTrue($protection->getFormatRows(), 'format rows');
+        self::assertTrue($protection->getFormatCells(), 'format cells');
+        self::assertTrue($protection->getInsertColumns(), 'insert columns');
+        self::assertTrue($protection->getDeleteColumns(), 'delete columns');
+
+        // No password: it stops an accident, and a user who needs to can still unprotect.
+        self::assertSame('', (string) $protection->getPassword());
+    }
+
+    /**
+     * "Nothing else" at CELL level. Sample rows are real cells, so they show what the data area
+     * gets: a lock range one row too long would ship a first data row nobody can type into, and
+     * every assertion above — column styles, default style, selection — would still hold.
+     */
+    #[Test]
+    public function theRowsBelowTheHeaderStayUnlockedCellByCell(): void
+    {
+        $sheet = $this->build(new TemplateOptions(sampleRows: 2, protectHeader: true))->getSheet(0);
+
+        foreach (['A3', 'F3', 'A4', 'F4'] as $cell) {
+            self::assertSame(Protection::PROTECTION_UNPROTECTED, $sheet->getStyle($cell)->getProtection()->getLocked(), $cell);
+        }
+    }
+
+    #[Test]
+    public function withoutAKeyRowTheRowBelowTheLabelsStaysUnlocked(): void
+    {
+        $sheet = $this->build(new TemplateOptions(includeKeyRow: false, sampleRows: 2, protectHeader: true))->getSheet(0);
+
+        foreach (['A2', 'F2', 'A3'] as $cell) {
+            self::assertSame(Protection::PROTECTION_UNPROTECTED, $sheet->getStyle($cell)->getProtection()->getLocked(), $cell);
+        }
+    }
+
+    #[Test]
+    public function withoutAKeyRowTheLabelRowIsTheOneThatIsLocked(): void
+    {
+        $sheet = $this->build(new TemplateOptions(includeKeyRow: false, protectHeader: true))->getSheet(0);
+
+        self::assertTrue($sheet->getProtection()->getSheet());
+        self::assertSame('A2', $sheet->getSelectedCells());
+        self::assertSame(Protection::PROTECTION_PROTECTED, $sheet->getStyle('A1')->getProtection()->getLocked());
     }
 }

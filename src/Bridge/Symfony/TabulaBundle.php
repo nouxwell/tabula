@@ -56,6 +56,7 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
  *             sample_rows: 5
  *             example_word: Örnek
  *             required_word: Zorunlu
+ *             protect_header: true
  *
  * After that, `Nouxwell\Tabula\Tabula` can be autowired anywhere.
  */
@@ -233,6 +234,10 @@ final class TabulaBundle extends AbstractBundle
                             ->defaultValue('Required')
                             ->info('The second line of that message on a required column. A plain word or a translation key.')
                         ->end()
+                        ->booleanNode('protect_header')
+                            ->defaultFalse()
+                            ->info('Lock the key and label rows against editing in Excel (sheet protection without a password). Data entry below them stays open; formatting cells and adding or removing columns do not. See the README.')
+                        ->end()
                     ->end()
                 ->end()
 
@@ -381,6 +386,7 @@ final class TabulaBundle extends AbstractBundle
                 service(XlsxOptions::class),
                 $config['template']['example_word'],
                 $config['template']['required_word'],
+                $config['template']['protect_header'],
             ]);
 
         // `Tabula::template()` sets up its own writer; this registration is for code that wants

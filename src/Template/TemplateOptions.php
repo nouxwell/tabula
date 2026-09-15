@@ -36,6 +36,15 @@ final readonly class TemplateOptions
      *                                   translation key.
      * @param string      $requiredWord  The second line of that message on a required column.
      *                                   A plain word or a translation key.
+     * @param bool        $protectHeader Lock the key and label rows against editing in Excel.
+     *                                   Everything below them stays open: typing, pasting,
+     *                                   filling down, deleting and inserting rows, sorting and
+     *                                   filtering through the header buttons, column widths.
+     *                                   The sheet is protected WITHOUT a password, so this stops
+     *                                   an accidental edit rather than a deliberate one — Review ›
+     *                                   Unprotect Sheet is one click. Off by default, because
+     *                                   protection also takes things away (formatting cells,
+     *                                   adding or removing columns); see the README.
      *
      * Both are WORDS by default, not translation keys, for the reason given at
      * `TabulaSettings::$boolTrueKey`: a translator hands back what it cannot translate, so a key
@@ -47,8 +56,8 @@ final readonly class TemplateOptions
      * refused to compile ("non-existent parameter example"), and a user writing such a pattern in
      * `tabula.yaml` would hit the same wall. The layout "word: value" is fixed instead.
      *
-     * They come after `$xlsx` so that a positional call written against the earlier signature
-     * keeps working.
+     * The later parameters come after `$xlsx`, each appended in its own release, so that a
+     * positional call written against an earlier signature keeps working.
      */
     public function __construct(
         public bool $includeKeyRow = true,
@@ -57,6 +66,7 @@ final readonly class TemplateOptions
         public XlsxOptions $xlsx = new XlsxOptions(),
         public string $exampleWord = 'Example',
         public string $requiredWord = 'Required',
+        public bool $protectHeader = false,
     ) {
     }
 }

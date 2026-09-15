@@ -373,6 +373,29 @@ It is never written into a cell. A sample row in the data area is imported as a 
 moment someone forgets to delete it; an input message cannot be. The two words come from
 `TemplateOptions` (`exampleWord`, `requiredWord`) and translate the way the boolean words do.
 
+### Protecting the key row
+
+Hiding the key row keeps the keys out of sight, not out of reach. A user who unhides it can type
+over a key, and two keys swapped between columns of the same type import without a single error:
+each column's values land in the other's field. `protectHeader` locks the key and label rows:
+
+```php
+new TemplateOptions(protectHeader: true);
+```
+
+```yaml
+tabula:
+    template:
+        protect_header: true
+```
+
+The sheet is protected without a password, which stops accidents rather than intent. Below the
+header, everything a template is filled in with keeps working: typing, pasting from another
+workbook, filling down, inserting and deleting rows, sorting and filtering through the header
+buttons, column widths. What it takes away is formatting cells, inserting or deleting columns,
+sorting a range that includes the header, and typing into a row inserted directly under the
+header (Excel copies the header's locked format into it) — which is why it is off by default.
+
 ### What a boolean cell says
 
 `Yes` and `No`, unless you say otherwise:

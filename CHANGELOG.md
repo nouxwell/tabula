@@ -9,6 +9,30 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-09-15
+
+### Added
+
+- **`TemplateOptions::$protectHeader` (`template.protect_header`) locks the key and label rows
+  of a template in Excel.** A hidden key row keeps the keys out of sight, not out of reach: a
+  user who unhides it can type over a key, and two keys swapped between columns of the same type
+  import without an error, each column's values landing in the other's field. With the option
+  on, the sheet is protected without a password. The header cannot be typed over, cleared,
+  pasted over or unhidden; typing, pasting from another workbook, filling down, inserting and
+  deleting rows, sorting and filtering through the header buttons and column widths keep
+  working.
+
+### Notes
+
+- Off by default, because protection takes some things away: formatting cells, inserting or
+  deleting columns, sorting a range that includes the header, and typing into a row inserted
+  directly under the header (Excel copies the header's locked format into it).
+- The whole sheet is unlocked first and the header locked back, rather than unlocking only the
+  schema's columns. Measured in Excel: with the columns after the schema left locked, deleting or
+  clearing a whole row and pasting a block one column wider were all refused.
+- No password, on purpose — Review › Unprotect Sheet is one click. It stops accidents; an import
+  that must not trust the file still has to check the key row itself.
+
 ## [0.8.1] — 2026-09-15
 
 ### Added
@@ -165,7 +189,8 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/nouxwell/tabula/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/nouxwell/tabula/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/nouxwell/tabula/compare/v0.7.3...v0.8.0
 [0.7.3]: https://github.com/nouxwell/tabula/compare/v0.7.2...v0.7.3

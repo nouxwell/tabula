@@ -25,6 +25,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Style\Protection;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx as SpreadsheetXlsxWriter;
 use UnitEnum;
@@ -149,6 +150,16 @@ final class TemplateBuilder
         $spreadsheet = new Spreadsheet();
         $spreadsheet->getProperties()->setCreator($this->options->xlsx->creator);
 
+        if ($this->options->protectHeader) {
+            // ★ BEFORE anything is styled. Every style this builder creates is cloned from the
+            // default one, so unlocking it here leaves the whole sheet unlocked — every column
+            // style and every column past the last field — and protectHeader() locks the header
+            // rows back at the end. Unlocking only the schema's columns was measured and is not
+            // enough: the columns after them stay locked, and Excel refuses to delete or clear
+            // a row, or take a paste one column wider, when a single cell in it is locked.
+            $spreadsheet->getDefaultStyle()->getProtection()->setLocked(Protection::PROTECTION_UNPROTECTED);
+        }
+
         try {
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle($this->sheetTitle($schema, $context), false, true);
@@ -184,6 +195,10 @@ final class TemplateBuilder
             if ($this->options->xlsx->autoFilter) {
                 $sheet->setAutoFilter('A'.$labelRow.':'.$lastLetter.max($labelRow, $lastSampleRow));
                 $this->makeRoomForFilterButtons($sheet, $letters);
+            }
+
+            if ($this->options->protectHeader) {
+                $this->protectHeader($sheet, $lastLetter, $keyRow ?? $labelRow, $labelRow, $firstDataRow);
             }
 
             // The user should open the file on the DATA sheet; the hidden "_lists" cannot be
@@ -294,6 +309,66 @@ final class TemplateBuilder
 
         // If no label was given, the key itself becomes the header — a column is never left headerless.
         return $context->trans($label ?? $field->getKey());
+    }
+
+    // ---------------------------------------------------------------- protection
+
+    /**
+     * Locks the header rows and protects the sheet, leaving everything below them open.
+     *
+     * Hiding the key row keeps it out of sight; it does not keep it out of reach. A user who
+     * unhides it can overwrite a key, and two keys swapped between columns of the same type are
+     * read back without a single error — the values simply land in each other's fields. The
+     * label row is locked with it: an import skips the row after the keys as the label row, so
+     * a data row moved up into it is dropped just as silently.
+     *
+     * ★ Every flag below was measured in real Excel rather than read off the specification,
+     * because several do not do what their name suggests on their own:
+     *
+     * - PhpSpreadsheet's `true` means PROHIBITED — it writes the attribute Excel reads as "this
+     *   action is locked".
+     * - `formatRows` stays prohibited: allowing it lets the user unhide the key row.
+     * - `formatCells` stays prohibited, and that is what keeps a paste from another workbook
+     *   harmless. With it allowed, the pasted block brings its own "locked" and "General" along,
+     *   overwriting the text format that keeps "0042" from becoming 42.
+     * - Inserting and deleting COLUMNS stays prohibited: a new column would carry locked header
+     *   cells with no key, and deleting one would take its key with it.
+     * - Filtering and sorting through the header buttons work. Sorting a range that includes
+     *   the header does not — Excel will not move locked cells.
+     *
+     * Known cost: a row inserted directly below the header copies the header's LOCKED format
+     * ("format from above" is Excel's default), and cannot be typed into or deleted. Inserting
+     * with "format from below", or anywhere lower down, is fine.
+     */
+    private function protectHeader(Worksheet $sheet, string $lastLetter, int $firstHeaderRow, int $labelRow, int $firstDataRow): void
+    {
+        $sheet->getStyle('A'.$firstHeaderRow.':'.$lastLetter.$labelRow)
+            ->getProtection()
+            ->setLocked(Protection::PROTECTION_PROTECTED);
+
+        $sheet->getProtection()
+            ->setSheet(true)
+            // Allowed — what filling a template in actually takes.
+            ->setSelectLockedCells(false)
+            ->setSelectUnlockedCells(false)
+            ->setInsertRows(false)
+            ->setDeleteRows(false)
+            ->setSort(false)
+            ->setAutoFilter(false)
+            ->setFormatColumns(false)
+            // Prohibited.
+            ->setFormatRows(true)
+            ->setFormatCells(true)
+            ->setInsertColumns(true)
+            ->setDeleteColumns(true)
+            ->setInsertHyperlinks(true)
+            ->setObjects(true)
+            ->setScenarios(true)
+            ->setPivotTables(true);
+
+        // The cursor opens on the first data cell. Left on A1 it would sit in the hidden key row,
+        // and the first thing typed would meet a "protected cell" warning.
+        $sheet->setSelectedCells('A'.$firstDataRow);
     }
 
     // ---------------------------------------------------------------- column formats

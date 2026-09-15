@@ -281,6 +281,29 @@ final class RoundTripTest extends TestCase
     }
 
     /**
+     * Protection guards the header against Excel's user interface, not against a reader: a
+     * protected template makes exactly the same round trip.
+     */
+    #[Test]
+    public function aProtectedTemplateMakesTheSameRoundTrip(): void
+    {
+        $path = $this->dir->file('protected.xlsx');
+        (new TemplateBuilder($this->translator(), $this->settings(), new TemplateOptions(protectHeader: true)))
+            ->write($this->schema(), $path, 'tr');
+        $this->fill($path, 3);
+
+        /** @var list<ImportedRow> $rows */
+        $rows = [];
+        $result = $this->import($this->translator(), $path, $rows);
+
+        self::assertTrue($result->isCompletelySuccessful());
+        self::assertSame(2, $result->imported);
+        self::assertSame(['code', 'name', 'qty', 'balance', 'isActive', 'status', 'createdAt'], $result->columns);
+        self::assertSame(3, $rows[0]->row);
+        self::assertSame('0042', $rows[0]->get('code'));
+    }
+
+    /**
      * ★ THE PROOF THAT THE FATAL FLAW OF THE SYSTEM THIS REPLACES HAS BEEN REPAIRED.
      *
      * The same file is imported a second time with a catalogue in which EVERY column label has
