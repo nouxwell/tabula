@@ -31,12 +31,32 @@ final readonly class TemplateOptions
      *                                   the header. 0 (the default) = none; values below zero
      *                                   count as "none" too.
      * @param XlsxOptions $xlsx          Header appearance — the settings object SHARED with export
+     * @param string      $exampleWord   The word that introduces a column's example in its input
+     *                                   message ("Example: 120.01.001"). A plain word or a
+     *                                   translation key.
+     * @param string      $requiredWord  The second line of that message on a required column.
+     *                                   A plain word or a translation key.
+     *
+     * Both are WORDS by default, not translation keys, for the reason given at
+     * `TabulaSettings::$boolTrueKey`: a translator hands back what it cannot translate, so a key
+     * with no catalogue entry would pop up in Excel as the literal key. Plain words read fine
+     * untranslated; a key the catalogue does define is still resolved.
+     *
+     * ★ A WORD, not a pattern such as "Example: %example%". A `%name%` inside a string handed to
+     * the Symfony container is a PARAMETER REFERENCE: with that default the bridge's container
+     * refused to compile ("non-existent parameter example"), and a user writing such a pattern in
+     * `tabula.yaml` would hit the same wall. The layout "word: value" is fixed instead.
+     *
+     * They come after `$xlsx` so that a positional call written against the earlier signature
+     * keeps working.
      */
     public function __construct(
         public bool $includeKeyRow = true,
         public bool $hideKeyRow = true,
         public int $sampleRows = 0,
         public XlsxOptions $xlsx = new XlsxOptions(),
+        public string $exampleWord = 'Example',
+        public string $requiredWord = 'Required',
     ) {
     }
 }

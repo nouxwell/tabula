@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nouxwell\Tabula\Tests\Template;
 
+use DateTimeImmutable;
 use Nouxwell\Tabula\Port\ArrayTranslator;
 use Nouxwell\Tabula\Port\Translator;
 use Nouxwell\Tabula\Schema\Field;
@@ -478,6 +479,225 @@ final class TemplateBuilderTest extends TestCase
                 "{$cell} must accept an empty cell.",
             );
         }
+    }
+
+    // ---------------------------------------------------------------- examples
+
+    private function buildWith(Schema $schema, ?TemplateOptions $options = null, ?Translator $translator = null): Spreadsheet
+    {
+        $builder = new TemplateBuilder(
+            $translator ?? $this->translator(),
+            new TabulaSettings(boolTrueKey: 'tabula.bool.yes', boolFalseKey: 'tabula.bool.no'),
+            $options ?? new TemplateOptions(),
+        );
+
+        $path = $this->dir->file('examples.xlsx');
+        $builder->write($schema, $path, 'tr');
+
+        return $this->loaded = IOFactory::load($path);
+    }
+
+    /**
+     * The example is a MESSAGE, never a cell.
+     *
+     * A sample row in the data area is imported as a real record the moment a user forgets to
+     * delete it — on an opening-balance template that is two invented ledger entries. An input
+     * message cannot be imported, so the file stays empty and the guidance is still there the
+     * moment the user needs it.
+     */
+    #[Test]
+    public function aTextColumnWithAnExampleShowsItWhenTheCellIsSelected(): void
+    {
+        $sheet = $this->buildWith(Schema::make('doc')->fields(
+            Field::string('code')->label('col.code')->required()->example('120.01.001'),
+        ))->getSheet(0);
+
+        $validation = $sheet->getDataValidation('A3');
+
+        self::assertTrue($validation->getShowInputMessage());
+        self::assertSame('Kod', $validation->getPromptTitle());
+        self::assertSame("Example: 120.01.001\nRequired", $validation->getPrompt());
+        // An "any value" rule: it carries the message and can never refuse what is typed.
+        self::assertSame(DataValidation::TYPE_NONE, $validation->getType());
+        self::assertSame('', $sheet->getCell('A3')->getValueString(), 'The example must not be written into a cell.');
+    }
+
+    #[Test]
+    public function aNumericExampleIsShownTheWayTheExportWouldWriteIt(): void
+    {
+        $validation = $this->buildWith(Schema::make('doc')->fields(
+            Field::decimal('total')->label('col.total')->decimals(2)->example(1250.5),
+        ))->getSheet(0)->getDataValidation('A3');
+
+        self::assertSame('Example: 1.250,50', $validation->getPrompt());
+        // The message rides on the existing rule instead of replacing it.
+        self::assertSame(DataValidation::TYPE_DECIMAL, $validation->getType());
+    }
+
+    #[Test]
+    public function aDateExampleFollowsTheDatePattern(): void
+    {
+        $validation = $this->buildWith(Schema::make('doc')->fields(
+            Field::date('issuedAt')->label('col.date')->example(new DateTimeImmutable('2026-01-31')),
+        ))->getSheet(0)->getDataValidation('A3');
+
+        self::assertSame('Example: 31.01.2026', $validation->getPrompt());
+        self::assertSame(DataValidation::TYPE_DATE, $validation->getType());
+    }
+
+    /**
+     * A template has no row, and a closure written for rows must never be called with null.
+     *
+     * The first draft sent the example through the export formatter as it was. The currency
+     * closure the README shows — `fn (array $row): string => $row['currencyCode']` — then threw
+     * a TypeError and no template was written at all, on a schema that built fine the moment its
+     * example was taken away. On these columns the example is formatted by the type alone, the
+     * way the template's own cell format already sees the column: no closure, no symbol.
+     */
+    #[Test]
+    public function anExampleOnATypedColumnLeavesOutEverythingThatNeedsARow(): void
+    {
+        $rowOnly = static fn (mixed $raw, array $row): string => 'row '.$row['id'];
+
+        $sheet = $this->buildWith(Schema::make('doc')->fields(
+            Field::money('balance')->label('col.balance')
+                ->currency(static fn (array $row): string => $row['currencyCode'])
+                ->example(1250.5),
+            Field::money('fixed')->label('col.fixed')->currency('TRY')->example(1250.5),
+            Field::decimal('rate')->label('col.rate')->decimals(2)->format($rowOnly)->example(1250.5),
+            Field::date('issuedAt')->label('col.date')->format($rowOnly)->example(new DateTimeImmutable('2026-01-31')),
+            Field::string('code')->label('col.code')->format($rowOnly)->example(501),
+        ))->getSheet(0);
+
+        self::assertSame('Example: 1.250,50', $sheet->getDataValidation('A3')->getPrompt());
+        // A fixed code needs no row, but the cell format has no symbol either: the user types a bare number.
+        self::assertSame('Example: 1.250,50', $sheet->getDataValidation('B3')->getPrompt());
+        self::assertSame('Example: 1.250,50', $sheet->getDataValidation('C3')->getPrompt());
+        self::assertSame('Example: 31.01.2026', $sheet->getDataValidation('D3')->getPrompt());
+        self::assertSame('Example: 501', $sheet->getDataValidation('E3')->getPrompt());
+    }
+
+    /**
+     * A dropdown column is the exception, on purpose: its example goes through the very call that
+     * built its list, so it reads exactly like its entry in the list.
+     */
+    #[Test]
+    public function aDropdownExampleGoesThroughTheSameFormatClosureAsItsList(): void
+    {
+        $spreadsheet = $this->buildWith(Schema::make('doc')->fields(
+            Field::bool('inStock')->label('col.stock')
+                ->format(static fn (mixed $raw, mixed $row): string => true === $raw ? 'Var' : 'Yok')
+                ->example(true),
+        ));
+        $validation = $spreadsheet->getSheet(0)->getDataValidation('A3');
+
+        self::assertSame('Example: Var', $validation->getPrompt());
+        self::assertSame(['Var', 'Yok'], $this->dropdownOptions($spreadsheet, $validation));
+    }
+
+    #[Test]
+    public function aDropdownExampleIsTheTranslatedOptionAndTheListIsKept(): void
+    {
+        $spreadsheet = $this->buildWith(Schema::make('doc')->fields(
+            Field::bool('isActive')->label('col.active')->example(true),
+        ));
+        $validation = $spreadsheet->getSheet(0)->getDataValidation('A3');
+
+        self::assertSame('Example: Evet', $validation->getPrompt());
+        self::assertSame(['Evet', 'Hayır'], $this->dropdownOptions($spreadsheet, $validation));
+    }
+
+    #[Test]
+    public function aTextExampleIsTranslatedWhenTheCatalogueKnowsItAndAClosureIsUsedAsIs(): void
+    {
+        $translator = new ArrayTranslator(['tr' => ['col.city' => 'Şehir', 'example.city' => 'İstanbul']]);
+
+        $sheet = $this->buildWith(Schema::make('doc')->fields(
+            Field::string('city')->label('col.city')->example('example.city'),
+            Field::string('note')->label('col.note')
+                ->example(static fn (string $locale): string => 'tr' === $locale ? 'Kapıda ödeme' : 'Cash on delivery'),
+        ), translator: $translator)->getSheet(0);
+
+        self::assertSame('Example: İstanbul', $sheet->getDataValidation('A3')->getPrompt());
+        self::assertSame('Example: Kapıda ödeme', $sheet->getDataValidation('B3')->getPrompt());
+    }
+
+    /**
+     * Without an example nothing changes: a text column still carries no validation at all and
+     * a dropdown gets no message bolted on.
+     */
+    #[Test]
+    public function aColumnWithoutAnExampleGetsNoMessage(): void
+    {
+        $sheet = $this->build()->getSheet(0);
+
+        self::assertFalse($sheet->dataValidationExists('A3'));
+        self::assertFalse($sheet->getDataValidation('C3')->getShowInputMessage());
+    }
+
+    #[Test]
+    public function theWordsComeFromTheOptionsAndAreTranslated(): void
+    {
+        $translator = new ArrayTranslator(['tr' => [
+            'col.code' => 'Kod',
+            'tpl.example' => 'Örnek',
+            'tpl.required' => 'Zorunlu',
+        ]]);
+
+        $validation = $this->buildWith(
+            Schema::make('doc')->fields(Field::string('code')->label('col.code')->required()->example('120.01.001')),
+            new TemplateOptions(exampleWord: 'tpl.example', requiredWord: 'tpl.required'),
+            $translator,
+        )->getSheet(0)->getDataValidation('A3');
+
+        self::assertSame("Örnek: 120.01.001\nZorunlu", $validation->getPrompt());
+    }
+
+    /**
+     * Excel refuses an input-message title over 32 characters and a text over 255, and opens
+     * such a workbook saying it needs repairing. The cut counts characters, not bytes.
+     */
+    #[Test]
+    public function aLongLabelAndExampleAreCutToWhatExcelAccepts(): void
+    {
+        $label = str_repeat('Ğ', 40);
+
+        $validation = $this->buildWith(Schema::make('doc')->fields(
+            Field::string('code')->label(static fn (): string => $label)->required()->example(str_repeat('ş', 300)),
+        ))->getSheet(0)->getDataValidation('A3');
+
+        self::assertSame(32, mb_strlen($validation->getPromptTitle()));
+        self::assertStringEndsWith('…', $validation->getPromptTitle());
+        self::assertLessThanOrEqual(255, mb_strlen($validation->getPrompt()));
+        // The requiredness line survives; only the example gives way.
+        self::assertStringEndsWith("\nRequired", $validation->getPrompt());
+    }
+
+    /**
+     * Excel counts the message TEXT in UTF-16 units, not characters.
+     *
+     * 128 emoji are 128 characters but 256 units, and Excel refuses to open such a workbook —
+     * measured in Excel, after a character count had let exactly that through. The mixed column
+     * is the realistic one: ordinary letters with a few emoji pass 255 units while staying under
+     * 255 characters.
+     */
+    #[Test]
+    public function theMessageIsCutInTheUnitsExcelCounts(): void
+    {
+        $sheet = $this->buildWith(Schema::make('doc')->fields(
+            Field::string('code')->label('col.code')->required()->example(str_repeat('😀', 300)),
+            Field::string('note')->label('col.note')->example(str_repeat('ş', 230).str_repeat('😀', 10)),
+        ))->getSheet(0);
+
+        foreach (['A3', 'B3'] as $cell) {
+            $prompt = $sheet->getDataValidation($cell)->getPrompt();
+
+            self::assertLessThanOrEqual(255, intdiv(\strlen(mb_convert_encoding($prompt, 'UTF-16LE', 'UTF-8')), 2), $cell);
+            self::assertTrue(mb_check_encoding($prompt, 'UTF-8'), $cell.': no character may be split.');
+            self::assertStringEndsWith('…', explode("\n", $prompt)[0], $cell);
+        }
+
+        self::assertStringEndsWith("\nRequired", $sheet->getDataValidation('A3')->getPrompt());
     }
 
     // ---------------------------------------------------------------- options

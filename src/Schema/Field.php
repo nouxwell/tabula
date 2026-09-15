@@ -52,6 +52,9 @@ final class Field
 
     private ?Closure $formatter = null;
 
+    /** null = no example; see example() */
+    private mixed $example = null;
+
     private function __construct(
         private readonly string $key,
         private readonly FieldType $type,
@@ -147,8 +150,8 @@ final class Field
         });
     }
 
-    /** A fixed currency code, or fn(mixed $row): string */
-    public function currency(string|Closure $currency): self
+    /** A fixed currency code, fn(mixed $row): string, or null to remove one set earlier */
+    public function currency(string|Closure|null $currency): self
     {
         return $this->with(static function (self $f) use ($currency): void {
             $f->currency = $currency;
@@ -199,11 +202,41 @@ final class Field
         });
     }
 
-    /** Take formatting over entirely: fn(mixed $raw, mixed $row): string */
-    public function format(Closure $formatter): self
+    /** Take formatting over entirely: fn(mixed $raw, mixed $row): string — or null to remove one set earlier */
+    public function format(?Closure $formatter): self
     {
         return $this->with(static function (self $f) use ($formatter): void {
             $f->formatter = $formatter;
+        });
+    }
+
+    /**
+     * A sample value, shown in the template as the input message Excel pops up when a cell of
+     * the column is selected.
+     *
+     * Give it a value OF THE FIELD'S OWN TYPE and it is formatted the way the export formats that
+     * type: `1250.5` on a decimal column reads "1.250,50" under Turkish number settings, a
+     * `DateTimeImmutable` follows the date pattern, `true` on a bool column is the translated
+     * yes-word, an options column takes the option KEY. That is the point of passing a value
+     * rather than finished text — the example follows the same settings as the file.
+     *
+     * A template has no data row. On text, number, money and date columns the example therefore
+     * leaves out what needs one: a `format()` closure is not applied, and money carries no
+     * currency symbol — just like the column's own cell format. On a bool, enum or options
+     * column it goes through the same call as the dropdown list, `format()` closure included and
+     * called with a null row, so it reads exactly like its entry in the list. Templates use the
+     * built-in formatters; a custom `FormatterRegistry` reaches the export only.
+     *
+     * On a text column a string is resolved like a label: a translation key, or plain text that
+     * passes through untouched. `fn(string $locale): string` is used verbatim.
+     *
+     * The example is never written into a cell. A sample row in the data area gets imported as
+     * a real record the moment a user forgets to delete it; a message cannot.
+     */
+    public function example(mixed $example): self
+    {
+        return $this->with(static function (self $f) use ($example): void {
+            $f->example = $example;
         });
     }
 
@@ -286,6 +319,11 @@ final class Field
     public function getFormatter(): ?Closure
     {
         return $this->formatter;
+    }
+
+    public function getExample(): mixed
+    {
+        return $this->example;
     }
 
     /** @return list<Format>|null */

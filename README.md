@@ -124,6 +124,7 @@ $result->rows;    // number of rows written
 | `width` | Column width; automatic when omitted. |
 | `align` | Derived from the type when omitted: numbers right, bool/date centre, text left. |
 | `required` | Marks the header in the template and makes the field non-empty on import. |
+| `example` | A sample value shown in the template's input message when a cell is selected, formatted with the export's number and date settings. Never written into a cell. |
 | `priority` | Rank in the PDF column budget: `Always` · `Normal` · `Optional`. |
 | `only` | Restricts the field to specific output formats. |
 | `format` | A closure that takes over formatting entirely. |
@@ -345,6 +346,32 @@ Blank stays allowed on every rule, because requiredness belongs to the import wh
 name the row and the field. Made Excel's job it fires a warning box for merely tabbing through an
 unfinished row, and a user who meets that box twice switches validation off for good — taking the
 rules that do matter with it.
+
+### Examples without sample rows
+
+`Field::example()` shows a sample value when a cell of the column is selected:
+
+```php
+Field::string('code')->label('col.code')->required()->example('120.01.001'),
+Field::decimal('total')->label('col.total')->decimals(2)->example(1250.5),
+Field::date('issuedAt')->label('col.date')->example(new DateTimeImmutable('2026-01-31')),
+```
+
+Excel's input message then reads "Example: 120.01.001", with "Required" underneath on a required
+column. A value of the field's own type is formatted with the same number and date settings as the
+export: `1250.5` reads "1.250,50" under Turkish settings.
+
+A template has no data row, and the example behaves accordingly. On text, number, money and date
+columns a `format()` closure is not applied and money carries no currency symbol, exactly like the
+column's own cell format. On bool, enum and options columns the example goes through the same call
+as the dropdown list, so it reads exactly like its entry in the list — which also means a `format()` or
+`options()` closure on such a column is called with a `null` row and has to accept it, for the
+list as much as for the example. Templates use the built-in formatters; a custom
+`FormatterRegistry` given to `Tabula` affects the export only.
+
+It is never written into a cell. A sample row in the data area is imported as a real record the
+moment someone forgets to delete it; an input message cannot be. The two words come from
+`TemplateOptions` (`exampleWord`, `requiredWord`) and translate the way the boolean words do.
 
 ### What a boolean cell says
 

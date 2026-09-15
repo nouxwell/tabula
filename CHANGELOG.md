@@ -9,6 +9,44 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-09-15
+
+### Added
+
+- **`Field::example()` shows a sample value in the template without writing it into a cell.**
+  Selecting a cell of the column pops up Excel's input message — "Example: 120.01.001", with
+  "Required" on a second line for a required column. Give it a value of the field's own type
+  and it is formatted the way the export formats that type: `1250.5` reads "1.250,50" under
+  Turkish number settings, a date follows the date pattern, `true` is the translated yes-word,
+  an options column takes the option key. On a text column a string resolves like a label.
+- `TemplateOptions::$exampleWord` / `$requiredWord` (`template.example_word` /
+  `template.required_word` in the bundle) — plain words by default, translated when the
+  catalogue defines them, like the boolean words.
+- `Field::format()` and `Field::currency()` accept `null`, taking a formatter or a currency set
+  earlier back off a copy of the field.
+
+### Notes
+
+- A sample row in the data area was the obvious alternative and the wrong one: a reader takes
+  every non-empty row as data, so an example a user forgets to delete is imported as a real
+  record. A message cannot be imported.
+- A text column that has an example now carries an "any value" validation. It holds the message
+  and refuses nothing; a text column without an example still gets no validation at all.
+- Excel refuses an input-message title over 32 characters and a text over 255 UTF-16 units — an
+  emoji counts twice there, as a check in Excel showed. Both are cut without splitting a
+  character, and when the text is too long the example gives way before the "Required" line.
+- A template has no data row. On text, number, money and date columns the example is formatted
+  by the column's type alone: a `format()` closure is not applied and money shows no currency
+  symbol, exactly like the column's own cell format. So a closure typed `fn (array $row)` — the
+  README's own currency pattern — is never called with `null`; before a pre-release review
+  caught it, adding an example to such a column made the whole template throw.
+- Bool, enum and options columns format their example through the same call as their dropdown
+  list, `format()` closure and `null` row included, so the example reads exactly like its entry in
+  the list. Those closures already had to accept a `null` row for the list itself; the README now
+  says so.
+- Templates format with the built-in formatters, as their dropdown lists always have. A custom
+  `FormatterRegistry` given to `Tabula` reaches the export only.
+
 ## [0.8.0] — 2026-08-31
 
 ### Fixed
@@ -127,7 +165,8 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/nouxwell/tabula/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/nouxwell/tabula/compare/v0.7.3...v0.8.0
 [0.7.3]: https://github.com/nouxwell/tabula/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/nouxwell/tabula/compare/v0.7.1...v0.7.2

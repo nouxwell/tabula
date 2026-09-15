@@ -90,6 +90,12 @@ final class TemplateBuilder
      */
     private const string LIST_SHEET_TITLE = '_lists';
 
+    /** Excel refuses a longer input-message title and asks to repair the workbook. */
+    private const int PROMPT_TITLE_MAX_LENGTH = 32;
+
+    /** The same for the input-message text itself. */
+    private const int PROMPT_MAX_LENGTH = 255;
+
     /**
      * The registry that produces both the output text and the dropdown options from a cell value.
      *
@@ -165,8 +171,8 @@ final class TemplateBuilder
                 $this->unRightAlignHeaders($sheet, $fields, $letters, $labelRow);
             }
             $lastSampleRow = $this->createSampleRows($sheet, $lastLetter, $firstDataRow);
-            $this->applyDropdowns($spreadsheet, $sheet, $fields, $letters, $firstDataRow, $context);
-            $this->applyTypeValidation($sheet, $fields, $letters, $firstDataRow);
+            $listed = $this->applyDropdowns($spreadsheet, $sheet, $fields, $letters, $firstDataRow, $context);
+            $this->applyTypeValidation($sheet, $fields, $letters, $firstDataRow, $context, $listed);
 
             if ($this->options->xlsx->freezeHeader) {
                 // "Freeze A3" = both the key AND the label row stay fixed. `XlsxWriter` freezes
@@ -485,6 +491,8 @@ final class TemplateBuilder
      *
      * @param list<Field>  $fields
      * @param list<string> $letters
+     *
+     * @return array<int, true> the indexes of the columns that received a dropdown
      */
     private function applyDropdowns(
         Spreadsheet $spreadsheet,
@@ -493,7 +501,7 @@ final class TemplateBuilder
         array $letters,
         int $firstDataRow,
         FormatContext $context,
-    ): void {
+    ): array {
         /** @var array<int, list<string>> $optionsByIndex */
         $optionsByIndex = [];
 
@@ -513,8 +521,10 @@ final class TemplateBuilder
         }
 
         if ([] === $optionsByIndex) {
-            return;
+            return [];
         }
+
+        $listed = [];
 
         $lists = $spreadsheet->createSheet();
         $lists->setTitle(self::LIST_SHEET_TITLE, false, true);
@@ -571,9 +581,13 @@ final class TemplateBuilder
             // thousands of rows.
             $sheet->setDataValidation(
                 $letters[$index].$firstDataRow.':'.$letters[$index].AddressRange::MAX_ROW,
-                $validation,
+                $this->withPrompt($validation, $fields[$index], $context),
             );
+
+            $listed[$index] = true;
         }
+
+        return $listed;
     }
 
     /**
@@ -588,25 +602,32 @@ final class TemplateBuilder
      * names the row and the field. A template is not the place to encode policy: it is opened
      * once, kept for months, and filled in against rules that have moved on since.
      *
-     * String columns get NOTHING. They are already formatted as text so that "0501" keeps its
+     * String columns get no RULE. They are already formatted as text so that "0501" keeps its
      * leading zero, and any validation on top of that would only ever fire on a value Excel
-     * has no opinion about.
+     * has no opinion about. A text column that has a `Field::example()` does get a validation,
+     * but of Excel's "any value" type: it exists only to carry the input message and cannot
+     * refuse anything that is typed.
      *
-     * @param list<Field>  $fields
-     * @param list<string> $letters
+     * @param list<Field>      $fields
+     * @param list<string>     $letters
+     * @param array<int, true> $listed  the columns that already carry a dropdown
      */
     private function applyTypeValidation(
         Worksheet $sheet,
         array $fields,
         array $letters,
         int $firstDataRow,
+        FormatContext $context,
+        array $listed,
     ): void {
         foreach ($fields as $index => $field) {
             $type = $field->getType();
 
-            // An enumerable column already carries a list validation from applyDropdowns();
-            // a second rule on the same range would simply overwrite it.
-            if ($type->isEnumerable()) {
+            // A column that already carries a list validation from applyDropdowns() is done —
+            // its input message rode in with the list. A second rule on the same range would
+            // simply overwrite it. (An enumerable column whose options came back empty got no
+            // list, and falls through: it may still need its message.)
+            if (isset($listed[$index])) {
                 continue;
             }
 
@@ -614,7 +635,7 @@ final class TemplateBuilder
                 $type->isTemporal() => $this->dateValidation(),
                 FieldType::Integer === $type => $this->numberValidation(DataValidation::TYPE_WHOLE),
                 $type->isNumeric() => $this->numberValidation(DataValidation::TYPE_DECIMAL),
-                default => null,
+                default => $this->messageOnlyValidation($field, $context),
             };
 
             if (null === $validation) {
@@ -625,7 +646,7 @@ final class TemplateBuilder
             // and creates no cells, so this stays free however far the user pastes.
             $sheet->setDataValidation(
                 $letters[$index].$firstDataRow.':'.$letters[$index].AddressRange::MAX_ROW,
-                $validation,
+                $this->withPrompt($validation, $field, $context),
             );
         }
     }
@@ -687,6 +708,163 @@ final class TemplateBuilder
         $validation->setShowErrorMessage(true);
 
         return $validation;
+    }
+
+    /**
+     * An "any value" validation whose only job is to carry the column's input message.
+     *
+     * `null` when the field has no example: a text column without one keeps getting nothing at
+     * all, exactly as before.
+     */
+    private function messageOnlyValidation(Field $field, FormatContext $context): ?DataValidation
+    {
+        if (null === $this->exampleText($field, $context)) {
+            return null;
+        }
+
+        $validation = new DataValidation();
+        $validation->setType(DataValidation::TYPE_NONE);
+        $validation->setAllowBlank(true);
+
+        return $validation;
+    }
+
+    /**
+     * Attaches the field's example as the message Excel shows when a cell is selected.
+     *
+     * The message sits on the column's EXISTING rule rather than replacing it — a date column
+     * keeps refusing text while telling the user what a date should look like.
+     */
+    private function withPrompt(DataValidation $validation, Field $field, FormatContext $context): DataValidation
+    {
+        $example = $this->exampleText($field, $context);
+
+        if (null === $example) {
+            return $validation;
+        }
+
+        $exampleLine = $context->trans($this->options->exampleWord).': '.$example;
+        $requiredLine = $field->isRequired() ? $context->trans($this->options->requiredWord) : null;
+
+        // When the text is too long, the EXAMPLE gives way and the requiredness line survives:
+        // a truncated sample is still a sample, a missing "required" is missing information.
+        $room = self::PROMPT_MAX_LENGTH - (null === $requiredLine ? 0 : self::utf16Length($requiredLine) + 1);
+        $prompt = self::cut($exampleLine, max(1, $room), utf16: true);
+
+        if (null !== $requiredLine) {
+            $prompt .= "\n".$requiredLine;
+        }
+
+        $validation->setShowInputMessage(true);
+        $validation->setPromptTitle(self::cut($this->labelOf($field, $context), self::PROMPT_TITLE_MAX_LENGTH));
+        $validation->setPrompt(self::cut($prompt, self::PROMPT_MAX_LENGTH, utf16: true));
+
+        return $validation;
+    }
+
+    /**
+     * The example as the user reads it, or `null` when the field has none.
+     *
+     * A closure is used verbatim and a string on a text column resolves like a label. Any other
+     * value goes through the formatter for the column's type, so a number or a date follows the
+     * same number and date settings as the export.
+     *
+     * ★ A template has no rows, and the two kinds of column handle that differently:
+     *
+     * - A dropdown column (bool, enum, options) formats its example through exactly the call that
+     *   built its list — `format()` closure and null row included — so it reads exactly like its
+     *   entry in the list; skipping the closure could make the two disagree.
+     * - Every other column formats it through cellView(), without the parts that need a row.
+     *   Before examples existed a template never called those closures on these columns, and a
+     *   closure typed `fn (array $row)` — the currency pattern the README shows — throws a
+     *   TypeError on null: the whole template failed on a schema that built fine without its
+     *   example.
+     */
+    private function exampleText(Field $field, FormatContext $context): ?string
+    {
+        $example = $field->getExample();
+
+        if (null === $example) {
+            return null;
+        }
+
+        $type = $field->getType();
+
+        $text = match (true) {
+            $example instanceof Closure => (string) $example($context->locale),
+            FieldType::String === $type && \is_string($example) => $context->trans($example),
+            $type->isEnumerable() => $this->formatters->for($type)->format($example, $field, null, $context)->text,
+            default => $this->formatters->for($type)->format($example, self::cellView($field), null, $context)->text,
+        };
+
+        $text = trim($text);
+
+        return '' === $text ? null : $text;
+    }
+
+    /**
+     * The field as the template's own cells see it: without its `format()` closure and without
+     * a currency.
+     *
+     * Both may need a data row, and a template has none. The currency goes even when it is a
+     * fixed code: the column's number format leaves the symbol out (see numberFormatFor()), so
+     * the user types a bare number, and an example showing "₺" would suggest otherwise.
+     */
+    private static function cellView(Field $field): Field
+    {
+        if (null !== $field->getFormatter()) {
+            $field = $field->format(null);
+        }
+
+        if (null !== $field->getCurrency()) {
+            $field = $field->currency(null);
+        }
+
+        return $field;
+    }
+
+    /**
+     * Cuts text to a limit without splitting a character, ending it with "…".
+     *
+     * A byte cut would split a letter such as "ş" in half. `$utf16` counts the way Excel counts
+     * the input-message TEXT: in UTF-16 code units, where a character outside the Basic
+     * Multilingual Plane — an emoji — takes two. Measured in Excel: 255 Turkish letters open,
+     * 128 emoji (128 characters, 256 units) make the workbook unopenable. A character count let
+     * exactly that through until a pre-release check. The title opened with 32 emoji, so it is
+     * counted in characters.
+     */
+    private static function cut(string $text, int $max, bool $utf16 = false): string
+    {
+        $length = $utf16 ? self::utf16Length($text) : mb_strlen($text);
+
+        if ($length <= $max) {
+            return $text;
+        }
+
+        // The ellipsis is one unit either way.
+        $room = max(0, $max - 1);
+        $kept = '';
+        $used = 0;
+
+        foreach (mb_str_split($text) as $character) {
+            // A four-byte UTF-8 character is exactly the one UTF-16 writes as a surrogate pair.
+            $width = $utf16 && 4 === \strlen($character) ? 2 : 1;
+
+            if ($used + $width > $room) {
+                break;
+            }
+
+            $kept .= $character;
+            $used += $width;
+        }
+
+        return rtrim($kept).'…';
+    }
+
+    /** The length Excel measures an input message in: UTF-16 code units. */
+    private static function utf16Length(string $text): int
+    {
+        return mb_strlen($text) + (int) preg_match_all('/[\x{10000}-\x{10FFFF}]/u', $text);
     }
 
     /**

@@ -140,6 +140,13 @@ final class FieldTest extends TestCase
             'd.m.Y',
         ];
 
+        yield 'example' => [
+            static fn (Field $f): Field => $f->example('120.01.001'),
+            static fn (Field $f): mixed => $f->getExample(),
+            null,
+            '120.01.001',
+        ];
+
         // Instead of closure identity we ask "is one set"; two separate closures are never equal.
         yield 'format' => [
             static fn (Field $f): Field => $f->format(static fn (mixed $raw): string => (string) $raw),
@@ -175,6 +182,24 @@ final class FieldTest extends TestCase
         // only() does not accumulate, it replaces the previous selection entirely.
         $formats = Field::string('s')->only(Format::Xlsx)->only(Format::Csv, Format::Pdf);
         self::assertSame([Format::Csv, Format::Pdf], $formats->getOnly());
+    }
+
+    /**
+     * `format(null)` and `currency(null)` take a closure or a code back off a copy — this is how a
+     * template formats an example without the parts that need a data row.
+     */
+    #[Test]
+    public function formatAndCurrencyCanBeRemovedAgain(): void
+    {
+        $field = Field::money('m')
+            ->currency(static fn (mixed $row): string => 'TRY')
+            ->format(static fn (mixed $raw): string => (string) $raw);
+        $plain = $field->currency(null)->format(null);
+
+        self::assertNull($plain->getCurrency());
+        self::assertNull($plain->getFormatter());
+        self::assertNotNull($field->getCurrency(), 'The original keeps its currency.');
+        self::assertNotNull($field->getFormatter(), 'The original keeps its formatter.');
     }
 
     // ---------------------------------------------------------------- source

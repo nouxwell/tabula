@@ -54,6 +54,8 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
  *             orientation: landscape
  *         template:
  *             sample_rows: 5
+ *             example_word: Örnek
+ *             required_word: Zorunlu
  *
  * After that, `Nouxwell\Tabula\Tabula` can be autowired anywhere.
  */
@@ -220,6 +222,17 @@ final class TabulaBundle extends AbstractBundle
                             ->beforeNormalization()->ifNull()->then(static fn (): int => 0)->end()
                             ->info('How many pre-formatted empty rows are created beneath the header. 0 = none.')
                         ->end()
+                        // Words — not translation keys, and not a `%pattern%`: a `%name%` here is
+                        // read by the container as a parameter reference. See
+                        // TemplateOptions::$exampleWord.
+                        ->scalarNode('example_word')
+                            ->defaultValue('Example')
+                            ->info('The word that introduces the example of a column in the template ("Example: 120.01.001"). A plain word or a translation key.')
+                        ->end()
+                        ->scalarNode('required_word')
+                            ->defaultValue('Required')
+                            ->info('The second line of that message on a required column. A plain word or a translation key.')
+                        ->end()
                     ->end()
                 ->end()
 
@@ -353,8 +366,8 @@ final class TabulaBundle extends AbstractBundle
 
         // It does NOT GO THROUGH `SettingsFactory`: that factory exists for the places where
         // the core settings classes carry an enum or a derived value (see the class comment).
-        // `TemplateOptions` carries only three scalars and the shared `XlsxOptions`, so it can
-        // be built directly.
+        // `TemplateOptions` carries only scalars and the shared `XlsxOptions`, so it can be
+        // built directly.
         //
         // ★ The appearance setting comes from the service SHARED WITH EXPORT: a user who
         // downloads and fills in a template must see the same header as in the file they
@@ -366,6 +379,8 @@ final class TabulaBundle extends AbstractBundle
                 $config['template']['hide_key_row'],
                 $config['template']['sample_rows'],
                 service(XlsxOptions::class),
+                $config['template']['example_word'],
+                $config['template']['required_word'],
             ]);
 
         // `Tabula::template()` sets up its own writer; this registration is for code that wants

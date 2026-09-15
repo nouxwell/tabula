@@ -12,6 +12,7 @@ use Nouxwell\Tabula\Port\Translator;
 use Nouxwell\Tabula\Settings\SymbolPosition;
 use Nouxwell\Tabula\Settings\TabulaSettings;
 use Nouxwell\Tabula\Tabula;
+use Nouxwell\Tabula\Template\TemplateOptions;
 use Nouxwell\Tabula\Tests\Fixture\KernelParameters;
 use Nouxwell\Tabula\Tests\Fixture\StubSymfonyTranslator;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -347,6 +348,38 @@ final class TabulaBundleTest extends TestCase
         $this->compile(['numbers' => ['symbol_position' => 'sideways']]);
     }
 
+    // ---------------------------------------------------------------- configuration → template options
+
+    /**
+     * The template words are compiled here, not just read off the tree.
+     *
+     * The first draft offered "Example: %example%" as the default. The configuration tree took
+     * it; the container did not — a `%name%` inside a service argument is a parameter reference,
+     * so every application using the bundle would have failed to boot.
+     */
+    #[Test]
+    public function theTemplateWordsHaveDefaultsTheContainerAccepts(): void
+    {
+        $options = $this->compile()->get(TemplateOptions::class);
+        self::assertInstanceOf(TemplateOptions::class, $options);
+
+        self::assertSame('Example', $options->exampleWord);
+        self::assertSame('Required', $options->requiredWord);
+    }
+
+    #[Test]
+    public function theConfiguredTemplateWordsReachTheOptions(): void
+    {
+        $options = $this->compile(['template' => [
+            'example_word' => 'import.template.tooltip.example',
+            'required_word' => 'import.template.tooltip.required',
+        ]])->get(TemplateOptions::class);
+        self::assertInstanceOf(TemplateOptions::class, $options);
+
+        self::assertSame('import.template.tooltip.example', $options->exampleWord);
+        self::assertSame('import.template.tooltip.required', $options->requiredWord);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /**
@@ -370,6 +403,7 @@ final class TabulaBundleTest extends TestCase
         $this->loadExtension($container, $config);
 
         $container->getDefinition(TabulaSettings::class)->setPublic(true);
+        $container->getDefinition(TemplateOptions::class)->setPublic(true);
         $container->getDefinition(SymfonyTranslator::class)->setPublic(true);
         $container->getAlias(Translator::class)->setPublic(true);
 

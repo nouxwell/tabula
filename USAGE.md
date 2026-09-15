@@ -284,6 +284,15 @@ Typed columns are also validated **in the cell**: a date column takes dates, an 
 numbers, the other numeric types decimals. The import would catch these too, but only after the user
 had filled the whole file in and uploaded it.
 
+Give a column an example and Excel shows it when a cell is selected. The file itself stays empty,
+so a forgotten sample can never be imported:
+
+```php
+Field::string('code')->label('col.code')->required()->example('120.01.001');
+// selecting a cell shows:  Example: 120.01.001
+//                          Required
+```
+
 ---
 
 ## 8. Reporting import errors to the user
