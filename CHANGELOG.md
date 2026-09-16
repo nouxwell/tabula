@@ -9,6 +9,61 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-09-16
+
+### Added
+
+- **`RowError::$code` and `RowError::$params` let an application word import errors in its own
+  language.** `RowError::$message` is a sentence in English. An application whose users read
+  another language could show it anyway, or check every cell a second time in its own code to get
+  its own wording — a second copy of the rules the schema is there to hold once. Every cell failure
+  now also carries a `RowErrorCode` and the values its wording needs, under plain names the
+  library's `Translator` port takes as they are:
+
+  ```php
+  $tabula->translator()->trans('import.error.'.$error->code->value, $error->params, 'tr');
+  // import.error.not_a_number: '"%value%" bir sayı değil.'
+  ```
+
+  The codes are `required`, `not_a_number`, `not_an_integer`, `not_a_date`, `not_a_boolean` and
+  `not_an_option`.
+- **`ImportBuilder::keepRawValues()` keeps the value the reader produced, before the field's parser
+  touched it; `ImportedRow::raw()` and `rawValues()` return it.** The parsed value says what a cell
+  means, not what was in it: a quantity written as `1.234,5` comes back as `1234.5` and the text is
+  gone. That is right for saving the record, and not enough for showing the user what they
+  uploaded, for an audit trail, or for moving code that normalises strings itself over to typed
+  values one field at a time.
+
+### Notes
+
+- No existing method, argument or message changed. Every message is the same sentence byte for
+  byte, `toArray()` still returns only parsed values, a required-field error still has no `value`,
+  and the new constructor parameters come last with defaults. The objects do carry more: a
+  `RowError` now has `code` and `params`, and a row imported with raw values holds them, so
+  comparing one with a hand-built object, or its `json_encode`/`serialize` output, sees the new
+  fields.
+- Raw values are off by default. Rows streamed through the callback cost the same either way; code
+  that keeps the `ImportedRow` objects was measured holding about half as much memory again per row
+  with them on. Without `keepRawValues()`, `raw()` refuses rather than answering null for every
+  field.
+- The codes name the failure, not the field type: money and quantity columns both report
+  `not_a_number`, enum and options columns both `not_an_option`; `params['type']` tells them apart.
+  A mistake in the schema or the set-up — no parser for a type, an enum field pointing at a class
+  that is not an enum — still stops the run with an exception and has no code. New codes may come
+  in a later release, so a `match` over them should keep a `default` arm.
+- The params are plain names because the `Translator` port adds the `%…%`. Symfony's own
+  `TranslatorInterface` does not, and takes the domain rather than the locale as its third
+  argument, so going around the port means wrapping the names first.
+- A custom parser that throws `new ParseException(...)` produces an error whose code is null; its
+  message still reaches the user. The code lives in `ParseException::rowErrorCode()`, not in
+  `$code`, which PHP keeps for the exception's own integer code.
+- With `ErrorMode::FailFast` the exception's message is still English; `rowErrors()` carries the
+  codes.
+- `raw()` is the reader's value, not the user's keystrokes. A CSV cell is the text in the file (an
+  empty cell is an empty string); an xlsx cell is what the workbook stores — a number as an int or
+  float, a date as its serial number, a formula as its result as PhpSpreadsheet calculates it, an
+  empty cell as null. Only the schema's fields are kept, and only accepted rows reach the callback.
+
 ## [0.8.2] — 2026-09-15
 
 ### Added
@@ -189,7 +244,8 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.3...HEAD
+[0.8.3]: https://github.com/nouxwell/tabula/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/nouxwell/tabula/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/nouxwell/tabula/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/nouxwell/tabula/compare/v0.7.3...v0.8.0

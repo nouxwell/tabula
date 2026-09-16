@@ -276,6 +276,17 @@ all of them at once, and nobody finds out until an import is rejected.
 Values come back **typed**: a bool is a bool, an enum field is an enum instance, a date is a
 `DateTimeImmutable`, a quantity is a float.
 
+What was in the cell before parsing can be kept too — call `->keepRawValues()` on the import:
+
+```php
+$row->get('qty');   // 1234.5
+$row->raw('qty');   // "1.234,5" from a CSV
+```
+
+In a CSV that is the text in the file. In an xlsx it is what the workbook stores, so a number comes back
+as a number (`1234.5`), a date as its serial number (`45296`) and a formula as its result. It is off by
+default because a caller who keeps the row objects pays for it in memory.
+
 Templates carry real Excel dropdowns for bool, enum and options columns. The dropdown entries and
 the values the parser accepts come from the same call, so a value the template offered can never be
 rejected by the import that reads it.
@@ -316,6 +327,23 @@ foreach ($result->errorsByRow() as $rowNumber => $errors) {
 ```
 
 The row number is **the one the user sees in Excel**, so "row 37" sends them to row 37.
+
+The message is English. To show the error in your users' language, word it from the code and its
+params — no second round of validation needed:
+
+```php
+// translations: import.error.not_a_number: '%row%. satır: "%value%" bir sayı değil.'
+$translator = $tabula->translator(); // the library's port: it adds the %…% around the param names
+
+foreach ($result->errors as $error) {
+    $messages[] = null === $error->code
+        ? $error->message                     // a custom parser that threw without a code
+        : $translator->trans('import.error.'.$error->code->value, ['row' => $error->row] + $error->params, 'tr');
+}
+```
+
+The codes, what their params hold, and what changes when you use Symfony's own translator instead are
+in [README › Errors carry a code](README.md#errors-carry-a-code-not-just-a-sentence).
 
 To stop at the first problem instead:
 

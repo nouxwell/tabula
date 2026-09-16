@@ -56,6 +56,9 @@ final class ImportBuilder
     /** @var (Closure(ImportedRow): void)|null */
     private ?Closure $handler = null;
 
+    /** @see keepRawValues() */
+    private bool $keepRawValues = false;
+
     public function __construct(
         private readonly Schema $schema,
         private readonly Translator $translator,
@@ -113,6 +116,21 @@ final class ImportBuilder
     {
         return $this->with(static function (self $b) use ($mode): void {
             $b->errorMode = $mode;
+        });
+    }
+
+    /**
+     * Keep every field's raw value on the row, for `ImportedRow::raw()` and `rawValues()`.
+     *
+     * Off by default because it is not free. Rows streamed through the callback cost the same
+     * either way, but code that keeps the `ImportedRow` objects themselves holds a second array
+     * per row — measured at roughly half as much memory again. A caller who never asks for a raw
+     * value should not pay for it.
+     */
+    public function keepRawValues(bool $keep = true): self
+    {
+        return $this->with(static function (self $b) use ($keep): void {
+            $b->keepRawValues = $keep;
         });
     }
 
@@ -257,6 +275,8 @@ final class ImportBuilder
             $rowErrors = [];
             /** @var array<string, mixed> $values */
             $values = [];
+            /** @var array<string, mixed>|null $raws null unless keepRawValues() was called */
+            $raws = $this->keepRawValues ? [] : null;
 
             foreach ($columns as [$index, $field, $parser]) {
                 $key = $field->getKey();
@@ -268,8 +288,16 @@ final class ImportBuilder
                     $value = $parser->parse($raw, $field, $context);
                 } catch (ParseException $exception) {
                     // The raw value travels alongside the error: a message that just says
-                    // "invalid value" does not tell the user which cell to look at.
-                    $rowErrors[] = RowError::forField($number, $key, $exception->getMessage(), StringParser::describe($raw));
+                    // "invalid value" does not tell the user which cell to look at. So do the
+                    // code and its params, for the application that words the message itself.
+                    $rowErrors[] = RowError::forField(
+                        $number,
+                        $key,
+                        $exception->getMessage(),
+                        StringParser::describe($raw),
+                        $exception->rowErrorCode(),
+                        $exception->rowErrorParams(),
+                    );
 
                     continue;
                 }
@@ -279,12 +307,26 @@ final class ImportBuilder
                 // value" (see `StringParser::isBlank()`). Requiredness is the schema's
                 // knowledge, and only this loop sees the schema.
                 if (null === $value && $field->isRequired()) {
-                    $rowErrors[] = RowError::forField($number, $key, ParseException::required($field)->getMessage());
+                    $required = ParseException::required($field);
+                    $rowErrors[] = RowError::forField(
+                        $number,
+                        $key,
+                        $required->getMessage(),
+                        null,
+                        $required->rowErrorCode(),
+                        $required->rowErrorParams(),
+                    );
 
                     continue;
                 }
 
                 $values[$key] = $value;
+
+                // Only when asked for: the reader's value is kept next to the parsed one, under
+                // the same key, so the callback can see what was actually in the cell.
+                if (null !== $raws) {
+                    $raws[$key] = $raw;
+                }
             }
 
             if ([] !== $rowErrors) {
@@ -308,7 +350,7 @@ final class ImportBuilder
             // error is not a `RowError` and must not get lost inside a "4,812 rows imported"
             // report. (The readers' `finally` blocks still close the file as the cursor is
             // destroyed.)
-            $handler(new ImportedRow($number, $values));
+            $handler(new ImportedRow($number, $values, $raws));
             ++$imported;
         }
 

@@ -286,7 +286,7 @@ $result = $tabula->import($schema)
     ->run();
 
 $result->imported;        // 4812
-$result->errors;          // list<RowError>: row number + field key + message
+$result->errors;          // list<RowError>: row number + field key + message + code
 $result->errorsByRow();   // grouped for display
 ```
 
@@ -318,6 +318,26 @@ produced elsewhere or filled in by hand still work. `Key` requires the key row; 
 `ImportedRow` hands you real types, not strings: `bool` is a bool, an enum field is an enum instance,
 a date is a `DateTimeImmutable`, a quantity is a float.
 
+What was in the cell can be kept too — for showing the user their own input, for an audit trail, or
+for moving string-normalising code over to typed values one field at a time. Ask for it on the import:
+
+```php
+$tabula->import($schema)->from($path)->locale('tr')->keepRawValues()->each(...)->run();
+
+$row->get('qty');       // 1234.5
+$row->raw('qty');       // "1.234,5" from a CSV — the value the reader produced, before parsing
+$row->rawValues();      // every field's raw value, keyed like toArray()
+```
+
+It is off by default. Rows streamed through the callback cost the same either way, but code that keeps
+the `ImportedRow` objects holds about half as much memory again per row with it on. Without it,
+`raw()` refuses rather than answering null for every field.
+
+> ⚠ The raw value is the **reader's**, not the user's keystrokes. A CSV cell is the text in the file.
+> An xlsx cell is what the workbook stores: a number is a number (`1234.5`), a date its serial number
+> (`45296`), a formula its result as PhpSpreadsheet calculates it. Only accepted rows reach the
+> callback; for a rejected cell, `RowError::$value` shows what was rejected.
+
 ### Parsers are strict where formatters are lenient
 
 An export may swallow a broken cell and print a blank; an import doing the same writes wrong data into
@@ -329,6 +349,41 @@ continues. Two consequences worth knowing:
   `ErrorMode::FailFast` stops at the first error.
 
 Transactions are **yours**: the library parses and validates, it never writes to your database.
+
+### Errors carry a code, not just a sentence
+
+`RowError::$message` is an English sentence, ready to show. When your users read another language,
+word it yourself from `RowError::$code` and `RowError::$params` instead of checking the cells again:
+
+```php
+$text = null === $error->code
+    ? $error->message   // a custom parser that threw without a code
+    : $tabula->translator()->trans('import.error.'.$error->code->value, $error->params, $locale);
+```
+
+| Code | When | Params |
+| --- | --- | --- |
+| `required` | a required field is empty | `field`, `type` |
+| `not_a_number` | an integer, decimal, quantity or money cell is not a number at all | `field`, `type`, `value` |
+| `not_an_integer` | a number, but a fraction or too large, in an integer field | `field`, `type`, `value` |
+| `not_a_date` | a date or date-time cell cannot be read | `field`, `type`, `value`, `format` |
+| `not_a_boolean` | not one of the accepted yes/no words | `field`, `type`, `value`, `accepted` |
+| `not_an_option` | not one of an enum's or an options field's values | `field`, `type`, `value`, `options` |
+
+What the params hold: `field` is the field **key** (the same as `RowError::$field`), not its label;
+`type` is the `FieldType` value (`quantity`, `money`, …); `value` is the rejected cell as text; `format`
+is the PHP date pattern the field expects; `accepted` and `options` are the lists exactly as the message
+shows them, joined with `, ` — display text, not meant to be split (`options` is empty when the field
+has none).
+
+The params are plain names. Tabula's `Translator` port adds the `%…%` — `ArrayTranslator`,
+`PassthroughTranslator` and the Symfony bridge all do. Symfony's own `TranslatorInterface` does not, and
+its third argument is the domain, not the locale; if you call it directly, wrap the names first.
+
+New codes may be added in a later release; existing ones are never renamed, so a `match` over
+`RowErrorCode` should keep a `default` arm that falls back to `$error->message`. The code is null only
+when a custom parser threw its own `new ParseException(...)`; reusing a factory such as
+`ParseException::notAnOption()` carries the code.
 
 ### Templates refuse bad input in the cell
 

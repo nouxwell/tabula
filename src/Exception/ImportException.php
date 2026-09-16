@@ -144,6 +144,15 @@ final class ImportException extends RuntimeException implements TabulaException
         ));
     }
 
+    /** A raw value was asked of a row whose import did not keep them. */
+    public static function rawValuesNotKept(): self
+    {
+        return new self(
+            'This row carries no raw values: call ->keepRawValues() on the import. '
+            .'They are off by default because every row that is kept would hold them too.',
+        );
+    }
+
     /**
      * The first error under `ErrorMode::FailFast`: the run stopped.
      *
