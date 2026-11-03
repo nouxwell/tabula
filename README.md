@@ -392,10 +392,16 @@ sheet with identical option sets de-duplicated. The dropdown entries and the val
 are derived from the same translation call, so a value written by the template is always a member of
 its own allowed list.
 
-Typed columns are validated as they are typed: a date column takes dates, an integer column whole
-numbers, the other numeric types decimals. The parser catches these anyway — but only once the file
-has been filled in and sent back, which is the difference between "row 348 could not be read" and the
-cursor never leaving the cell.
+Typed columns are validated as they are typed: an integer column takes whole numbers, the other
+numeric types decimals. The parser catches these anyway — but only once the file has been filled in
+and sent back, which is the difference between "row 348 could not be read" and the cursor never
+leaving the cell.
+
+A date column says so when Excel does not read a value as a date, and keeps it on OK. Whether
+"31.01.2026" is a date to Excel is decided by the regional format of the user's Windows, not by the
+file: where the region writes "01/31/2026" it stays text — and the parser still reads it with the
+date pattern. Refusing it would push that user to the slash, which follows the machine's month-first
+order and turns 05/03 into the 3rd of May without an error.
 
 Blank stays allowed on every rule, because requiredness belongs to the import where the failure can
 name the row and the field. Made Excel's job it fires a warning box for merely tabbing through an

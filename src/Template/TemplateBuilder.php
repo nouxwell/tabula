@@ -670,7 +670,8 @@ final class TemplateBuilder
      *
      * The import parser catches these mistakes anyway, but only once the user has filled the
      * whole file in and sent it back. Catching them in the cell is the difference between "row
-     * 348 could not be read" and the cursor never leaving the cell in the first place.
+     * 348 could not be read" and the cursor never leaving the cell in the first place. Date
+     * columns are the exception: they flag a value but let it through (see dateValidation()).
      *
      * Only shape is enforced here, never business meaning. Requiredness, ranges and
      * cross-field rules stay on the import side, where they can produce a `RowError` that
@@ -752,18 +753,28 @@ final class TemplateBuilder
     }
 
     /**
-     * "This has to be a date.".
+     * "This should be a date." — said, not enforced.
      *
      * The window is wide on purpose but not unbounded: 1900 is where Excel's own serial
      * numbering begins, and an upper edge in the far future still catches the mistake this
      * rule is really for — a date typed as text, or a stray number landing in a date column,
      * which would otherwise be read back as some day in 1901.
+     *
+     * Unlike the numeric rules this one only informs; OK keeps what was typed. Whether Excel
+     * takes "31.01.2026" for a date is decided by the regional format of the user's Windows,
+     * not by the file: on a machine whose region writes "01/31/2026" it stays text. A stop
+     * rule refused that text there, although it is exactly what the column's example shows
+     * and the import reads it with the date pattern. A warning would ask "Continue?" on every
+     * such cell, and the way out of being asked is the slash — which follows that machine's
+     * month-first order, so 05/03 becomes the 3rd of May and imports without an error. A date
+     * typed in the pattern cannot be swapped like that; the cell must not push the user away
+     * from it.
      */
     private function dateValidation(): DataValidation
     {
         $validation = new DataValidation();
         $validation->setType(DataValidation::TYPE_DATE);
-        $validation->setErrorStyle(DataValidation::STYLE_STOP);
+        $validation->setErrorStyle(DataValidation::STYLE_INFORMATION);
         $validation->setOperator(DataValidation::OPERATOR_BETWEEN);
         // Excel serials: 1900-01-01 and 2199-12-31.
         $validation->setFormula1('1');

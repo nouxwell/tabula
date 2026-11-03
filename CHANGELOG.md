@@ -9,6 +9,26 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.8.4] — 2026-11-03
+
+### Changed
+
+- **A template's date column no longer refuses a value Excel does not read as a date; it says so
+  and keeps it on OK.** Excel decides whether "31.01.2026" is a date from the regional format of
+  the user's Windows, not from the file. On a machine whose region writes "01/31/2026" the date
+  stays text, and the stop rule refused it — the very format the column's example shows, and one
+  the import reads with the date pattern. The only way past it was the slash, which follows that
+  machine's month-first order: 05/03 went in as the 3rd of May and imported without an error.
+  Integer and decimal columns still refuse what is not a number.
+
+### Notes
+
+- A date column still shows Excel's own "does not match" message, in Excel's language. The rule
+  is an information rule now rather than a warning: a warning asks "Continue?" on every such
+  cell, which pushes the user to the slash all the same.
+- Text that is no date at all now gets past the cell too and becomes a `not_a_date` row error on
+  import.
+
 ## [0.8.3] — 2026-09-16
 
 ### Added
@@ -244,7 +264,8 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.3...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.4...HEAD
+[0.8.4]: https://github.com/nouxwell/tabula/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/nouxwell/tabula/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/nouxwell/tabula/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/nouxwell/tabula/compare/v0.8.0...v0.8.1

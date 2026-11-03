@@ -445,6 +445,35 @@ final class TemplateBuilderTest extends TestCase
     }
 
     /**
+     * A date rule informs; a number rule stops.
+     *
+     * Whether Excel takes "31.01.2026" for a date depends on the regional format of the user's
+     * Windows. Where the region writes "01/31/2026" it stays text, a stop rule refused it, and the
+     * import would have read it with the date pattern. Pushed to the slash instead, the user gets
+     * that machine's month-first order and 05/03 imports as the 3rd of May without an error.
+     */
+    #[Test]
+    public function aDateColumnFlagsAValueItCannotReadButANumberColumnRefusesIt(): void
+    {
+        $schema = Schema::make('doc')->fields(
+            Field::date('issuedAt')->label('col.date'),
+            Field::integer('lineNo')->label('col.line'),
+            Field::decimal('rate')->label('col.rate'),
+        );
+
+        $path = $this->dir->file('styles.xlsx');
+        (new TemplateBuilder($this->translator(), new TabulaSettings(), new TemplateOptions()))
+            ->write($schema, $path, 'tr');
+
+        $sheet = IOFactory::load($path)->getSheet(0);
+
+        self::assertSame(DataValidation::STYLE_INFORMATION, $sheet->getDataValidation('A3')->getErrorStyle());
+        self::assertTrue($sheet->getDataValidation('A3')->getShowErrorMessage(), 'Excel must still say the value is not a date.');
+        self::assertSame(DataValidation::STYLE_STOP, $sheet->getDataValidation('B3')->getErrorStyle());
+        self::assertSame(DataValidation::STYLE_STOP, $sheet->getDataValidation('C3')->getErrorStyle());
+    }
+
+    /**
      * The bounds exist to make the rule well-formed, not to express a limit.
      *
      * Excel has no "any number" rule; a decimal validation must carry an operator and bounds.
