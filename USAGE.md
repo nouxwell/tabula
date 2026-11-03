@@ -287,13 +287,24 @@ In a CSV that is the text in the file. In an xlsx it is what the workbook stores
 as a number (`1234.5`), a date as its serial number (`45296`) and a formula as its result. It is off by
 default because a caller who keeps the row objects pays for it in memory.
 
+To read only some of the columns, name them. The file is still recognised by its full key row, and the
+columns left out are not parsed, so their errors do not count either:
+
+```php
+$tabula->import($schema)->from($path)->locale('en')->only(['code', 'qty'])->each(...)->run();
+
+$row->only(['code', 'qty']);   // ['code' => 'A-1', 'qty' => 5.0] — the same, on one row
+```
+
 Templates carry real Excel dropdowns for bool, enum and options columns. The dropdown entries and
 the values the parser accepts come from the same call, so a value the template offered can never be
 rejected by the import that reads it.
 
-Typed columns are also validated **in the cell**: a date column takes dates, an integer column whole
-numbers, the other numeric types decimals. The import would catch these too, but only after the user
-had filled the whole file in and uploaded it.
+Typed columns are also validated **in the cell**: an integer column takes whole numbers, the other
+numeric types decimals. The import would catch these too, but only after the user had filled the whole
+file in and uploaded it. A date column only says so when Excel does not read a value as a date, and
+keeps it: whether "31.01.2026" is a date to Excel depends on the user's Windows region, and the import
+reads it with the date pattern either way.
 
 Give a column an example and Excel shows it when a cell is selected. The file itself stays empty,
 so a forgotten sample can never be imported:

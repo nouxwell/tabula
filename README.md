@@ -338,6 +338,29 @@ the `ImportedRow` objects holds about half as much memory again per row with it 
 > (`45296`), a formula its result as PhpSpreadsheet calculates it. Only accepted rows reach the
 > callback; for a rejected cell, `RowError::$value` shows what was rejected.
 
+### Reading only some of the columns
+
+`only()` on the import reads the fields you name and leaves the file's other columns alone:
+
+```php
+$tabula->import($schema)->from($path)->locale('tr')
+    ->only(['code', 'qty'])
+    ->each(static fn (ImportedRow $row) => $stock->set($row->get('code'), $row->get('qty')))
+    ->run();
+```
+
+The file is still matched against the whole schema. A schema narrowed with `Schema::only()` would not
+recognise its own template's key row, and would refuse the file as the wrong template. The columns left
+out are not parsed, so a blank required cell or an unreadable value in them is no error. A picked field
+the file lacks is absent from the rows, like any missing column; a file with none of them is refused.
+`$result->columns` lists the columns that were read.
+
+A row hands back some of its fields the same way, each key checked like `get()`:
+
+```php
+$row->only(['code', 'qty']);   // ['code' => 'A-1', 'qty' => 5.0]
+```
+
 ### Parsers are strict where formatters are lenient
 
 An export may swallow a broken cell and print a blank; an import doing the same writes wrong data into

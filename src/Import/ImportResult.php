@@ -11,7 +11,8 @@ final readonly class ImportResult
      * @param int            $read     number of data rows read from the file (headers excluded)
      * @param int            $imported number of rows successfully handed to the callback
      * @param list<RowError> $errors   row-level and field-level errors
-     * @param list<string>   $columns  the field keys recognised in the file, in file order
+     * @param list<string>   $columns  the field keys read from the file, in file order: those recognised,
+     *                                 narrowed to the ones picked with `ImportBuilder::only()`
      * @param list<string>   $ignored  headers with no counterpart in the schema, ignored
      */
     public function __construct(

@@ -9,6 +9,30 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.8.5] — 2026-11-03
+
+### Added
+
+- **`ImportBuilder::only()` reads the named fields and leaves the file's other columns alone.**
+  The file is still matched against the whole schema: a schema narrowed with `Schema::only()` does
+  not recognise its own template's key row, because a key row counts only when every key in it
+  belongs to the schema, and the file was refused as the wrong template. Columns left out are not
+  parsed, so a blank required cell or an unreadable value in them is no error.
+- **`ImportedRow::only()` returns some of a row's values**, keyed by field key in the order asked,
+  each key checked like `get()`.
+
+### Notes
+
+- An unknown key or an empty list fails on the `only()` call itself, with the same
+  `SchemaException` as `Schema::only()`. A picked field the file lacks is absent from the rows,
+  like any missing column; a file with none of the picked fields is refused rather than handing
+  over empty rows.
+- `ImportResult::$columns` lists the columns that were read, so with `only()` it holds the picked
+  ones only. Columns left out are not added to `ImportResult::$ignored`, which stays for headers
+  the schema does not know.
+- `ImportedRow::only([])` returns an empty array.
+- USAGE.md still said a date column refuses what is not a date; it now says what 0.8.4 does.
+
 ## [0.8.4] — 2026-11-03
 
 ### Changed
@@ -264,7 +288,8 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.4...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.5...HEAD
+[0.8.5]: https://github.com/nouxwell/tabula/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/nouxwell/tabula/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/nouxwell/tabula/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/nouxwell/tabula/compare/v0.8.1...v0.8.2

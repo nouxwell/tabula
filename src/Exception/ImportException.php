@@ -124,6 +124,21 @@ final class ImportException extends RuntimeException implements TabulaException
     }
 
     /**
+     * The file matched the schema, but none of the fields picked with `ImportBuilder::only()`.
+     *
+     * @param list<string> $selected
+     * @param list<string> $found    the schema's fields the file does have
+     */
+    public static function noSelectedColumns(array $selected, array $found): self
+    {
+        return new self(sprintf(
+            'None of the selected fields is in the file. Selected: %s. Found in the file: %s.',
+            implode(', ', $selected),
+            [] === $found ? '(none)' : implode(', ', $found),
+        ));
+    }
+
+    /**
      * `MatchStrategy::Key` was requested but the file has no key row.
      */
     public static function keyRowMissing(): self

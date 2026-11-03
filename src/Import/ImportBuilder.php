@@ -59,6 +59,13 @@ final class ImportBuilder
     /** @see keepRawValues() */
     private bool $keepRawValues = false;
 
+    /**
+     * @var list<string>|null null = every field the file has
+     *
+     * @see only()
+     */
+    private ?array $keys = null;
+
     public function __construct(
         private readonly Schema $schema,
         private readonly Translator $translator,
@@ -131,6 +138,34 @@ final class ImportBuilder
     {
         return $this->with(static function (self $b) use ($keep): void {
             $b->keepRawValues = $keep;
+        });
+    }
+
+    /**
+     * Read these fields only; the file's other columns are not parsed.
+     *
+     * The file is still matched against the WHOLE schema, and that is why this lives here rather
+     * than in `Schema::only()`. A key row is recognised only when every key in it belongs to the
+     * schema, so a narrowed schema no longer recognises its own template: the keys are compared
+     * with labels instead, nothing matches, and the file is refused as the wrong template.
+     *
+     * A column left out is not looked at: a blank required cell or an unreadable value in it is
+     * no error. Nor is it listed in `ImportResult::$ignored`, which is for headers the schema does
+     * not know. A picked field the file does not have is absent from the rows, as any missing
+     * column is; when the file has none of them the run is refused, rather than handing over rows
+     * with nothing in them.
+     *
+     * The keys are checked against the schema here, so a typo fails on this line.
+     *
+     * @param list<string> $keys
+     */
+    public function only(array $keys): self
+    {
+        // Schema::only() refuses an unknown key and an empty list, and collapses a repeated one.
+        $keys = $this->schema->only($keys)->getKeys();
+
+        return $this->with(static function (self $b) use ($keys): void {
+            $b->keys = $keys;
         });
     }
 
@@ -229,6 +264,7 @@ final class ImportBuilder
         $secondRow = $iterator->valid() ? $iterator->current() : [];
 
         $map = HeaderMap::resolve($firstRow, $secondRow, $this->schema, $this->strategy, $context);
+        $fields = $this->selectedFields($map);
 
         // The parsers are resolved ONCE, before a single row is read. `ParserRegistry::for()`
         // throws a `ParseException` when it finds no registered parser; that is a
@@ -238,7 +274,7 @@ final class ImportBuilder
         /** @var list<array{int, Field, ValueParser}> $columns */
         $columns = [];
 
-        foreach ($map->fields as $index => $field) {
+        foreach ($fields as $index => $field) {
             $columns[] = [$index, $field, $this->parsers->for($field)];
         }
 
@@ -358,12 +394,38 @@ final class ImportBuilder
             read: $read,
             imported: $imported,
             errors: $errors,
-            columns: $map->columns(),
+            columns: array_values(array_map(static fn (Field $field): string => $field->getKey(), $fields)),
             ignored: $map->ignored,
         );
     }
 
     // ---------------------------------------------------------------- internals
+
+    /**
+     * The matched columns this run parses: all of them, or the ones picked with `only()`.
+     *
+     * @return array<int, Field> column index => field, in file order
+     */
+    private function selectedFields(HeaderMap $map): array
+    {
+        if (null === $this->keys) {
+            return $map->fields;
+        }
+
+        $keys = $this->keys;
+        $fields = array_filter(
+            $map->fields,
+            static fn (Field $field): bool => \in_array($field->getKey(), $keys, true),
+        );
+
+        // Every row would reach the callback empty, and "4,812 rows imported" would read as
+        // success on a file that never had the columns the caller asked for.
+        if ([] === $fields) {
+            throw ImportException::noSelectedColumns($keys, $map->columns());
+        }
+
+        return $fields;
+    }
 
     /**
      * Turns the `iterable` the reader gives us into a cursor that can be advanced by hand.

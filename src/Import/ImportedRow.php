@@ -59,6 +59,27 @@ final readonly class ImportedRow
     }
 
     /**
+     * The values of the given fields only, keyed by field key, IN THE ORDER THEY WERE GIVEN.
+     *
+     * Each key is checked the way `get()` checks it: a typo is refused rather than quietly left
+     * out of the array, where it would only surface as a column that never gets saved.
+     *
+     * @param list<string> $keys
+     *
+     * @return array<string, mixed>
+     */
+    public function only(array $keys): array
+    {
+        $values = [];
+
+        foreach ($keys as $key) {
+            $values[$key] = $this->get($key);
+        }
+
+        return $values;
+    }
+
+    /**
      * The value AS THE READER GAVE IT, before the field's parser touched it.
      *
      * What that is depends on the file. A CSV cell is the text as it stands in the file, and an
