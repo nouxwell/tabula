@@ -16,6 +16,9 @@ use Nouxwell\Tabula\Settings\TabulaSettings;
 use Nouxwell\Tabula\Source\ArraySource;
 use Nouxwell\Tabula\Tabula;
 use Nouxwell\Tabula\Tests\Fixture\TempDirectory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xls;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -197,6 +200,70 @@ final class MultiSheetTest extends TestCase
 
         // An empty template has no data rows; the point is that it was READ, not refused.
         self::assertCount(0, $result->errors);
+    }
+
+    /**
+     * The sheet list comes from the workbook's own index rather than from loading it (see
+     * `XlsxReader::dataSheets()`), and that index is read by a different code path per format —
+     * so the .xls side is pinned down too: a hidden sheet still does not count.
+     */
+    #[Test]
+    public function anXlsWorkbookCountsOnlyItsVisibleSheets(): void
+    {
+        $tabula = new Tabula($this->translator(), new TabulaSettings());
+        $path = $this->xls(['Veri' => Worksheet::SHEETSTATE_VISIBLE, 'Gizli' => Worksheet::SHEETSTATE_HIDDEN]);
+
+        $codes = [];
+        $result = $tabula->import($this->schema())
+            ->from($path)
+            ->locale('tr')
+            ->each(function (ImportedRow $row) use (&$codes): void {
+                $codes[] = $row->toArray()['code'];
+            })
+            ->run();
+
+        self::assertCount(0, $result->errors);
+        self::assertSame(['A-1'], $codes);
+    }
+
+    /** Two visible sheets in an .xls are still refused by name. */
+    #[Test]
+    public function anXlsWorkbookWithTwoVisibleSheetsIsRefused(): void
+    {
+        $tabula = new Tabula($this->translator(), new TabulaSettings());
+        $path = $this->xls(['Veri' => Worksheet::SHEETSTATE_VISIBLE, 'Notlar' => Worksheet::SHEETSTATE_VISIBLE]);
+
+        $this->expectException(ImportException::class);
+        $this->expectExceptionMessageMatches('/"Veri".+"Notlar"/s');
+
+        $tabula->import($this->schema())
+            ->from($path)
+            ->locale('tr')
+            ->each(static fn (ImportedRow $row) => null)
+            ->run();
+    }
+
+    /**
+     * @param array<string, string> $sheets sheet name => sheet state; every sheet holds the same header and one row
+     */
+    private function xls(array $sheets): string
+    {
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->removeSheetByIndex(0);
+
+        foreach ($sheets as $name => $state) {
+            $sheet = $spreadsheet->createSheet();
+            $sheet->setTitle($name);
+            $sheet->fromArray([['Kod', 'Depo'], ['A-1', 'Ankara']]);
+            $sheet->setSheetState($state);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+        $path = $this->dir->file('workbook.xls');
+        (new Xls($spreadsheet))->save($path);
+        $spreadsheet->disconnectWorksheets();
+
+        return $path;
     }
 
     #[Test]

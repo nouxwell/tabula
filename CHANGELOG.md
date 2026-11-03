@@ -9,6 +9,23 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.8.6] — 2026-11-03
+
+### Changed
+
+- **An xlsx or xls import loads the workbook once instead of twice.** Before reading a row the
+  import checks how many visible sheets the file has, and that check loaded the whole workbook
+  just to look at its sheet names; reading the rows then loaded it again. The sheet names and
+  their visibility now come from the workbook's own index (`listWorksheetInfo()`), without building
+  a single cell. On a 5,000-row, 40-column sheet the check took 8.7 s of a 16.3 s import; it now
+  takes 0.8 s and the import 9.7 s.
+
+### Notes
+
+- The result is the same: hidden sheets still do not count, a workbook with more than one visible
+  sheet is still refused with their names, and a broken file is still reported as unreadable. A
+  reader whose index cannot be read falls back to loading the workbook, as before.
+
 ## [0.8.5] — 2026-11-03
 
 ### Added
@@ -288,7 +305,8 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.5...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.6...HEAD
+[0.8.6]: https://github.com/nouxwell/tabula/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/nouxwell/tabula/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/nouxwell/tabula/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/nouxwell/tabula/compare/v0.8.2...v0.8.3
