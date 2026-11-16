@@ -9,6 +9,24 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.8.7] — 2026-11-16
+
+### Changed
+
+- **A template's dropdown column is wide enough for its longest option.** Excel draws the open
+  list from the column's width, and the options sit on the hidden `_lists` sheet, so the column
+  was sized to its header alone: a country column headed "Ülke" showed "Amerika Birleşik
+  Devletleri" as "Amerika Birleşik Devlet". The column now takes the wider of its header (with
+  the filter button's room) and its longest option, with or without the auto-filter.
+
+### Notes
+
+- The widening stops at 40, so one option written as a sentence does not stretch its column to
+  the sentence; a header wider than that still widens its column as before. A width set with
+  `Field::width()` is left as given.
+- Only the width can be set from a file. The eight rows the open list shows, its scroll bar and
+  its look are Excel's own.
+
 ## [0.8.6] — 2026-11-03
 
 ### Changed
@@ -305,7 +323,8 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.6...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.7...HEAD
+[0.8.7]: https://github.com/nouxwell/tabula/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/nouxwell/tabula/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/nouxwell/tabula/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/nouxwell/tabula/compare/v0.8.3...v0.8.4

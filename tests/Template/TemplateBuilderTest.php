@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nouxwell\Tabula\Tests\Template;
 
 use DateTimeImmutable;
+use Nouxwell\Tabula\Export\Writer\XlsxOptions;
 use Nouxwell\Tabula\Port\ArrayTranslator;
 use Nouxwell\Tabula\Port\Translator;
 use Nouxwell\Tabula\Schema\Field;
@@ -420,6 +421,83 @@ final class TemplateBuilderTest extends TestCase
         $sheet = IOFactory::load($path)->getSheet(0);
 
         self::assertEqualsWithDelta(9.0, $sheet->getColumnDimension('A')->getWidth(), 0.01);
+    }
+
+    /**
+     * Excel draws an open dropdown list from its column's width, and the options sit on the
+     * hidden helper sheet where auto-sizing never looks. A country column sized to its header
+     * "Ülke" showed "Amerika Birleşik Devletleri" in the list as "Amerika Birleşik Devlet".
+     */
+    #[Test]
+    public function aDropdownColumnIsWideEnoughForItsLongestOption(): void
+    {
+        $dimension = $this->buildWith($this->countrySchema())->getSheet(0)->getColumnDimension('A');
+
+        self::assertFalse($dimension->getAutoSize(), 'A column still on auto-size is measured by its header alone on save.');
+        self::assertGreaterThan(
+            mb_strlen('Amerika Birleşik Devletleri'),
+            $dimension->getWidth(),
+            'The longest option must fit in the open list.',
+        );
+    }
+
+    /** The list opens whether or not the header has filter buttons, so it is measured either way. */
+    #[Test]
+    public function aDropdownColumnIsWidenedWithoutAnAutoFilterToo(): void
+    {
+        $options = new TemplateOptions(xlsx: new XlsxOptions(autoFilter: false));
+        $dimension = $this->buildWith($this->countrySchema(), $options)->getSheet(0)->getColumnDimension('A');
+
+        self::assertGreaterThan(mb_strlen('Amerika Birleşik Devletleri'), $dimension->getWidth());
+    }
+
+    /** One long option must not drag its column out to the length of a sentence. */
+    #[Test]
+    public function aVeryLongOptionStopsWideningItsColumnAtTheCap(): void
+    {
+        $schema = Schema::make('w')->fields(
+            Field::options('note', ['long' => str_repeat('A', 200), 'short' => 'B'])->label('Not'),
+        );
+
+        $sheet = $this->buildWith($schema)->getSheet(0);
+
+        self::assertEqualsWithDelta(40.0, $sheet->getColumnDimension('A')->getWidth(), 0.01);
+    }
+
+    /** Options shorter than the header take nothing away: the header and its filter button still fit. */
+    #[Test]
+    public function aHeaderWiderThanItsOptionsStillDecidesTheWidth(): void
+    {
+        $label = 'Sipariş Onaylandı mı';
+        $schema = Schema::make('w')->fields(Field::bool('approved')->label($label));
+
+        $sheet = $this->buildWith($schema)->getSheet(0);
+
+        self::assertGreaterThan(mb_strlen($label) + 2, $sheet->getColumnDimension('A')->getWidth());
+    }
+
+    /** A width set by hand stands on a dropdown column as well. */
+    #[Test]
+    public function anExplicitWidthOnADropdownColumnIsNotWidened(): void
+    {
+        $schema = Schema::make('w')->fields(
+            Field::options('country', ['us' => 'Amerika Birleşik Devletleri'])->label('Ülke')->width(9),
+        );
+
+        $sheet = $this->buildWith($schema)->getSheet(0);
+
+        self::assertEqualsWithDelta(9.0, $sheet->getColumnDimension('A')->getWidth(), 0.01);
+    }
+
+    private function countrySchema(): Schema
+    {
+        return Schema::make('w')->fields(
+            Field::options('country', [
+                'de' => 'Almanya',
+                'us' => 'Amerika Birleşik Devletleri',
+                'tr' => 'Türkiye',
+            ])->label('Ülke'),
+        );
     }
 
     // ---------------------------------------------------------------- type validation
