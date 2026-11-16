@@ -20,12 +20,10 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\Exception as SpreadsheetException;
-use PhpOffice\PhpSpreadsheet\Shared\Font as SharedFont;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\Font;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Style\Protection;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -81,19 +79,6 @@ final class TemplateBuilder
      * translation files, and one bad paste is all it takes.
      */
     private const float MAX_COLUMN_WIDTH = 255.0;
-
-    /**
-     * How far a dropdown column widens for its options, at most.
-     *
-     * A column is widened so that its longest option fits in the open list, and one long
-     * option is all it takes: an enum label written as a sentence would otherwise stretch the
-     * column to the sentence. Forty is about thirty-three characters by the default, approximate
-     * measurement, which gives every letter the same generous width ("Heard Adası ve McDonald
-     * Adaları", 31 characters, measures 37.7); ordinary text set in the cell font is narrower
-     * than that. A header wider than this still widens its column as before; the cap applies to
-     * the options alone.
-     */
-    private const float MAX_DROPDOWN_WIDTH = 40.0;
 
     /**
      * The hidden helper sheet that holds the sources of the dropdown lists.
@@ -209,11 +194,8 @@ final class TemplateBuilder
 
             if ($this->options->xlsx->autoFilter) {
                 $sheet->setAutoFilter('A'.$labelRow.':'.$lastLetter.max($labelRow, $lastSampleRow));
+                $this->makeRoomForFilterButtons($sheet, $letters);
             }
-
-            // After the filter, never before it: the measurement reads the filter range to
-            // know which header cells carry a button.
-            $this->settleAutoWidths($sheet, $letters, $listed);
 
             if ($this->options->protectHeader) {
                 $this->protectHeader($sheet, $lastLetter, $keyRow ?? $labelRow, $labelRow, $firstDataRow);
@@ -459,104 +441,64 @@ final class TemplateBuilder
     }
 
     /**
-     * Gives auto-sized columns a fixed width that has room for what auto-sizing cannot see.
+     * Widens auto-sized columns so the filter button does not sit on top of the header.
      *
-     * Auto-sizing measures the text in the sheet's cells and stops there. Two things a user
-     * reads in a template are not in those cells:
-     *
-     * - THE FILTER BUTTON. Two of this class's own defaults were fighting each other: the
-     *   auto-filter draws its button INSIDE the header cell, hard against the right edge, so a
-     *   column sized exactly to its header loses its last two characters behind the arrow —
-     *   "Döviz Kuru" reads as "Döviz Ku▾", and the wider the header the worse it looks, because
-     *   the button is a fixed width the measurement never knew about.
-     * - THE DROPDOWN OPTIONS. They live on the hidden `_lists` sheet, so a dropdown column was
-     *   measured by its header alone, and Excel draws the open list from the column's width.
-     *   A country column sized to "Ülke" showed "Amerika Birleşik Devletleri" as "Amerika
-     *   Birleşik Devlet". The width is the only part of that list a file can set: the eight
-     *   visible rows and the scroll bar are Excel's own.
+     * Two of this class's own defaults were fighting each other. Auto-sizing measures the TEXT
+     * and stops there; the auto-filter then draws its button INSIDE the cell, hard against the
+     * right edge. A column sized exactly to its header therefore loses its last two characters
+     * behind the arrow — "Döviz Kuru" reads as "Döviz Ku▾", and the wider the header the worse
+     * it looks, because the button is a fixed width the measurement never knew about.
      *
      * The widths have to be resolved BEFORE they can be adjusted: while a column is on
      * auto-size, its width is -1 and the real number is only worked out during save.
      * `calculateColumnWidths()` performs that measurement early, after which each column can be
-     * given an explicit width; auto-size is turned off with it, so the value survives the save
-     * instead of being recomputed from the cells alone.
+     * given an explicit width — which also turns auto-size off, so the value survives the save
+     * instead of being recomputed without the headroom.
      *
      * A column with a width set by hand is left alone: the caller said what they wanted.
      *
-     * @param list<string>             $letters
-     * @param array<int, list<string>> $listed  the options of each dropdown column, by field index
+     * A dropdown column is sized to its header, NOT to its options, and that is deliberate.
+     * 0.8.7 widened it to the longest option, which sits on the hidden `_lists` sheet where
+     * auto-sizing never looks: a country column came out about three times as wide, while the
+     * open list, drawn in a smaller font than the cell, used two thirds of it at most. 0.8.8
+     * took it back. A user who wants a wider column drags it; a schema sets one with `width()`.
+     *
+     * @param list<string> $letters
      */
-    private function settleAutoWidths(Worksheet $sheet, array $letters, array $listed): void
+    private function makeRoomForFilterButtons(Worksheet $sheet, array $letters): void
     {
         // Excel's filter button is a fixed ~2 width units. Three leaves the header clear of it
         // without opening a visible gap; two was still touching the last glyph.
-        $headroom = $this->options->xlsx->autoFilter ? 3.0 : 0.0;
-
-        // The cells of a template carry the default font; the options are measured in it too.
-        $font = $sheet->getParentOrThrow()->getDefaultStyle()->getFont();
+        $headroom = 3.0;
 
         // Which columns are ours to touch has to be noted BEFORE the measurement: resolving a
         // width clears the auto-size flag, and afterwards an auto-sized column is
         // indistinguishable from one the caller sized by hand.
-        /** @var array<string, float> $floors column letter => the width its options need */
-        $floors = [];
-        foreach ($letters as $index => $letter) {
-            if (!$sheet->getColumnDimension($letter)->getAutoSize()) {
-                continue;
+        $auto = [];
+        foreach ($letters as $letter) {
+            if ($sheet->getColumnDimension($letter)->getAutoSize()) {
+                $auto[] = $letter;
             }
-
-            $options = $listed[$index] ?? [];
-
-            // With no filter button and no list there is nothing to add, and the column is left
-            // to the save to measure, exactly as it measures every other auto-sized column.
-            if (0.0 === $headroom && [] === $options) {
-                continue;
-            }
-
-            $floors[$letter] = self::widestOption($options, $font);
         }
 
-        if ([] === $floors) {
+        if ([] === $auto) {
             return;
         }
 
         $sheet->calculateColumnWidths();
 
-        foreach ($floors as $letter => $floor) {
+        foreach ($auto as $letter) {
             $dimension = $sheet->getColumnDimension($letter);
             $width = $dimension->getWidth();
 
-            // -1 means the measurement produced nothing to widen (an empty column). The filter
-            // headroom belongs to the header text, so the options do not get it: the list's
-            // arrow is drawn beside the cell, not inside it.
-            $width = max($width > 0 ? $width + $headroom : 0.0, $floor);
-
+            // -1 means the measurement produced nothing to widen (an empty column).
             if ($width <= 0) {
                 continue;
             }
 
             $dimension->setAutoSize(false);
-            $dimension->setWidth(min($width, self::MAX_COLUMN_WIDTH));
+            $dimension->setWidth(min($width + $headroom, self::MAX_COLUMN_WIDTH));
         }
-    }
-
-    /**
-     * The column width the longest of the options needs, capped at `MAX_DROPDOWN_WIDTH`.
-     *
-     * Measured with the same function `calculateColumnWidths()` uses for the cells, so an
-     * option and a header of the same text come out the same width.
-     *
-     * @param list<string> $options
-     */
-    private static function widestOption(array $options, Font $font): float
-    {
-        $widest = 0.0;
-
-        foreach ($options as $option) {
-            $widest = max($widest, SharedFont::calculateColumnWidth($font, $option, 0, $font));
-        }
-
-        return min($widest, self::MAX_DROPDOWN_WIDTH);
     }
 
     /**
@@ -631,7 +573,7 @@ final class TemplateBuilder
      * @param list<Field>  $fields
      * @param list<string> $letters
      *
-     * @return array<int, list<string>> the options of each column that received a dropdown, by field index
+     * @return array<int, true> the indexes of the columns that received a dropdown
      */
     private function applyDropdowns(
         Spreadsheet $spreadsheet,
@@ -723,7 +665,7 @@ final class TemplateBuilder
                 $this->withPrompt($validation, $fields[$index], $context),
             );
 
-            $listed[$index] = $options;
+            $listed[$index] = true;
         }
 
         return $listed;
@@ -748,9 +690,9 @@ final class TemplateBuilder
      * but of Excel's "any value" type: it exists only to carry the input message and cannot
      * refuse anything that is typed.
      *
-     * @param list<Field>              $fields
-     * @param list<string>             $letters
-     * @param array<int, list<string>> $listed  the columns that already carry a dropdown
+     * @param list<Field>      $fields
+     * @param list<string>     $letters
+     * @param array<int, true> $listed  the columns that already carry a dropdown
      */
     private function applyTypeValidation(
         Worksheet $sheet,

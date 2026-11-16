@@ -9,6 +9,15 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.8.8] — 2026-11-16
+
+### Changed
+
+- **A template's dropdown column is sized to its header again, as before 0.8.7.** Sized to its
+  longest option, a country column came out about three times as wide, while the open list,
+  drawn in a smaller font than the cell, used two thirds of it at most. A user who wants a wider
+  column widens it by hand, and a schema can still set one with `Field::width()`.
+
 ## [0.8.7] — 2026-11-16
 
 ### Changed
@@ -323,7 +332,8 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.7...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.8...HEAD
+[0.8.8]: https://github.com/nouxwell/tabula/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/nouxwell/tabula/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/nouxwell/tabula/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/nouxwell/tabula/compare/v0.8.4...v0.8.5
