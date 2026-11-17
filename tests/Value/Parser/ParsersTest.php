@@ -367,10 +367,67 @@ final class ParsersTest extends TestCase
         self::assertSame('2024-01-05', $this->parseDate($field, '2024-01-05')->format('Y-m-d'));
     }
 
+    #[Test]
+    public function aDateAndATimeAreReadWithTheOtherPatternToo(): void
+    {
+        // A date column given a date and a time keeps the day; a date-time column given only a
+        // day takes its midnight. Both through the settings' own patterns, nothing guessed.
+        self::assertSame(
+            '2024-01-05 00:00:00',
+            $this->parseDate(Field::date('d'), '05.01.2024 09:30')->format('Y-m-d H:i:s'),
+        );
+        self::assertSame(
+            '2024-01-05 00:00:00',
+            $this->parseDate(Field::dateTime('d'), '05.01.2024')->format('Y-m-d H:i:s'),
+        );
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function isoDateTimes(): iterable
+    {
+        yield 'date only' => ['2024-01-05', '2024-01-05 00:00:00'];
+        yield 'a space and minutes' => ['2024-01-05 09:30', '2024-01-05 09:30:00'];
+        yield 'a T and seconds' => ['2024-01-05T09:30:15', '2024-01-05 09:30:15'];
+        yield 'single digits' => ['2024-1-5 9:30', '2024-01-05 09:30:00'];
+    }
+
+    #[Test]
+    #[DataProvider('isoDateTimes')]
+    public function isoTextIsReadWithItsTime(string $raw, string $expected): void
+    {
+        self::assertSame($expected, $this->parseDate(Field::dateTime('d'), $raw)->format('Y-m-d H:i:s'));
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function datesTheParserWillNotGuess(): iterable
+    {
+        // PHP's free-form reader took these, and read the first as 3 May with Turkish settings.
+        yield 'a slashed date in the other order' => ['05/03/2026'];
+        yield 'a month written as a word' => ['1 March 2026'];
+        // Which wall-clock time an offset should become is not the parser's to decide.
+        yield 'an ISO time with an offset' => ['2024-01-05T09:30:00+03:00'];
+        yield 'an ISO time in UTC' => ['2024-01-05T09:30:00Z'];
+    }
+
+    #[Test]
+    #[DataProvider('datesTheParserWillNotGuess')]
+    public function aDateThatCouldBeReadMoreThanOneWayIsAnError(string $raw): void
+    {
+        $this->expectException(ParseException::class);
+        $this->expectExceptionMessage('expected format: d.m.Y');
+
+        $this->parse(Field::date('createdAt'), $raw);
+    }
+
     /** @return iterable<string, array{string}> */
     public static function unparsableDates(): iterable
     {
         yield 'non-existent day and month' => ['32.13.2024'];
+        // These two miss the pattern and reach PHP's free-form reader, which used to roll them
+        // into March without an error.
+        yield 'a day February does not have' => ['31.02.2026'];
+        yield 'the same in ISO form' => ['2026-02-30'];
+        yield 'an hour that does not exist' => ['05.01.2024 24:00'];
         yield 'MySQL zero date' => ['0000-00-00'];
         yield 'MySQL zero datetime' => ['0000-00-00 00:00:00'];
         yield 'free text' => ['yarın'];

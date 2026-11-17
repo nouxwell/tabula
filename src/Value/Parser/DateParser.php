@@ -23,8 +23,16 @@ use Stringable;
  *     (45292 = 2024-01-01). What `DateFormatter` wrote is undone here; the conversion is
  *     again done by hand, this class is deliberately not tied to PhpSpreadsheet.
  *  3. The field's pattern (`d.m.Y`) — the format the user SEES in the template.
- *  4. ISO/free form — canonical representations such as `2024-01-05` or
- *     `2024-01-05T09:30:00`.
+ *  4. The other temporal pattern: the date-and-time pattern for a date field, the date pattern
+ *     for a date-time field. "05.01.2024 09:30" in a date column is still 5 January, and
+ *     "05.01.2024" in a date-time column is its midnight.
+ *  5. ISO 8601 without an offset — `2024-01-05`, `2024-01-05 09:30`, `2024-01-05T09:30:00` —
+ *     as other systems write dates.
+ *
+ * Nothing else. PHP's free-form date reader used to be the last resort, and it read too much:
+ * "05/03/2026" became 3 May under Turkish settings, "31.02.2026" rolled into 3 March, and
+ * neither said a word. A date this parser cannot place for certain is an error the user sees,
+ * never a different date in the database.
  *
  * Three points where it DIFFERS from the formatter:
  *  - `DateFormatter` prints a cell it cannot resolve as RAW TEXT and moves on; here a value
@@ -55,11 +63,13 @@ final class DateParser implements ValueParser
      *
      * A numeric cell in a spreadsheet is definitely a serial number, but a "2024" arriving
      * as TEXT may be a year fragment; taken as a serial it would silently become
-     * 1905-07-16. PHP's free-form parser does not rescue that string either — it reads it as
-     * the time "20:24" — which is why digits-only strings outside the range are rejected
-     * without being tried at all.
+     * 1905-07-16, which is why digits-only strings outside the range are rejected without
+     * being tried at all.
      */
     private const int MIN_TEXT_SERIAL = 10000;
+
+    /** ISO 8601 as other systems write it: a date, and optionally a time, with no offset. */
+    private const string ISO_DATE = '/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/';
 
     public function supports(FieldType $type): bool
     {
@@ -76,8 +86,11 @@ final class DateParser implements ValueParser
         // The field's own pattern wins if it has one; otherwise the global setting
         // (date and date-time are configured separately).
         $pattern = $field->getPattern() ?? $context->settings->dates->patternFor($type);
+        $otherPattern = $context->settings->dates->patternFor(
+            FieldType::DateTime === $type ? FieldType::Date : FieldType::DateTime,
+        );
 
-        $date = $this->toDate($raw, $pattern);
+        $date = $this->toDate($raw, $pattern, $otherPattern);
 
         if (null === $date) {
             throw ParseException::notADate($field, StringParser::describe($raw), $pattern);
@@ -88,7 +101,7 @@ final class DateParser implements ValueParser
         return FieldType::Date === $type ? $date->setTime(0, 0) : $date;
     }
 
-    private function toDate(mixed $raw, string $pattern): ?DateTimeImmutable
+    private function toDate(mixed $raw, string $pattern, string $otherPattern): ?DateTimeImmutable
     {
         if ($raw instanceof DateTimeImmutable) {
             return $raw;
@@ -112,10 +125,10 @@ final class DateParser implements ValueParser
             return null;
         }
 
-        return $this->fromString(StringParser::clean($raw), $pattern);
+        return $this->fromString(StringParser::clean($raw), $pattern, $otherPattern);
     }
 
-    private function fromString(string $value, string $pattern): ?DateTimeImmutable
+    private function fromString(string $value, string $pattern, string $otherPattern): ?DateTimeImmutable
     {
         if ($this->isZeroDate($value)) {
             return null;
@@ -132,18 +145,26 @@ final class DateParser implements ValueParser
             return $this->fromExcelSerial((float) $value, (float) self::MIN_TEXT_SERIAL);
         }
 
-        // Text without a digit in it is not a date. Without this check, PHP's free-form
-        // parser would ACCEPT strings such as "now", "tomorrow" or "next monday" and write
-        // the date of the import run itself into the database.
-        if (1 !== preg_match('/\d/', $value)) {
+        return $this->fromPattern($value, $otherPattern) ?? $this->fromIso($value);
+    }
+
+    /**
+     * An ISO date or date-time, through the same strict reading as a pattern: "2026-02-30" is
+     * refused, not rolled into March. A trailing offset or fractions of a second are not read;
+     * which wall-clock time an offset should become is not this parser's to guess.
+     */
+    private function fromIso(string $value): ?DateTimeImmutable
+    {
+        if (1 !== preg_match(self::ISO_DATE, $value, $parts)) {
             return null;
         }
 
-        try {
-            return new DateTimeImmutable($value);
-        } catch (Exception) {
-            return null;
-        }
+        $number = static fn (int $index): int => isset($parts[$index]) && '' !== $parts[$index] ? (int) $parts[$index] : 0;
+
+        return $this->fromPattern(
+            sprintf('%04d-%02d-%02d %02d:%02d:%02d', $number(1), $number(2), $number(3), $number(4), $number(5), $number(6)),
+            'Y-m-d H:i:s',
+        );
     }
 
     private function fromPattern(string $value, string $pattern): ?DateTimeImmutable
@@ -158,12 +179,21 @@ final class DateParser implements ValueParser
         // the next month in `createFromFormat`, and the user would never notice the wrong
         // date. A partial match is not accepted either ("15.01.2024 at 9" does not fit the
         // pattern).
-        $errors = DateTimeImmutable::getLastErrors();
-        if (is_array($errors) && (0 < $errors['warning_count'] || 0 < $errors['error_count'])) {
-            return null;
-        }
+        return self::readCleanly() ? $parsed : null;
+    }
 
-        return $parsed;
+    /**
+     * Whether the date just read came through without a warning or an error.
+     *
+     * PHP keeps going past a day or an hour that does not exist and rolls it into the next one,
+     * leaving only a warning behind ("The parsed date was invalid"). Every path here reads
+     * through `fromPattern()`, which asks, so none can turn a typo into a different, real date.
+     */
+    private static function readCleanly(): bool
+    {
+        $errors = DateTimeImmutable::getLastErrors();
+
+        return !is_array($errors) || (0 === $errors['warning_count'] && 0 === $errors['error_count']);
     }
 
     /**

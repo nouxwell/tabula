@@ -31,8 +31,10 @@ use UnitEnum;
  * All three steps are SEPARATE PASSES: if one case's label collides with another case's
  * `value`, the label wins, because that is the text the user sees.
  *
- * Comparison is trimmed and case-insensitive ("AÇIK" and "açık " match too); beyond that
- * there is no leniency. `EnumFormatter` prints a value it does not recognise as it is and
+ * Comparison is trimmed and case-insensitive ("OPEN" and "open " match); beyond that there is
+ * no leniency. Case is folded without a locale, as `mb_strtolower()` does, so the Turkish i's
+ * are four letters to it: "AÇIK" folds to "açik" and does not meet "açık". The browser side
+ * (@nouxwell/tabula-core) folds the same way, so a value is refused on both or on neither. `EnumFormatter` prints a value it does not recognise as it is and
  * moves on — in an export that is merely an ugly cell. Here the same behaviour would mean a
  * status that is not on the list leaking into the database; a value that does not match
  * throws an exception, and the message lists the VALID OPTIONS.

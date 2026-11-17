@@ -9,6 +9,35 @@ left publicly installable.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-11-17
+
+### Fixed
+
+- **A date that does not exist is refused, wherever it was read.** The pattern path already
+  refused "32.13.2024"; a date the pattern missed went on to PHP's free-form reader, which rolled
+  "31.02.2026" into 3 March and "2026-02-30" into 2 March and only left a warning behind. Both
+  are now `not_a_date`, as is an hour such as 24:00.
+
+### Changed
+
+- **A date the pattern does not read is no longer guessed.** After the field's pattern and an
+  Excel serial number, the parser now tries the other temporal pattern (the date-and-time pattern
+  for a date field, the date pattern for a date-time field) and ISO 8601 (`2024-01-05`,
+  `2024-01-05 09:30`, `2024-01-05T09:30:00`), and nothing else. PHP's free-form reader is gone:
+  with Turkish settings it read "05/03/2026" as 3 May, without an error.
+
+### Notes
+
+- **Breaking** for a file whose dates were only readable by the free-form reader: a slashed date
+  such as "05/03/2026" or "01/31/2026", a month written as a word ("1 March 2026"), and an ISO time
+  with an offset or a `Z` ("2024-01-05T09:30:00Z"). Each is now a `not_a_date` error naming the
+  expected pattern. Give the field a `pattern()` to read slashed dates, in the order the file
+  writes them.
+- The rule now matches @nouxwell/tabula-core, the browser side, which reads dates the same way.
+  The two are checked against one shared file of cases.
+- `EnumParser`'s description said "AÇIK" matches "açık". It does not: case is folded without a
+  locale, and "AÇIK" folds to "açik". Only the description changed.
+
 ## [0.8.8] — 2026-11-16
 
 ### Changed
@@ -332,7 +361,8 @@ The library is complete in all three directions:
 
 Requires PHP 8.3 or newer.
 
-[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.8.8...HEAD
+[Unreleased]: https://github.com/nouxwell/tabula/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/nouxwell/tabula/compare/v0.8.8...v0.9.0
 [0.8.8]: https://github.com/nouxwell/tabula/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/nouxwell/tabula/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/nouxwell/tabula/compare/v0.8.5...v0.8.6
