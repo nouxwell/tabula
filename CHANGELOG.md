@@ -9,6 +9,25 @@ left publicly installable.
 
 ## [Unreleased]
 
+### Added
+
+- **A schema for the browser's grid.** `GridSchema` adds to a `Schema` what the grid of
+  @nouxwell/tabula-grid needs: a version, lookups, fields that are read-only or not sent, and
+  rules (`Rule::min` and `Rule::max` as decimal text, `minLength`, `maxLength`, `unique`), each
+  refused on a field it does not fit. `Tabula::gridSchema()` writes it as the module schema the
+  grid reads, with labels, the title and option labels translated as a template translates them.
+- **`Tabula::checkRows()`** checks the rows a grid sends, for its pre-flight check or its run,
+  against the schema and its rules as the browser checked them. It answers in the grid's issue
+  shape (`GridIssue::toArray()`): the row's id, the field, the code, the params, and for a value
+  on several rows, the other rows. Values are read in the form the grid sends them (decimal text
+  with a point, ISO dates, booleans, an option's value, a lookup's id), never in a user's writing.
+  A request not in the grid's shape throws the new `GridException`.
+
+### Notes
+
+- The shared file of cases the browser side is checked against now holds whole rows too: the
+  grid's `SheetValidator` and `checkRows()` must find the same issues in them.
+
 ## [0.9.0] — 2026-11-17
 
 ### Fixed

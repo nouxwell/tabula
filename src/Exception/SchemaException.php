@@ -34,4 +34,19 @@ final class SchemaException extends InvalidArgumentException implements TabulaEx
     {
         return new self(sprintf('At least one field must be selected from the "%s" schema.', $schema));
     }
+
+    public static function invalidRule(string $rule, string $reason): self
+    {
+        return new self(sprintf('The "%s" rule %s.', $rule, $reason));
+    }
+
+    public static function ruleDoesNotApply(string $rule, string $field, string $type): self
+    {
+        return new self(sprintf('The "%s" rule does not apply to the field "%s", a %s field.', $rule, $field, $type));
+    }
+
+    public static function invalidVersion(int $version): self
+    {
+        return new self(sprintf('A schema version is a whole number, 1 or more; got %d.', $version));
+    }
 }

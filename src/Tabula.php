@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace Nouxwell\Tabula;
 
+use Nouxwell\Tabula\Exception\GridException;
 use Nouxwell\Tabula\Export\ExportBuilder;
 use Nouxwell\Tabula\Export\Writer\DefaultWriterFactory;
 use Nouxwell\Tabula\Export\Writer\WriterFactory;
+use Nouxwell\Tabula\Grid\GridIssue;
+use Nouxwell\Tabula\Grid\GridSchema;
+use Nouxwell\Tabula\Grid\RowChecker;
+use Nouxwell\Tabula\Grid\SchemaDescriber;
 use Nouxwell\Tabula\Import\ImportBuilder;
 use Nouxwell\Tabula\Import\Reader\ReaderRegistry;
 use Nouxwell\Tabula\Port\PassthroughTranslator;
@@ -120,6 +125,42 @@ final class Tabula
             settings: $this->settings,
             options: $this->templateOptions,
         );
+    }
+
+    /**
+     * The schema as the browser's grid (@nouxwell/tabula-grid) reads it, ready for `json_encode`:
+     * the fields of the same `Schema` that drives export, import and templates, labels translated
+     * into `$locale`, with the rules, lookups and the rest the `GridSchema` adds.
+     *
+     *     return new JsonResponse($tabula->gridSchema($grid, $request->getLocale()));
+     *
+     * @return array<string, mixed>
+     */
+    public function gridSchema(GridSchema $grid, ?string $locale = null): array
+    {
+        return (new SchemaDescriber($this->translator, $this->settings, $this->formatters))
+            ->describe($grid, $locale ?? $this->settings->defaultLocale);
+    }
+
+    /**
+     * Checks the rows a grid sent, its pre-flight check or its run, against the schema and its rules,
+     * as the browser checked them; the browser's checks promise nothing. Each issue is bound to the
+     * row's id and the field's key, in the shape the grid reads (`GridIssue::toArray()`).
+     *
+     *     $issues = $tabula->checkRows($grid, $request['rows']);
+     *
+     * Passing is passing the schema's rules only: what the application knows, such as whether a
+     * product is still on sale, it checks after this.
+     *
+     * @param iterable<int|string, mixed> $rows each `{rowId, values}`, as the grid sends them
+     *
+     * @return list<GridIssue>
+     *
+     * @throws GridException when a row is not in the grid's shape
+     */
+    public function checkRows(GridSchema $grid, iterable $rows): array
+    {
+        return (new RowChecker())->check($grid, $rows);
     }
 
     public function settings(): TabulaSettings
