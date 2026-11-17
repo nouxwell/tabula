@@ -54,8 +54,14 @@ final class SourcesTest extends TestCase
         $source = ArraySource::of(self::generateRows(3));
 
         self::assertSame(3, $source->count());
-        self::assertSame([['id' => 1], ['id' => 2], ['id' => 3]], self::collect($source));
-        self::assertSame([['id' => 1], ['id' => 2], ['id' => 3]], self::collect($source));
+
+        // Each read in its own variable: asserted in place, PHPStan takes the second read for the
+        // first one again and calls the second assertion always true.
+        $first = self::collect($source);
+        $second = self::collect($source);
+
+        self::assertSame([['id' => 1], ['id' => 2], ['id' => 3]], $first);
+        self::assertSame([['id' => 1], ['id' => 2], ['id' => 3]], $second);
     }
 
     #[Test]
