@@ -211,8 +211,13 @@ final class PdfWriterTest extends TestCase
         $writer->startSheet('Test', self::columns(2));
         $writer->writeRow(self::cells(2));
 
-        self::assertSame([$path], $writer->close());
-        self::assertSame([$path], $writer->close());
+        // Each result in its own variable: asserted in place, PHPStan takes the second call for the
+        // first one again and calls the second assertion always true.
+        $first = $writer->close();
+        $second = $writer->close();
+
+        self::assertSame([$path], $first);
+        self::assertSame([$path], $second);
     }
 
     #[Test]
