@@ -812,6 +812,10 @@ final class TemplateBuilderTest extends TestCase
         self::assertFalse($protection->getSelectLockedCells(), 'select locked cells');
         self::assertFalse($protection->getSelectUnlockedCells(), 'select unlocked cells');
 
+        // Allowed although a template holds no objects: prohibited, it lets the arrow of a
+        // dropdown cell take over the cell's fill handle, and a value cannot be dragged down.
+        self::assertFalse($protection->getObjects(), 'edit objects');
+
         // Prohibited. Formatting rows would unhide the key row; formatting cells would let a
         // pasted block overwrite the text format with its own; a new or deleted column would
         // carry off a key.
