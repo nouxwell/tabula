@@ -335,6 +335,12 @@ final class TemplateBuilder
      *   cells with no key, and deleting one would take its key with it.
      * - Filtering and sorting through the header buttons work. Sorting a range that includes
      *   the header does not — Excel will not move locked cells.
+     * - `objects` stays ALLOWED, though nothing in a template is an object: with it prohibited,
+     *   the arrow of a dropdown cell takes over that cell's fill handle. The handle is drawn but
+     *   a press on it opens the list, so a country could not be dragged down a thousand rows.
+     *   Allowing it leaves the header locked and formatting prohibited, and the arrow still
+     *   opens the list. A column without a dropdown was never affected, and neither were Ctrl+D
+     *   or a drag from two selected cells, whose handle sits away from the arrow.
      *
      * Known cost: a row inserted directly below the header copies the header's LOCKED format
      * ("format from above" is Excel's default), and cannot be typed into or deleted. Inserting
@@ -356,13 +362,14 @@ final class TemplateBuilder
             ->setSort(false)
             ->setAutoFilter(false)
             ->setFormatColumns(false)
+            // Allowed for the fill handle of a dropdown cell, see above.
+            ->setObjects(false)
             // Prohibited.
             ->setFormatRows(true)
             ->setFormatCells(true)
             ->setInsertColumns(true)
             ->setDeleteColumns(true)
             ->setInsertHyperlinks(true)
-            ->setObjects(true)
             ->setScenarios(true)
             ->setPivotTables(true);
 

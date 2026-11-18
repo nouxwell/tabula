@@ -23,6 +23,11 @@ left publicly installable.
   with a point, ISO dates, booleans, an option's value, a lookup's id), never in a user's writing.
   A request not in the grid's shape throws the new `GridException`.
 
+### Fixed
+
+- **A dropdown cell's fill handle works in a protected template.** Also released for the 0.8
+  line as 0.8.9; see there.
+
 ### Notes
 
 - The shared file of cases the browser side is checked against now holds whole rows too: the
@@ -56,6 +61,24 @@ left publicly installable.
   The two are checked against one shared file of cases.
 - `EnumParser`'s description said "AÇIK" matches "açık". It does not: case is folded without a
   locale, and "AÇIK" folds to "açik". Only the description changed.
+
+## [0.8.9] — 2026-11-18
+
+### Fixed
+
+- **A dropdown cell's fill handle works in a protected template.** With `protectHeader` on, a
+  cell with a dropdown could not be dragged down: the handle was drawn, but a press on it opened
+  the list, so a country had to be picked again on every row. The protection prohibited editing
+  objects, as Excel's own dialog does by default, and with that prohibited Excel lets the
+  dropdown's arrow take over its cell's fill handle. Editing objects is now allowed. The header
+  stays locked, formatting cells and inserting or deleting columns stay prohibited, and the
+  arrow still opens the list. Measured in Excel 16 with a real drag of the handle.
+
+### Notes
+
+- A template written before keeps its old protection. In one, Ctrl+D or a drag from two selected
+  cells, whose handle sits away from the arrow, still fills a dropdown column.
+- Released from v0.8.8 for installs still on 0.8. The next 0.9 release carries the same fix.
 
 ## [0.8.8] — 2026-11-16
 
@@ -382,6 +405,7 @@ Requires PHP 8.3 or newer.
 
 [Unreleased]: https://github.com/nouxwell/tabula/compare/v0.9.0...HEAD
 [0.9.0]: https://github.com/nouxwell/tabula/compare/v0.8.8...v0.9.0
+[0.8.9]: https://github.com/nouxwell/tabula/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/nouxwell/tabula/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/nouxwell/tabula/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/nouxwell/tabula/compare/v0.8.5...v0.8.6

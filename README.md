@@ -475,8 +475,9 @@ tabula:
 
 The sheet is protected without a password, which stops accidents rather than intent. Below the
 header, everything a template is filled in with keeps working: typing, pasting from another
-workbook, filling down, inserting and deleting rows, sorting and filtering through the header
-buttons, column widths. What it takes away is formatting cells, inserting or deleting columns,
+workbook, filling down (the fill handle of a dropdown cell included), inserting and deleting rows,
+sorting and filtering through the header buttons, column widths. Editing objects stays allowed
+too: prohibited, it lets a dropdown's arrow take over its cell's fill handle. What it takes away is formatting cells, inserting or deleting columns,
 sorting a range that includes the header, and typing into a row inserted directly under the
 header (Excel copies the header's locked format into it) — which is why it is off by default.
 
